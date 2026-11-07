@@ -3,7 +3,7 @@ import { BRAND_NAME } from "@/lib/constants";
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-3xl font-black text-white">Privacy Policy</h1>
+      <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Privacy Policy</h1>
       <p className="text-sm text-white/50">Last updated: 7 November 2026</p>
 
       <section className="rounded-2xl border border-white/10 bg-card p-6">

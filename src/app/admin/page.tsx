@@ -9,7 +9,7 @@ export default async function AdminPage() {
   if (!isSupabaseConfigured) {
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-card p-8 text-center">
-        <h1 className="text-2xl font-black text-white">Admin Review</h1>
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Admin Review</h1>
         <p className="mt-3 text-sm leading-relaxed text-white/60">
           Supabase is not configured yet. Add your keys to .env.local first.
         </p>
@@ -23,7 +23,7 @@ export default async function AdminPage() {
   if (!isOwner(profile)) {
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-card p-8 text-center">
-        <h1 className="text-2xl font-black text-white">Access denied</h1>
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Access denied</h1>
         <p className="mt-3 text-sm text-white/60">
           Admin Review is owner-only. The first account created on the site
           is the owner.
@@ -54,7 +54,7 @@ export default async function AdminPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-black text-white">Admin Review</h1>
+        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Admin Review</h1>
         <p className="mt-2 text-sm text-white/60">
           Owner-only. Submissions stay Pending at $0 until you enter verified
           views and approve them. Approved earnings go into the creator&apos;s

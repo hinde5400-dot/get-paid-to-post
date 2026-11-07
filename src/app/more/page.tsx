@@ -4,12 +4,12 @@ import { getWallet } from "@/lib/data";
 import { formatUSD } from "@/lib/money";
 
 const LINKS = [
-  { href: "/campaigns", label: "Campaigns", icon: "🎬", desc: "Browse funded campaigns" },
+  { href: "/campaigns", label: "Campaigns", icon: "C", desc: "Browse funded campaigns" },
   { href: "/connect", label: "My accounts", icon: "🔗", desc: "TikTok, Instagram & YouTube links" },
-  { href: "/how-it-works", label: "Academy & FAQ", icon: "📚", desc: "Learn how earning works" },
-  { href: "/dashboard", label: "Stats", icon: "📊", desc: "Your views and earnings" },
-  { href: "/earnings", label: "Earnings", icon: "💰", desc: "Balance, hold & withdrawals" },
-  { href: "/support", label: "Contact Support", icon: "💬", desc: "Discord support" },
+  { href: "/how-it-works", label: "Academy & FAQ", icon: "?", desc: "Learn how earning works" },
+  { href: "/dashboard", label: "Stats", icon: "S", desc: "Your views and earnings" },
+  { href: "/earnings", label: "Earnings", icon: "$", desc: "Balance, hold & withdrawals" },
+  { href: "/support", label: "Contact Support", icon: "✉", desc: "Discord support" },
 ];
 
 export default async function MorePage() {
@@ -18,7 +18,7 @@ export default async function MorePage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="text-3xl font-black text-white">More</h1>
+      <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">More</h1>
 
       <div className="rounded-3xl border border-white/10 bg-card p-6">
         <p className="text-xs text-white/50">Your balance</p>
@@ -59,7 +59,7 @@ export default async function MorePage() {
             href={l.href}
             className="flex items-center gap-4 border-b border-white/5 px-5 py-4 transition last:border-0 hover:bg-white/5"
           >
-            <span className="text-2xl">{l.icon}</span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sun/15 font-display text-lg font-black text-sun">{l.icon}</span>
             <span>
               <span className="block font-bold text-white">{l.label}</span>
               <span className="block text-xs text-white/50">{l.desc}</span>

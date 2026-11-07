@@ -3,19 +3,20 @@
 @tailwind utilities;
 
 /* Get Paid To Post — brand theme.
-   Dark purple #120826 background, full yellow #FFDE00 accent,
-   dark card #1E1233. System font stack on purpose: no external
-   font fetch, so first paint is never blocked. */
+   Near-black #0A0A0B background, cards #141417, full yellow #FFDE00
+   accent. Headings use Archivo (font-display), body uses Inter.
+   Fonts come from next/font/google (bundled + self-hosted at build
+   time) — there is intentionally no runtime fetch to Google Fonts, so
+   first paint is never blocked. */
 html {
   scroll-behavior: smooth;
 }
 
 body {
-  background-color: #120826;
+  background-color: #0a0a0b;
   color: #ffffff;
   font-family:
-    "Plus Jakarta Sans",
-    Inter,
+    var(--font-inter),
     system-ui,
     -apple-system,
     "Segoe UI",
@@ -26,7 +27,51 @@ body {
 
 ::selection {
   background: #ffde00;
-  color: #120826;
+  color: #0a0a0b;
+}
+
+/* Skeleton loading shimmer (campaign lists, like TryShoot's loading state) */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #1d1d21 25%,
+    #26262b 50%,
+    #1d1d21 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Slide-in sidebar drawer */
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-drawer-in {
+  animation: drawer-in 0.25s ease-out;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
 }
 
 /* Submit success popup */
@@ -81,7 +126,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-pop,
   .animate-confetti,
-  .animate-shake {
+  .animate-shake,
+  .animate-drawer-in,
+  .animate-fade-in,
+  .skeleton {
     animation: none;
   }
   html {

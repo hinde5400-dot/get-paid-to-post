@@ -20,7 +20,7 @@ export default async function BrandsPage() {
     <div className="space-y-12">
       {/* Role split */}
       <section className="pt-4 text-center">
-        <h1 className="text-4xl font-black text-white md:text-5xl">
+        <h1 className="font-display text-4xl font-black uppercase tracking-tight text-white md:text-5xl">
           For Brands &amp; Creators
         </h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-white/70 md:text-base">

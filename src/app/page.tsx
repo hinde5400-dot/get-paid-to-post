@@ -1,18 +1,11 @@
 import Link from "next/link";
 import { getCampaigns } from "@/lib/data";
 import CampaignCard from "@/components/CampaignCard";
+import CampaignBanner from "@/components/CampaignBanner";
 import AdSlot from "@/components/AdSlot";
 import Faq from "@/components/Faq";
-import { BRAND_NAME } from "@/lib/constants";
+import { BRAND_NAME, BRAND_MIN_BUDGET } from "@/lib/constants";
 import { formatUSD } from "@/lib/money";
-
-const TOP_EARNERS = [
-  { name: "Ayesha K.", platform: "TikTok", earned: 2840 },
-  { name: "Liam R.", platform: "Instagram", earned: 2310 },
-  { name: "Sofia M.", platform: "YouTube", earned: 1975 },
-  { name: "Daniyal A.", platform: "TikTok", earned: 1640 },
-  { name: "Emma W.", platform: "Instagram", earned: 1420 },
-];
 
 const FAQS = [
   {
@@ -50,21 +43,22 @@ export default async function HomePage() {
     <div className="space-y-14">
       {/* Hero */}
       <section className="pt-6 text-center md:pt-10">
-        <p className="inline-block rounded-full bg-sun/15 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-sun">
+        <p className="inline-block rounded-full bg-sun px-4 py-1.5 text-xs font-black uppercase tracking-widest text-black">
           TikTok · Instagram · YouTube
         </p>
-        <h1 className="mx-auto mt-5 max-w-3xl text-4xl font-black leading-tight text-white md:text-6xl">
+        <h1 className="mx-auto mt-5 max-w-3xl font-display text-5xl font-black uppercase leading-[0.95] tracking-tight text-white md:text-7xl">
           Get Paid to Post on{" "}
-          <span className="text-sun">TikTok, Instagram &amp; YouTube</span>
+          <span className="bg-sun px-2 text-black">TikTok, Instagram</span>{" "}
+          &amp; YouTube
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/70 md:text-lg">
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-white/70 md:text-lg">
           {BRAND_NAME} connects creators with brands. Post short clips, get
           paid per view. No follower minimum — a great clip is all you need.
         </p>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/campaigns"
-            className="rounded-full bg-sun px-7 py-3.5 text-sm font-bold text-ink transition hover:bg-sundark"
+            className="rounded-full bg-sun px-7 py-3.5 text-sm font-black text-black transition hover:bg-sundark"
           >
             Browse campaigns
           </Link>
@@ -75,30 +69,20 @@ export default async function HomePage() {
             I am a Brand
           </Link>
         </div>
-        <div className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-3 md:grid-cols-4">
-          {[
-            { v: "8,100+", l: "Active creators" },
-            { v: "$1.8M+", l: "Paid out to creators" },
-            { v: "180+", l: "Countries" },
-            { v: "4.72 ★", l: "Creator rating" },
-          ].map((s) => (
-            <div
-              key={s.l}
-              className="rounded-2xl border border-white/10 bg-card px-3 py-4"
-            >
-              <p className="text-xl font-black text-sun">{s.v}</p>
-              <p className="mt-1 text-xs text-white/60">{s.l}</p>
-            </div>
-          ))}
-        </div>
+        <p className="mt-8 text-sm font-bold text-white/50">
+          <span className="font-black text-sun">
+            {campaigns.length} live campaign{campaigns.length === 1 ? "" : "s"}
+          </span>
+          {" · "}Every live campaign is funded upfront by the brand
+        </p>
       </section>
 
       {/* Featured campaign */}
       {featured && (
         <section>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-2xl font-extrabold text-white">
-              ⭐ Featured Campaign
+            <h2 className="font-display text-2xl font-black uppercase tracking-tight text-white">
+              Featured Campaign
             </h2>
             <Link
               href="/campaigns"
@@ -107,64 +91,91 @@ export default async function HomePage() {
               View all →
             </Link>
           </div>
-          <div className="overflow-hidden rounded-3xl border border-sun/40 bg-gradient-to-br from-card to-[#2A1B4A] p-6 md:p-8">
-            <p className="text-xs font-bold uppercase tracking-widest text-sun">
-              {featured.brand_name} · {featured.category}
-            </p>
-            <h3 className="mt-2 max-w-xl text-2xl font-black text-white md:text-3xl">
-              {featured.title}
-            </h3>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">
-              {featured.description}
-            </p>
-            <div className="mt-5 flex flex-wrap items-center gap-6">
-              <div>
-                <p className="text-xs text-white/50">Earn up to</p>
-                <p className="text-3xl font-black text-sun">
-                  {formatUSD(featured.earn_up_to)}
-                  <span className="text-base font-semibold text-white/60"> / post</span>
-                </p>
+          <div className="overflow-hidden rounded-3xl border border-sun/40 bg-card">
+            <CampaignBanner campaign={featured} size="lg" />
+            <div className="p-6 md:p-8">
+              <h3 className="max-w-xl font-display text-2xl font-black tracking-tight text-white md:text-3xl">
+                {featured.title}
+              </h3>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">
+                {featured.description}
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-6">
+                <div>
+                  <p className="text-xs text-white/50">Earn up to</p>
+                  <p className="font-display text-3xl font-black text-sun">
+                    {formatUSD(featured.earn_up_to)}
+                    <span className="text-base font-semibold text-white/60"> / post</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/50">Base pay</p>
+                  <p className="text-lg font-bold text-white">
+                    {formatUSD(featured.base_pay)} per approved post
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/50">View bonus</p>
+                  <p className="text-lg font-bold text-white">
+                    {formatUSD(featured.view_bonus_per_1k)} per 1K views
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-white/50">Base pay</p>
-                <p className="text-lg font-bold text-white">
-                  {formatUSD(featured.base_pay)} per approved post
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-white/50">View bonus</p>
-                <p className="text-lg font-bold text-white">
-                  {formatUSD(featured.view_bonus_per_1k)} per 1K views
-                </p>
-              </div>
+              <Link
+                href={`/campaign/${featured.id}`}
+                className="mt-6 inline-block rounded-full bg-sun px-7 py-3 text-sm font-black text-black transition hover:bg-sundark"
+              >
+                View campaign &amp; submit
+              </Link>
             </div>
-            <Link
-              href={`/campaign/${featured.id}`}
-              className="mt-6 inline-block rounded-full bg-sun px-7 py-3 text-sm font-bold text-ink transition hover:bg-sundark"
-            >
-              View campaign &amp; submit
-            </Link>
           </div>
         </section>
       )}
 
-      {/* Campaign list */}
+      {/* Campaign list / empty state */}
       <section>
-        <h2 className="mb-4 text-2xl font-extrabold text-white">
+        <h2 className="mb-4 font-display text-2xl font-black uppercase tracking-tight text-white">
           Active campaigns
         </h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {rest.map((c) => (
-            <CampaignCard key={c.id} campaign={c} />
-          ))}
-        </div>
+        {campaigns.length === 0 ? (
+          <div className="rounded-3xl border border-white/10 bg-card p-10 text-center">
+            <p className="font-display text-2xl font-black uppercase tracking-tight text-white">
+              No funded campaigns yet
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/60">
+              A campaign goes live only after a brand funds ${BRAND_MIN_BUDGET}+
+              upfront. New campaigns will appear here as soon as a brand
+              launches one.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/brands"
+                className="rounded-full bg-sun px-6 py-3 text-sm font-black text-black transition hover:bg-sundark"
+              >
+                I am a Brand — launch a campaign
+              </Link>
+              <Link
+                href="/how-it-works"
+                className="rounded-full border border-white/25 px-6 py-3 text-sm font-bold text-white transition hover:border-sun hover:text-sun"
+              >
+                How it works
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {rest.map((c) => (
+              <CampaignCard key={c.id} campaign={c} />
+            ))}
+          </div>
+        )}
       </section>
 
       <AdSlot />
 
       {/* How it works */}
       <section>
-        <h2 className="mb-6 text-center text-2xl font-extrabold text-white">
+        <h2 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-tight text-white">
           How It Works
         </h2>
         <div className="grid gap-4 md:grid-cols-4">
@@ -178,10 +189,10 @@ export default async function HomePage() {
               key={s.n}
               className="rounded-2xl border border-white/10 bg-card p-5"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sun text-lg font-black text-ink">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sun font-display text-lg font-black text-black">
                 {s.n}
               </span>
-              <h3 className="mt-3 font-bold text-white">{s.t}</h3>
+              <h3 className="mt-3 font-display font-black tracking-tight text-white">{s.t}</h3>
               <p className="mt-1 text-sm leading-relaxed text-white/60">{s.d}</p>
             </div>
           ))}
@@ -190,7 +201,7 @@ export default async function HomePage() {
 
       {/* Why */}
       <section>
-        <h2 className="mb-6 text-center text-2xl font-extrabold text-white">
+        <h2 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-tight text-white">
           Why creators choose {BRAND_NAME}
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
@@ -203,34 +214,8 @@ export default async function HomePage() {
               key={s.t}
               className="rounded-2xl border border-white/10 bg-card p-5"
             >
-              <h3 className="font-bold text-white">{s.t}</h3>
+              <h3 className="font-display font-black tracking-tight text-white">{s.t}</h3>
               <p className="mt-1 text-sm leading-relaxed text-white/60">{s.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Top earners */}
-      <section>
-        <h2 className="mb-4 text-2xl font-extrabold text-white">Top Earners</h2>
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-card">
-          {TOP_EARNERS.map((e, i) => (
-            <div
-              key={e.name}
-              className="flex items-center justify-between border-b border-white/5 px-5 py-3.5 last:border-0"
-            >
-              <span className="flex items-center gap-3 text-sm font-bold text-white">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sun/15 font-black text-sun">
-                  {i + 1}
-                </span>
-                {e.name}
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/60">
-                  {e.platform}
-                </span>
-              </span>
-              <span className="text-sm font-black text-sun">
-                {formatUSD(e.earned)}
-              </span>
             </div>
           ))}
         </div>
@@ -238,22 +223,22 @@ export default async function HomePage() {
 
       {/* FAQ */}
       <section>
-        <h2 className="mb-4 text-2xl font-extrabold text-white">
+        <h2 className="mb-4 font-display text-2xl font-black uppercase tracking-tight text-white">
           Frequently asked questions
         </h2>
         <Faq items={FAQS} />
       </section>
 
       <section className="rounded-3xl bg-sun p-8 text-center">
-        <h2 className="text-2xl font-black text-ink md:text-3xl">
+        <h2 className="font-display text-2xl font-black uppercase tracking-tight text-black md:text-3xl">
           Ready to get paid for your clips?
         </h2>
-        <p className="mx-auto mt-2 max-w-lg text-sm font-medium text-ink/70">
+        <p className="mx-auto mt-2 max-w-lg text-sm font-medium text-black/70">
           Sign up free, connect your profiles, and post your first clip today.
         </p>
         <Link
           href="/signup"
-          className="mt-5 inline-block rounded-full bg-ink px-7 py-3 text-sm font-bold text-white"
+          className="mt-5 inline-block rounded-full bg-ink px-7 py-3 text-sm font-black text-white"
         >
           Create your free account
         </Link>

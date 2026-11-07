@@ -1,5 +1,4 @@
 import { getServerClient } from "./supabase/server";
-import { SEED_CAMPAIGNS } from "./seed";
 import type { Campaign, Submission, Wallet, Withdrawal } from "./types";
 
 function mapCampaign(row: Record<string, unknown>): Campaign {
@@ -51,7 +50,12 @@ function mapSubmission(row: Record<string, unknown>): Submission {
   };
 }
 
-/** Live funded campaigns from Supabase; sample campaigns when none exist. */
+/**
+ * Live funded campaigns from Supabase only. There are no sample or
+ * fallback campaigns: a campaign appears here only after a brand has
+ * funded $500+ and it is live. When none exist, this returns [] and the
+ * site shows an honest "No funded campaigns yet" empty state.
+ */
 export async function getCampaigns(): Promise<Campaign[]> {
   const supabase = getServerClient();
   if (supabase) {
@@ -61,11 +65,11 @@ export async function getCampaigns(): Promise<Campaign[]> {
       .eq("is_funded", true)
       .eq("status", "live")
       .order("created_at", { ascending: false });
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return (data as Record<string, unknown>[]).map(mapCampaign);
     }
   }
-  return SEED_CAMPAIGNS;
+  return [];
 }
 
 export async function getCampaign(id: string): Promise<Campaign | null> {
@@ -78,7 +82,7 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
       .single();
     if (!error && data) return mapCampaign(data as Record<string, unknown>);
   }
-  return SEED_CAMPAIGNS.find((c) => c.id === id) ?? null;
+  return null;
 }
 
 /** A creator's submissions, newest first. Empty when Supabase is not set up. */

@@ -31,6 +31,10 @@ export default function SignupPage() {
       const { data, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          // Confirmation links must return to the live site, not localhost.
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
       if (authError) throw authError;
       if (data.session) {
@@ -53,7 +57,9 @@ export default function SignupPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="text-3xl font-black text-white">Create your account</h1>
+      <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-white">
+        Create your account
+      </h1>
       <p className="mt-2 text-sm text-white/60">
         Email and password only — we never ask for your phone, address, or
         extra details.
@@ -104,7 +110,7 @@ export default function SignupPage() {
         <button
           type="submit"
           disabled={busy}
-          className="mt-6 w-full rounded-full bg-sun py-3 text-sm font-bold text-ink transition hover:bg-sundark disabled:opacity-40"
+          className="mt-6 w-full rounded-full bg-sun py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-sundark disabled:opacity-40"
         >
           {busy ? "Creating account…" : "Sign up free"}
         </button>

@@ -89,7 +89,7 @@ export default function ConnectPage() {
   if (!loggedIn) {
     return (
       <div className="mx-auto max-w-md text-center">
-        <h1 className="text-2xl font-black text-white">Please log in first</h1>
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Please log in first</h1>
         <p className="mt-2 text-sm text-white/60">
           Connect your social profiles after you log in.
         </p>
@@ -105,7 +105,7 @@ export default function ConnectPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="text-3xl font-black text-white">Connect your profiles</h1>
+      <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Connect your profiles</h1>
       <p className="mt-2 text-sm text-white/60">
         Step 2 — paste your TikTok, Instagram and YouTube profile links so
         your submitted clips can be matched to you.

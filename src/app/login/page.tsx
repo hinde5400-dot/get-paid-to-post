@@ -53,7 +53,9 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="text-3xl font-black text-white">Welcome back</h1>
+      <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-white">
+        Welcome back
+      </h1>
       <p className="mt-2 text-sm text-white/60">
         Log in to your Get Paid To Post account.
       </p>
@@ -97,7 +99,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={busy}
-          className="mt-6 w-full rounded-full bg-sun py-3 text-sm font-bold text-ink transition hover:bg-sundark disabled:opacity-40"
+          className="mt-6 w-full rounded-full bg-sun py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-sundark disabled:opacity-40"
         >
           {busy ? "Logging in…" : "Log in"}
         </button>

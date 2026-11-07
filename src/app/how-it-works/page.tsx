@@ -15,7 +15,7 @@ export default function HowItWorksPage() {
   return (
     <div className="space-y-10">
       <div className="text-center">
-        <h1 className="text-4xl font-black text-white">How It Works</h1>
+        <h1 className="font-display text-4xl font-black uppercase tracking-tight text-white">How It Works</h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-white/70">
           {BRAND_NAME} in seven simple steps — from signup to payout.
         </p>

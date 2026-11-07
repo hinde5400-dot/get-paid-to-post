@@ -3,6 +3,8 @@ import Link from "next/link";
 import { getCampaign, getUserSubmissions } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
 import SubmitBundleForm, { type LastSubmission } from "@/components/SubmitBundleForm";
+import CampaignBanner from "@/components/CampaignBanner";
+import { PlatformChips } from "@/components/PlatformIcons";
 import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { VIDEO_RULES } from "@/lib/validate";
@@ -51,14 +53,19 @@ export default async function CampaignDetailPage({
         ← Back to campaigns
       </Link>
 
-      <div className="rounded-3xl border border-white/10 bg-card p-6 md:p-8">
-        <p className="text-xs font-bold uppercase tracking-widest text-sun">
-          {campaign.brand_name} · {campaign.category} ·{" "}
-          {PLATFORM_LABELS[campaign.platform]}
-        </p>
-        <h1 className="mt-2 text-3xl font-black leading-tight text-white md:text-4xl">
-          {campaign.title}
-        </h1>
+      <div className="overflow-hidden rounded-3xl border border-white/10 bg-card">
+        <CampaignBanner campaign={campaign} size="lg" />
+        <div className="p-6 md:p-8">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs font-bold uppercase tracking-widest text-sun">
+              {campaign.brand_name} · {campaign.category} ·{" "}
+              {PLATFORM_LABELS[campaign.platform]}
+            </p>
+            <PlatformChips platform={campaign.platform} />
+          </div>
+          <h1 className="mt-2 font-display text-3xl font-black uppercase leading-tight tracking-tight text-white md:text-4xl">
+            {campaign.title}
+          </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/70">
           {campaign.description}
         </p>
@@ -97,8 +104,8 @@ export default async function CampaignDetailPage({
         <div className="mt-6">
           <div className="flex justify-between text-sm text-white/60">
             <span>
-              Budget: {formatUSD(campaign.budget_left)} left of{" "}
-              {formatUSD(campaign.budget_total)}
+              {formatUSD(campaign.budget_total - campaign.budget_left)} of{" "}
+              {formatUSD(campaign.budget_total)} funded
             </span>
             <span>{spentPct}% used</span>
           </div>
@@ -113,6 +120,7 @@ export default async function CampaignDetailPage({
             <span>📹 Max posts: {campaign.max_posts}</span>
             <span>🎯 {campaign.spots_left} spots left</span>
           </div>
+        </div>
         </div>
       </div>
 

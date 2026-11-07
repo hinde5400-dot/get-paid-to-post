@@ -4,13 +4,15 @@ import { getCurrentUser, getProfile } from "@/lib/auth";
 import { getUserSubmissions, getWallet } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import MyPostsList from "@/components/MyPostsList";
+import CopyButton from "@/components/CopyButton";
+import { SITE_URL } from "@/lib/constants";
 import { formatUSD } from "@/lib/money";
 
 export default async function DashboardPage() {
   if (!isSupabaseConfigured) {
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-card p-8 text-center">
-        <h1 className="text-2xl font-black text-white">Dashboard</h1>
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Dashboard</h1>
         <p className="mt-3 text-sm leading-relaxed text-white/60">
           Supabase is not configured yet. Add{" "}
           <code className="text-sun">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
@@ -34,7 +36,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-black text-white">Dashboard</h1>
+        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Dashboard</h1>
         <p className="mt-1 text-sm text-white/60">
           Welcome back, {profile?.email ?? user.email}
         </p>
@@ -91,6 +93,25 @@ export default async function DashboardPage() {
       <section>
         <h2 className="mb-4 text-xl font-extrabold text-white">My Posts</h2>
         <MyPostsList submissions={submissions} />
+      </section>
+
+      <section
+        id="refer"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sun/40 bg-card p-5"
+      >
+        <div>
+          <h2 className="font-display text-lg font-black uppercase tracking-tight text-white">
+            Refer a friend
+          </h2>
+          <p className="mt-1 max-w-md text-sm text-white/60">
+            Know a creator who should get paid for their clips? Share the
+            site link with them.
+          </p>
+          <p className="mt-2 truncate rounded-lg bg-ink px-3 py-2 text-sm font-bold text-sun">
+            {SITE_URL}
+          </p>
+        </div>
+        <CopyButton text={SITE_URL} />
       </section>
     </div>
   );

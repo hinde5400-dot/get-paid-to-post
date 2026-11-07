@@ -19,7 +19,7 @@ export default async function EarningsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-black text-white">Earnings</h1>
+        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Earnings</h1>
         <p className="mt-2 text-sm text-white/60">
           Approved earnings sit in a {HOLD_HOURS}-hour hold, then become
           available to withdraw.

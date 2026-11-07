@@ -3,10 +3,10 @@ import { BRAND_NAME, SITE_DOMAIN } from "@/lib/constants";
 
 export default function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-card/60 pb-24 md:pb-8">
+    <footer className="border-t border-white/10 bg-card/60 pb-8">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 md:grid-cols-4">
         <div>
-          <p className="text-lg font-extrabold text-white">{BRAND_NAME}</p>
+          <p className="font-display text-lg font-black uppercase tracking-tight text-white">{BRAND_NAME}</p>
           <p className="mt-2 text-sm text-white/60">
             Post Clips. Get Paid Per View. Creators post short clips on
             TikTok, Instagram and YouTube and get paid per view. No follower

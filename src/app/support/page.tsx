@@ -3,7 +3,7 @@ import { BRAND_NAME } from "@/lib/constants";
 export default function SupportPage() {
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="text-3xl font-black text-white">Contact Support</h1>
+      <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Contact Support</h1>
       <p className="text-sm leading-relaxed text-white/60">
         Support for {BRAND_NAME} runs on Discord — join the server to open a
         support ticket, ask a question, or report a problem.

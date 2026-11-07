@@ -1,9 +1,25 @@
 import type { Metadata } from "next";
+import { Archivo, Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import BottomNav from "@/components/BottomNav";
 import { BRAND_NAME, SITE_URL } from "@/lib/constants";
 import "./globals.css";
+
+// next/font/google bundles these fonts at build time and self-hosts them
+// from the app itself — no runtime request to Google Fonts, so first paint
+// is never blocked waiting on a font fetch.
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800", "900"],
+  variable: "--font-archivo",
+  display: "swap",
+});
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: `${BRAND_NAME} — Get Paid to Post on TikTok, Instagram & YouTube`,
@@ -25,14 +41,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-ink">
+    <html lang="en" className={`${archivo.variable} ${inter.variable}`}>
+      <body className="min-h-screen bg-ink font-sans text-white antialiased">
         <Navbar />
         <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-16 pt-6 md:pb-10">
           {children}
         </main>
         <Footer />
-        <BottomNav />
       </body>
     </html>
   );
