@@ -5,6 +5,7 @@ import { getUserSubmissions, getWallet } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import MyPostsList from "@/components/MyPostsList";
 import CopyButton from "@/components/CopyButton";
+import SignOutButton from "@/components/SignOutButton";
 import { SITE_URL } from "@/lib/constants";
 import { formatUSD } from "@/lib/money";
 
@@ -30,6 +31,16 @@ export default async function DashboardPage() {
   const wallet = await getWallet(user.id);
   const submissions = await getUserSubmissions(user.id);
 
+  // The creator's name, never "Guest" for a logged-in user: the
+  // profile row (migration 0005) first, then the signup metadata
+  // (saved before the migration runs), then the email.
+  const metaName = user.user_metadata?.full_name;
+  const displayName =
+    profile?.full_name ??
+    (typeof metaName === "string" && metaName.trim() ? metaName : null) ??
+    user.email ??
+    "Creator";
+
   const totalViews = submissions.reduce((s, x) => s + x.views, 0);
   const totalEarned = submissions.reduce((s, x) => s + x.earnings, 0);
 
@@ -37,9 +48,21 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Dashboard</h1>
-        <p className="mt-1 text-sm text-fg/60">
-          Welcome back, {profile?.email ?? user.email}
-        </p>
+        <p className="mt-1 text-sm text-fg/60">Welcome back, {displayName}</p>
+      </div>
+
+      {/* Profile — the creator's name and a way out. */}
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-fg/10 bg-card p-5">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-lime">
+          {displayName[0].toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-xl font-black text-fg">
+            {displayName}
+          </p>
+          <p className="truncate text-sm text-fg/60">{user.email}</p>
+        </div>
+        <SignOutButton />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

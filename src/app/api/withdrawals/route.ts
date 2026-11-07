@@ -46,15 +46,32 @@ export async function POST(request: Request) {
   const amount = Number(body.amount ?? 0);
   const method = String(body.method ?? "").trim();
   const details = String(body.details ?? "").trim();
-  if (!["usdt", "pakistani_bank", "wise"].includes(method)) {
+  if (!["usdt_trc20", "usdt_bep20"].includes(method)) {
     return NextResponse.json(
-      { error: "Choose a payout method: USDT, Pakistani bank, or Wise." },
+      { error: "Choose a payout method: USDT (TRC20) or USDT (BEP20)." },
       { status: 400 }
     );
   }
   if (!details) {
     return NextResponse.json(
-      { error: "Please enter your payout details." },
+      { error: "Please enter your USDT wallet address." },
+      { status: 400 }
+    );
+  }
+  // Basic USDT wallet address check — TRC20 is base58 starting with T,
+  // BEP20 is an Ethereum-style 0x address.
+  const addressOk =
+    method === "usdt_trc20"
+      ? /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(details)
+      : /^0x[a-fA-F0-9]{40}$/.test(details);
+  if (!addressOk) {
+    return NextResponse.json(
+      {
+        error:
+          method === "usdt_trc20"
+            ? "Enter a valid TRC20 USDT wallet address (starts with T, 34 characters)."
+            : "Enter a valid BEP20 USDT wallet address (starts with 0x, 42 characters).",
+      },
       { status: 400 }
     );
   }

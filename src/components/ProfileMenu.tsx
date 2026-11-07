@@ -14,8 +14,10 @@ import SignOutButton from "./SignOutButton";
  */
 export default function ProfileMenu({
   userEmail,
+  userName,
 }: {
   userEmail: string | null;
+  userName?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -45,7 +47,8 @@ export default function ProfileMenu({
     };
   }, [open ]);
 
-  const initial = userEmail ? userEmail[0].toUpperCase() : null;
+  const displayName = userName ?? userEmail ?? "Guest";
+  const initial = userEmail ? displayName[0].toUpperCase() : null;
 
   const itemCls =
     "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-fg transition hover:bg-fg/5";
@@ -76,10 +79,10 @@ export default function ProfileMenu({
             </span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-bold text-fg">
-                {userEmail ?? "Guest"}
+                {displayName}
               </span>
               <span className="block text-xs text-fg/50">
-                {userEmail ? "Signed in" : "Signed out"}
+                {userEmail ?? "Signed out"}
               </span>
             </span>
           </div>

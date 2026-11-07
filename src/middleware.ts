@@ -1,3 +1,8 @@
+/**
+ * Runs on every request. The Supabase middleware refreshes the
+ * session and tells us who is logged in; protected pages redirect
+ * guests to /login with "Please login to continue".
+ */
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
@@ -8,20 +13,20 @@ const PROTECTED_PREFIXES = [
   "/admin",
   "/connect",
   "/submit",
+  "/onboarding",
 ];
 
 export async function middleware(request: NextRequest) {
-  const response = await updateSession(request);
-
-  // Session refresh is handled by updateSession. Page-level guards
-  // (server components) redirect logged-out visitors to /login.
+  const { response, user } = await updateSession(request);
+  const pathname = request.nextUrl.pathname;
   const isProtected = PROTECTED_PREFIXES.some((p) =>
-    request.nextUrl.pathname.startsWith(p)
+    pathname.startsWith(p)
   );
-  if (isProtected) {
-    // Let the page decide — it can render a setup notice when Supabase
-    // is not configured yet, instead of a hard redirect loop.
-    return response;
+  if (isProtected && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "message=login-required";
+    return NextResponse.redirect(url);
   }
   return response;
 }

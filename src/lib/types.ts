@@ -72,6 +72,7 @@ export interface Withdrawal {
 export interface UserProfile {
   id: string;
   email: string;
+  full_name: string | null;
   tiktok_url: string | null;
   instagram_url: string | null;
   youtube_url: string | null;

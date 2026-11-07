@@ -3,15 +3,24 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { feeFor, finalFor, formatUSD } from "@/lib/money";
-import { WITHDRAW_MIN } from "@/lib/constants";
+import { WITHDRAW_MIN, WITHDRAW_METHODS, type WithdrawMethod } from "@/lib/constants";
 
-type Method = "usdt" | "pakistani_bank" | "wise";
+const METHOD_HINTS: Record<WithdrawMethod, string> = {
+  usdt_trc20: "Your TRC20 USDT wallet address (starts with T).",
+  usdt_bep20: "Your BEP20 USDT wallet address (starts with 0x).",
+};
 
-const METHODS: { key: Method; label: string; hint: string }[] = [
-  { key: "usdt", label: "USDT (Ethereum)", hint: "Your USDT wallet address (ERC-20)." },
-  { key: "pakistani_bank", label: "Pakistani Bank", hint: "Bank name + IBAN." },
-  { key: "wise", label: "Wise", hint: "Wise account email + currency (USD / GBP / EUR)." },
-];
+/** Basic USDT wallet address check — TRC20 is base58 starting with T,
+ *  BEP20 is an Ethereum-style 0x address. */
+export function isValidUsdtAddress(method: WithdrawMethod, address: string) {
+  if (method === "usdt_trc20") return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+const ADDRESS_ERRORS: Record<WithdrawMethod, string> = {
+  usdt_trc20: "Enter a valid TRC20 USDT wallet address (starts with T, 34 characters).",
+  usdt_bep20: "Enter a valid BEP20 USDT wallet address (starts with 0x, 42 characters).",
+};
 
 export default function WithdrawModal({
   available,
@@ -22,7 +31,7 @@ export default function WithdrawModal({
 }) {
   const router = useRouter();
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<Method>("usdt");
+  const [method, setMethod] = useState<WithdrawMethod>("usdt_trc20");
   const [details, setDetails] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,17 +40,24 @@ export default function WithdrawModal({
   const amountNum = useMemo(() => Number(amount) || 0, [amount]);
   const fee = feeFor(amountNum);
   const final = finalFor(amountNum);
+  const address = details.trim();
   const valid =
-    amountNum >= WITHDRAW_MIN && amountNum <= available && details.trim().length > 0;
+    amountNum >= WITHDRAW_MIN &&
+    amountNum <= available &&
+    isValidUsdtAddress(method, address);
 
   async function submit() {
     setError("");
-    if (!valid) {
-      setError(
-        amountNum < WITHDRAW_MIN
-          ? `Minimum withdrawal is ${formatUSD(WITHDRAW_MIN)}.`
-          : "Please check the amount and payout details."
-      );
+    if (amountNum < WITHDRAW_MIN) {
+      setError(`Minimum withdrawal is ${formatUSD(WITHDRAW_MIN)}.`);
+      return;
+    }
+    if (amountNum > available) {
+      setError("Amount is more than your withdrawable balance.");
+      return;
+    }
+    if (!isValidUsdtAddress(method, address)) {
+      setError(ADDRESS_ERRORS[method]);
       return;
     }
     setBusy(true);
@@ -49,7 +65,7 @@ export default function WithdrawModal({
       const res = await fetch("/api/withdrawals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amountNum, method, details: details.trim() }),
+        body: JSON.stringify({ amount: amountNum, method, details: address }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Withdrawal failed.");
@@ -81,8 +97,12 @@ export default function WithdrawModal({
             <p className="text-4xl">🎉</p>
             <p className="mt-3 text-lg font-bold text-fg">Withdrawal requested</p>
             <p className="mt-1 text-sm text-fg/60">
-              Your payout of {formatUSD(final)} is being processed. It will be
-              sent to the details you provided.
+              Withdrawal request sent. Will be processed in 24-48 hours.
+            </p>
+            <p className="mt-2 text-sm text-fg/60">
+              You will receive{" "}
+              <span className="font-bold text-lime">{formatUSD(final)}</span>{" "}
+              in USDT.
             </p>
             <button
               onClick={onClose}
@@ -94,7 +114,7 @@ export default function WithdrawModal({
         ) : (
           <>
             <p className="mt-2 text-sm text-fg/60">
-              Available balance:{" "}
+              Withdrawable balance:{" "}
               <span className="font-bold text-lime">{formatUSD(available)}</span>
             </p>
             <label className="mt-4 block text-sm font-bold text-fg">
@@ -113,10 +133,10 @@ export default function WithdrawModal({
               Payout method
               <select
                 value={method}
-                onChange={(e) => setMethod(e.target.value as Method)}
+                onChange={(e) => setMethod(e.target.value as WithdrawMethod)}
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               >
-                {METHODS.map((m) => (
+                {WITHDRAW_METHODS.map((m) => (
                   <option key={m.key} value={m.key}>
                     {m.label}
                   </option>
@@ -124,14 +144,14 @@ export default function WithdrawModal({
               </select>
             </label>
             <label className="mt-4 block text-sm font-bold text-fg">
-              Payout details
+              USDT Wallet Address
               <input
                 type="text"
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
-                placeholder={
-                  METHODS.find((m) => m.key === method)?.hint ?? ""
-                }
+                placeholder={METHOD_HINTS[method]}
+                autoComplete="off"
+                spellCheck={false}
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />
             </label>
@@ -150,6 +170,9 @@ export default function WithdrawModal({
                   <span className="font-bold text-fg">You receive</span>
                   <span className="font-black text-lime">{formatUSD(final)}</span>
                 </div>
+                <p className="mt-2 text-xs text-fg/50">
+                  You receive amount × 0.93 after the 7% fee, in USDT.
+                </p>
               </div>
             )}
 
@@ -168,7 +191,8 @@ export default function WithdrawModal({
             </button>
             <p className="mt-3 text-center text-xs text-fg/40">
               Payouts are processed by the platform owner from the funded
-              campaign budget.
+              campaign budget. Double-check your wallet address — USDT sent
+              to the wrong address cannot be recovered.
             </p>
           </>
         )}

@@ -4,11 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import Logo from "@/components/Logo";
 
 export default function SignupPage() {
   const router = useRouter();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,22 +26,42 @@ export default function SignupPage() {
       setError("Supabase is not configured yet. Add your keys to .env.local first.");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (!agreeTerms) {
+      setError("Please agree to the Terms of Service to continue.");
       return;
     }
     setBusy(true);
     try {
       const { data, error: authError } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
+          data: { full_name: fullName.trim() },
           // Confirmation links must return to the live site (not
           // localhost) and land on onboarding, not the dashboard.
           emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
         },
       });
-      if (authError) throw authError;
+      if (authError) {
+        if (/already registered/i.test(authError.message)) {
+          throw new Error(
+            "This email is already registered. Try logging in."
+          );
+        }
+        throw authError;
+      }
       if (data.session) {
         // Signed straight in — go to onboarding, not the dashboard.
         router.push("/onboarding");
@@ -59,10 +83,13 @@ export default function SignupPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
+      <div className="flex justify-center">
+        <Logo href="/" />
+      </div>
+      <h1 className="mt-6 text-center font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
         Create your account
       </h1>
-      <p className="mt-2 text-sm text-fg/60">
+      <p className="mt-2 text-center text-sm text-fg/60">
         Email and password only — we never ask for your phone, address, or
         extra details.
       </p>
@@ -77,6 +104,18 @@ export default function SignupPage() {
         className="mt-6 rounded-3xl border border-fg/10 bg-card p-6"
       >
         <label className="block text-sm font-bold text-fg">
+          Full Name
+          <input
+            type="text"
+            required
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Your full name"
+            autoComplete="name"
+            className={inputCls}
+          />
+        </label>
+        <label className="mt-4 block text-sm font-bold text-fg">
           Email
           <input
             type="email"
@@ -92,12 +131,42 @@ export default function SignupPage() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 6 characters"
+            placeholder="At least 8 characters"
             className={inputCls}
           />
+        </label>
+        <label className="mt-4 block text-sm font-bold text-fg">
+          Confirm Password
+          <input
+            type="password"
+            required
+            minLength={8}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Repeat your password"
+            className={inputCls}
+          />
+        </label>
+        <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-fg/80">
+          <input
+            type="checkbox"
+            checked={agreeTerms}
+            onChange={(e) => setAgreeTerms(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[#C6FF00]"
+          />
+          <span>
+            I agree to the{" "}
+            <Link href="/terms" className="font-bold text-lime hover:underline">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="font-bold text-lime hover:underline">
+              Privacy Policy
+            </Link>
+          </span>
         </label>
         {error && (
           <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
@@ -123,7 +192,6 @@ export default function SignupPage() {
           </Link>
         </p>
         <p className="mt-3 text-center text-xs leading-relaxed text-fg/40">
-          By signing up you agree to the Terms of Service and Privacy Policy.
           Fake engagement will lead to your account being strictly blocked or
           banned.
         </p>

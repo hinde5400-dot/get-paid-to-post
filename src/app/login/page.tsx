@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import Logo from "@/components/Logo";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Shown when middleware redirects a guest away from a protected page.
+  const notice =
+    searchParams.get("message") === "login-required"
+      ? "Please login to continue."
+      : "";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,11 +28,22 @@ export default function LoginPage() {
       setError("Supabase is not configured yet. Add your keys to .env.local first.");
       return;
     }
+    if (!email.trim() || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
     setBusy(true);
     try {
       const { data, error: authError } =
         await supabase.auth.signInWithPassword({ email, password });
-      if (authError) throw authError;
+      if (authError) {
+        if (/not confirmed/i.test(authError.message)) {
+          throw new Error(
+            "Please confirm your email first — check your inbox for the confirmation link."
+          );
+        }
+        throw new Error("Wrong email or password");
+      }
       if (data.user) {
         // Blocked accounts cannot log in.
         const { data: profile } = await supabase
@@ -42,7 +61,7 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Log in failed.");
+      setError(err instanceof Error ? err.message : "Wrong email or password");
     } finally {
       setBusy(false);
     }
@@ -53,16 +72,24 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
+      <div className="flex justify-center">
+        <Logo href="/" />
+      </div>
+      <h1 className="mt-6 text-center font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
         Welcome back
       </h1>
-      <p className="mt-2 text-sm text-fg/60">
+      <p className="mt-2 text-center text-sm text-fg/60">
         Log in to your Get Paid To Post account.
       </p>
       {!isSupabaseConfigured && (
         <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
           Supabase is not configured yet — add NEXT_PUBLIC_SUPABASE_URL and
           NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local (see README).
+        </p>
+      )}
+      {notice && (
+        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime">
+          {notice}
         </p>
       )}
       <form
@@ -91,6 +118,14 @@ export default function LoginPage() {
             className={inputCls}
           />
         </label>
+        <div className="mt-3 text-right">
+          <Link
+            href="/forgot-password"
+            className="text-sm font-bold text-lime hover:underline"
+          >
+            Forgot Password?
+          </Link>
+        </div>
         {error && (
           <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
             {error}
@@ -111,5 +146,19 @@ export default function LoginPage() {
         </p>
       </form>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-md text-center">
+          <p className="text-fg/60">Loading…</p>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

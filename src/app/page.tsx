@@ -4,13 +4,13 @@ import CampaignGrid from "@/components/CampaignGrid";
 import CampaignBanner from "@/components/CampaignBanner";
 import AdSlot from "@/components/AdSlot";
 import Faq from "@/components/Faq";
-import { BRAND_NAME } from "@/lib/constants";
+import DiscordButton from "@/components/DiscordButton";
 import { formatUSD } from "@/lib/money";
 
 const FAQS = [
   {
     q: "How do I get paid?",
-    a: "Pick a funded campaign, post your clip, and submit the link. Approved earnings go into a 72-hour hold, then move to your available balance. Withdraw from $10 via USDT, Pakistani bank, or Wise. A 7% fee applies at withdrawal.",
+    a: "Pick a funded campaign, post your clip, and submit the link. Approved earnings go into a 72-hour hold, then move to your available balance. Withdraw from $10 in USDT (TRC20 or BEP20). A 7% fee applies at withdrawal.",
   },
   {
     q: "Do I need followers to join?",
@@ -47,14 +47,15 @@ export default async function HomePage() {
         <p className="inline-block rounded-full bg-lime px-4 py-1.5 text-xs font-black uppercase tracking-widest text-black">
           TikTok · Instagram · YouTube
         </p>
+        <div className="mt-4 flex justify-center">
+          <DiscordButton compact />
+        </div>
         <h1 className="mx-auto mt-5 max-w-3xl font-display text-5xl font-black uppercase leading-[0.95] tracking-tight text-fg md:text-7xl">
-          Get Paid to Post on{" "}
-          <span className="bg-lime px-2 text-black">TikTok, Instagram</span>{" "}
-          &amp; YouTube
+          Post Clips. <span className="bg-lime px-2 text-black">Get Paid Per View.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-fg/70 md:text-lg">
-          {BRAND_NAME} connects creators with brands. Post short clips, get
-          paid per view. No follower minimum — a great clip is all you need.
+          Post short clips, get paid per view. No follower minimum — a great
+          clip is all you need.
         </p>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <Link
@@ -68,12 +69,6 @@ export default async function HomePage() {
             className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
           >
             Browse campaigns
-          </Link>
-          <Link
-            href="/brands"
-            className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
-          >
-            I am a Brand
           </Link>
         </div>
         <p className="mt-8 text-sm font-bold text-fg/50">
@@ -192,7 +187,7 @@ export default async function HomePage() {
             { n: "1", t: "Sign up free", d: "Create your account with email and password only. Then connect your TikTok, Instagram and YouTube profiles." },
             { n: "2", t: "Pick a campaign", d: "Browse funded campaigns and choose one that fits your style. Check the brief, rate and rules first." },
             { n: "3", t: "Post your clip", d: "Film a vertical 9:16 clip with captions and a hook in the first 3 seconds. Post it, then submit the link." },
-            { n: "4", t: "Get paid per view", d: "Approved earnings sit in a 72-hour hold, then land in your wallet. Withdraw from $10 via USDT, bank or Wise." },
+            { n: "4", t: "Get paid per view", d: "Approved earnings sit in a 72-hour hold, then land in your wallet. Withdraw from $10 in USDT (TRC20 or BEP20)." },
           ].map((s) => (
             <div
               key={s.n}
@@ -208,49 +203,12 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Why */}
-      <section>
-        <h2 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-tight text-fg">
-          Why creators choose {BRAND_NAME}
-        </h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            { t: "No follower minimum", d: "Small accounts earn the same per view as big ones. Your clip matters, not your follower count." },
-            { t: "Paid per real view", d: "$10 base pay per approved post, plus $0.75 per 1,000 views, tracked for 14 days." },
-            { t: "Funded budgets only", d: "Every live campaign is funded upfront by the brand, so approved earnings are always covered." },
-          ].map((s) => (
-            <div
-              key={s.t}
-              className="rounded-2xl border border-fg/10 bg-card p-5"
-            >
-              <h3 className="font-display font-black tracking-tight text-fg">{s.t}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-fg/60">{s.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* FAQ */}
       <section>
         <h2 className="mb-4 font-display text-2xl font-black uppercase tracking-tight text-fg">
           Frequently asked questions
         </h2>
         <Faq items={FAQS} />
-      </section>
-
-      <section className="rounded-3xl bg-lime p-8 text-center">
-        <h2 className="font-display text-2xl font-black uppercase tracking-tight text-black md:text-3xl">
-          Ready to get paid for your clips?
-        </h2>
-        <p className="mx-auto mt-2 max-w-lg text-sm font-medium text-black/70">
-          Sign up free, connect your profiles, and post your first clip today.
-        </p>
-        <Link
-          href="/signup"
-          className="mt-5 inline-block rounded-full bg-ink px-7 py-3 text-sm font-black text-fg"
-        >
-          Create your free account
-        </Link>
       </section>
     </div>
   );

@@ -9,6 +9,7 @@ import {
   InstagramIcon,
   YouTubeIcon,
 } from "./PlatformIcons";
+import DiscordButton from "./DiscordButton";
 
 /**
  * TryShoot-style brand page tabs: Home / Apps / Chats / About,
@@ -137,28 +138,24 @@ export default function CampaignDetailTabs({
 
         {tab === "chats" && (
           <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center">
-            <p className="text-4xl">✉️</p>
+            <p className="text-4xl">💬</p>
             <h2 className="mt-3 font-display text-lg font-black tracking-tight text-fg">
-              Campaign chat
+              Talk about this campaign
             </h2>
             <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-fg/60">
-              Messages about this campaign — approvals, feedback and payouts
-              — appear in your inbox.
+              There is no live chat on the site. Join our Discord community
+              to talk about this campaign, ask questions, and get support.
+              Submission status is always visible on My Posts and Earnings.
             </p>
-            <div className="mt-5 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/inbox"
-                className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
-              >
-                Open Inbox
-              </Link>
-              <Link
-                href="/support"
-                className="rounded-full border border-fg/20 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
-              >
-                Contact Support
-              </Link>
+            <div className="mx-auto mt-5 max-w-sm">
+              <DiscordButton />
             </div>
+            <Link
+              href="/support"
+              className="mt-4 inline-block text-sm font-bold text-lime hover:underline"
+            >
+              Contact Support →
+            </Link>
           </div>
         )}
 

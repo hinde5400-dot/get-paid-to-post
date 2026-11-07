@@ -167,7 +167,7 @@ export default async function CampaignDetailPage({
                   <li>• Post a short vertical clip about {campaign.brand_name} on TikTok, Instagram or YouTube.</li>
                   <li>• You are paid per real view — no follower minimum.</li>
                   <li>• Approved earnings move to your wallet after a 72-hour hold.</li>
-                  <li>• Withdraw from $10 via USDT, Pakistani bank, or Wise (7% fee).</li>
+                  <li>• Withdraw from $10 in USDT (TRC20 or BEP20) — 7% fee.</li>
                   <li>• Fake engagement will lead to your account being strictly blocked or banned.</li>
                 </ul>
               </div>

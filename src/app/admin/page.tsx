@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getAllSubmissions, getPendingCampaigns } from "@/lib/data";
+import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewList";
 import AdminCampaignList from "@/components/AdminCampaignList";
+import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
 
 export default async function AdminPage() {
   if (!isSupabaseConfigured) {
@@ -35,6 +36,7 @@ export default async function AdminPage() {
 
   const submissions = await getAllSubmissions();
   const pendingCampaigns = await getPendingCampaigns();
+  const withdrawals = await getAllWithdrawals();
 
   // Creator emails for the review list (owner can read all users).
   const supabase = getServerClient();
@@ -52,6 +54,13 @@ export default async function AdminPage() {
   }));
 
   const pending = items.filter((s) => s.status === "pending").length;
+  const pendingWithdrawals = withdrawals.filter(
+    (w) => w.status === "pending"
+  ).length;
+  const withdrawalItems: WithdrawalWithCreator[] = withdrawals.map((w) => ({
+    ...w,
+    creator_email: emailById.get(w.user_id) ?? w.user_id.slice(0, 8),
+  }));
 
   return (
     <div className="space-y-10">
@@ -91,6 +100,27 @@ export default async function AdminPage() {
           ) : (
             <AdminCampaignList campaigns={pendingCampaigns} />
           )}
+        </div>
+      </section>
+
+      {/* Withdrawal requests — owner-only. Approve once the USDT has
+          actually been sent, or reject to refund the amount. */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Withdrawal requests
+          </h2>
+          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+            {pendingWithdrawals} pending · {withdrawals.length} total
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Mark a request as paid only after the USDT has actually been sent
+          to the creator&apos;s wallet. Rejecting refunds the amount to the
+          creator&apos;s withdrawable balance.
+        </p>
+        <div className="mt-4">
+          <AdminWithdrawalList withdrawals={withdrawalItems} />
         </div>
       </section>
 

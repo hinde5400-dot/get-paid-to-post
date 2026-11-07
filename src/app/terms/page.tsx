@@ -43,7 +43,7 @@ export default function TermsPage() {
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Minimum withdrawal is $10.</li>
           <li>• A 7% fee applies at withdrawal — you receive amount × 0.93.</li>
-          <li>• Payout methods: USDT (Ethereum), Pakistani bank (bank name + IBAN), Wise (USD / GBP / EUR).</li>
+          <li>• Payout methods: USDT (TRC20) and USDT (BEP20) only.</li>
           <li>• Payouts are processed by the platform owner from the funded campaign budget.</li>
         </ul>
       </section>

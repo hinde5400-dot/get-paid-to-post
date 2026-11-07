@@ -1,12 +1,15 @@
 import { BRAND_NAME } from "@/lib/constants";
+import DiscordButton from "@/components/DiscordButton";
 
 export default function SupportPage() {
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Contact Support</h1>
       <p className="text-sm leading-relaxed text-fg/60">
-        Support for {BRAND_NAME} runs on Discord — join the server to open a
-        support ticket, ask a question, or report a problem.
+        Support Tickets, Announcements, and Community — All on Discord.
+        Support for {BRAND_NAME} runs on Discord only — there is no live
+        chat on the site. Join the server to open a support ticket, ask a
+        question, or report a problem.
       </p>
 
       <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center">
@@ -16,20 +19,10 @@ export default function SupportPage() {
         </h2>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg/60">
           Members join the Discord server, open support tickets, and get help
-          from the team.
+          from the team. Support tickets will be handled on Discord once the
+          server opens.
         </p>
-        {/* Honest placeholder — no fake invite link. The owner adds the real
-            Discord invite URL here after creating the server. */}
-        <button
-          disabled
-          className="mt-5 w-full cursor-not-allowed rounded-full bg-fg/10 py-3.5 text-sm font-bold text-fg/50"
-        >
-          Join Discord — invite link coming soon
-        </button>
-        <p className="mt-3 text-xs text-fg/40">
-          The Discord invite link will be added by the owner once the server
-          is ready. No link is shown here yet.
-        </p>
+        <DiscordButton className="mx-auto mt-5 max-w-sm" />
       </div>
 
       <div className="rounded-3xl border border-fg/10 bg-card p-6">

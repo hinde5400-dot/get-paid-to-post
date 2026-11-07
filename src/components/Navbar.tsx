@@ -1,17 +1,29 @@
-import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getProfile } from "@/lib/auth";
 import { getCampaigns, getUserSubmissions } from "@/lib/data";
-import { BRAND_NAME } from "@/lib/constants";
 import SideMenu from "./SideMenu";
 import ProfileMenu from "./ProfileMenu";
+import Logo from "./Logo";
+import DiscordButton from "./DiscordButton";
 
 /**
- * TryShoot-style header: hamburger menu at the top-LEFT, logo CENTER,
- * profile icon at the top-RIGHT with a Guest / signed-in dropdown.
- * Navigation lives in the sidebar drawer; the header stays clean.
+ * Header: hamburger menu at the top-LEFT, logo CENTER, Discord
+ * button and profile icon at the top-RIGHT. Navigation lives in the
+ * sidebar drawer; the header stays clean.
  */
 export default async function Navbar() {
   const user = await getCurrentUser();
+
+  // The creator's name, never "Guest" for a logged-in user: the
+  // profile row (migration 0005) first, then the signup metadata
+  // (saved before the migration runs), then the email.
+  let userName: string | null = null;
+  if (user) {
+    const profile = await getProfile(user.id);
+    const metaName = user.user_metadata?.full_name;
+    userName =
+      profile?.full_name ??
+      (typeof metaName === "string" && metaName.trim() ? metaName : null);
+  }
 
   // Campaigns the signed-in user has joined (for the JOINED section
   // of the sidebar drawer). Empty for guests.
@@ -31,23 +43,22 @@ export default async function Navbar() {
     <header className="sticky top-0 z-40 border-b border-fg/10 bg-ink/95 backdrop-blur">
       <div className="relative mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         {/* Hamburger at the top-left opens the slide-in sidebar drawer. */}
-        <SideMenu userEmail={user?.email ?? null} joined={joined} />
+        <SideMenu
+          userEmail={user?.email ?? null}
+          userName={userName}
+          joined={joined}
+        />
 
         {/* Centered logo. */}
-        <Link
-          href="/"
-          className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lime font-display text-lg font-black text-black">
-            G
-          </span>
-          <span className="hidden font-display text-lg font-black uppercase leading-tight tracking-tight text-fg min-[420px]:block">
-            {BRAND_NAME}
-          </span>
-        </Link>
+        <div className="absolute left-1/2 -translate-x-1/2">
+          <Logo />
+        </div>
 
-        {/* Profile icon at the top-right with dropdown. */}
-        <ProfileMenu userEmail={user?.email ?? null} />
+        {/* Discord + profile icon at the top-right. */}
+        <div className="flex items-center gap-2">
+          <DiscordButton compact />
+          <ProfileMenu userEmail={user?.email ?? null} userName={userName} />
+        </div>
       </div>
     </header>
   );

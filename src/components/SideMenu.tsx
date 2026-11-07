@@ -6,32 +6,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import SignOutButton from "./SignOutButton";
 import ThemeToggle from "./ThemeToggle";
+import Logo from "./Logo";
+import DiscordButton from "./DiscordButton";
 
 /**
- * Top-left hamburger menu (TryShoot-style) opening a slide-in sidebar
- * drawer. Every part of the site is reachable from this one menu, on
- * mobile and desktop. No bottom navigation.
+ * Top-left hamburger menu opening a slide-in sidebar drawer. One
+ * clean menu only — Home, Explore, My Clips, Profile, Earnings,
+ * Support (Discord) — plus the Discord community button and the
+ * JOINED list. No filler, no duplicate menus.
  */
-
 const MENU = [
   { href: "/", label: "Home", icon: "⌂" },
   { href: "/campaigns", label: "Explore", icon: "◎" },
-  { href: "/campaigns", label: "Submit", icon: "+" },
   { href: "/my-posts", label: "My Clips", icon: "▣" },
-  { href: "/inbox", label: "Chat", icon: "✉" },
   { href: "/dashboard", label: "Profile", icon: "○" },
   { href: "/earnings", label: "Earnings", icon: "$" },
-  { href: "/dashboard#refer", label: "Refer a friend", icon: "🎁" },
-  { href: "/news", label: "Blog", icon: "📰" },
-  { href: "/support", label: "Help & Support", icon: "?" },
-  { href: "/connect", label: "Settings", icon: "⚙" },
+  { href: "/support", label: "Support (Discord)", icon: "💬" },
 ];
 
 export default function SideMenu({
   userEmail,
+  userName,
   joined = [],
 }: {
   userEmail: string | null;
+  userName?: string | null;
   joined?: { id: string; title: string }[];
 }) {
   const [open, setOpen] = useState(false);
@@ -56,7 +55,8 @@ export default function SideMenu({
     setOpen(false);
   }, [pathname]);
 
-  const initial = userEmail ? userEmail[0].toUpperCase() : "G";
+  const displayName = userName ?? userEmail ?? "Guest";
+  const initial = displayName[0].toUpperCase();
 
   return (
     <>
@@ -84,21 +84,9 @@ export default function SideMenu({
             />
             <aside className="animate-drawer-in absolute left-0 top-0 flex h-full w-80 max-w-[85vw] flex-col bg-ink shadow-2xl">
             <div className="flex items-center justify-between border-b border-fg/10 px-5 py-4">
-              <Link
-                href="/"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2"
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime font-display text-lg font-black text-black">
-                  G
-                </span>
-                <span className="font-display text-base font-black uppercase leading-tight tracking-tight text-fg">
-                  Get Paid
-                  <span className="block text-[11px] font-bold normal-case tracking-wide text-fg/50">
-                    To Post
-                  </span>
-                </span>
-              </Link>
+              <div onClick={() => setOpen(false)}>
+                <Logo />
+              </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -115,18 +103,17 @@ export default function SideMenu({
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm font-bold text-fg">
-                  {userEmail ?? "Guest"}
+                  {displayName}
                 </span>
                 <span className="block text-xs text-fg/50">
-                  {userEmail ? "Signed in" : "Signed out"}
+                  {userEmail ? userEmail : "Signed out"}
                 </span>
               </span>
             </div>
 
             <nav className="flex-1 overflow-y-auto px-3 py-3">
               {MENU.map((item) => {
-                const active =
-                  pathname === item.href && item.label !== "Submit";
+                const active = pathname === item.href;
                 return (
                   <Link
                     key={item.label}
@@ -146,6 +133,8 @@ export default function SideMenu({
                   </Link>
                 );
               })}
+
+              <DiscordButton className="mt-3 px-3" />
             </nav>
 
             {/* JOINED — campaigns this user has submitted to (real data

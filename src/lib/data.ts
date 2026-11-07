@@ -218,16 +218,8 @@ export async function getWallet(userId: string): Promise<Wallet | null> {
   };
 }
 
-export async function getWithdrawals(userId: string): Promise<Withdrawal[]> {
-  const supabase = getServerClient();
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("withdrawals")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map((row) => ({
+function mapWithdrawal(row: Record<string, unknown>): Withdrawal {
+  return {
     id: String(row.id),
     user_id: String(row.user_id),
     amount: Number(row.amount ?? 0),
@@ -237,5 +229,30 @@ export async function getWithdrawals(userId: string): Promise<Withdrawal[]> {
     details: String(row.details ?? ""),
     status: String(row.status ?? "pending"),
     created_at: String(row.created_at ?? ""),
-  }));
+  };
+}
+
+export async function getWithdrawals(userId: string): Promise<Withdrawal[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("withdrawals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map(mapWithdrawal);
+}
+
+/** All withdrawal requests, newest first — owner only. */
+export async function getAllWithdrawals(): Promise<Withdrawal[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("withdrawals")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map(mapWithdrawal);
 }

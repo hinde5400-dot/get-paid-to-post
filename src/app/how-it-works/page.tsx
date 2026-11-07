@@ -8,7 +8,7 @@ const STEPS = [
   { n: "4", t: "Make your clip", d: "Film vertical 9:16, add captions, and hook viewers in the first 3 seconds. Keep it original and on-brief." },
   { n: "5", t: "Post and submit", d: "Post on TikTok and Instagram together (YouTube optional) and submit the links as one bundle, with proof and a short note on how you made it." },
   { n: "6", t: "Wait for approval", d: "Submissions stay Pending at $0 until approved. Approved earnings move into a 72-hour hold, then to your available balance." },
-  { n: "7", t: "Withdraw your earnings", d: "Withdraw from $10 via USDT, Pakistani bank, or Wise. A 7% fee applies at withdrawal." },
+  { n: "7", t: "Withdraw your earnings", d: "Withdraw from $10 in USDT (TRC20 or BEP20). A 7% fee applies at withdrawal." },
 ];
 
 export default function HowItWorksPage() {
@@ -43,7 +43,7 @@ export default function HowItWorksPage() {
           <li>• View bonus: $0.75 per 1,000 views, tracked for 14 days.</li>
           <li>• Approved earnings sit in a 72-hour hold, then become available.</li>
           <li>• Minimum withdrawal: $10. Withdrawal fee: 7%.</li>
-          <li>• Payouts: USDT, Pakistani bank, or Wise.</li>
+          <li>• Payouts: USDT (TRC20 or BEP20) only.</li>
           <li>• Brands fund every campaign upfront — minimum $500 to launch.</li>
           <li>• One clip per platform every 2 hours, max 7 posts per campaign.</li>
         </ul>

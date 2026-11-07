@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { BRAND_NAME, SITE_DOMAIN } from "@/lib/constants";
+import Logo from "./Logo";
+import DiscordButton from "./DiscordButton";
 
 export default function Footer() {
   return (
     <footer className="border-t border-fg/10 bg-card/60 pb-24 md:pb-8">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 md:grid-cols-4">
         <div>
-          <p className="font-display text-lg font-black uppercase tracking-tight text-fg">{BRAND_NAME}</p>
+          <Logo />
           <p className="mt-2 text-sm text-fg/60">
             Post Clips. Get Paid Per View. Creators post short clips on
             TikTok, Instagram and YouTube and get paid per view. No follower
             minimum.
           </p>
           <p className="mt-3 text-xs text-fg/40">{SITE_DOMAIN}</p>
+          <DiscordButton compact className="mt-4" />
         </div>
         <div>
           <p className="text-sm font-bold text-fg">Creators</p>
@@ -36,7 +39,6 @@ export default function Footer() {
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             <li><Link href="/terms" className="hover:text-lime">Terms of Service</Link></li>
             <li><Link href="/privacy" className="hover:text-lime">Privacy Policy</Link></li>
-            <li><Link href="/support" className="hover:text-lime">Support (Discord)</Link></li>
           </ul>
         </div>
       </div>

@@ -38,9 +38,9 @@ export default function PrivacyPage() {
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">4. Payout details</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
-          Payout details (USDT address, bank name + IBAN, or Wise details)
-          are used only to pay you. They are never published on the site and
-          never shared with brands.
+          Payout details (your USDT wallet address) are used only to pay
+          you. They are never published on the site and never shared with
+          brands.
         </p>
       </section>
 
