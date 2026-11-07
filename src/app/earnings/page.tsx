@@ -33,7 +33,7 @@ export default async function EarningsPage() {
           available to withdraw. Payouts are USDT only.
         </p>
         <p className="mt-2 max-w-2xl rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
-          After campaign ends and views are verified, your earnings go to Pending for 72-hour hold, then become Withdrawable. You can withdraw anytime when Withdrawable is more than $10.
+          After campaign ends and views are verified, your earnings go to Pending for 72-hour hold, then become Withdrawable. You can withdraw anytime when Withdrawable is more than $15.
         </p>
       </div>
 
@@ -63,7 +63,7 @@ export default async function EarningsPage() {
             <WithdrawButton available={available} />
           </div>
           <p className="mt-2 text-xs text-fg/50">
-            Ready to withdraw. Minimum $10.00.
+            Ready to withdraw. Minimum $15.00.
           </p>
         </div>
       </div>

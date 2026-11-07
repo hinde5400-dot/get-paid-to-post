@@ -46,17 +46,6 @@ export default function WithdrawModal({
   const final = finalFor(amountNum);
   const address = details.trim();
 
-  /** Never let the typed amount exceed the withdrawable balance —
-   *  a creator with $20 can only ever request $20 (the server
-   *  blocks anything above it too). */
-  function clampAmount(raw: string) {
-    if (raw === "" || raw === ".") return raw;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return raw;
-    if (n > available) return String(available);
-    return raw;
-  }
-
   function fillMax() {
     if (available > 0) setAmount(String(available));
   }
@@ -67,7 +56,7 @@ export default function WithdrawModal({
       return;
     }
     if (amountNum > available) {
-      showError("Amount is more than your withdrawable balance.");
+      showError("Amount is more than your available balance.");
       return;
     }
     if (!isValidUsdtAddress(method, address)) {
@@ -147,10 +136,9 @@ export default function WithdrawModal({
               <input
                 type="number"
                 min={WITHDRAW_MIN}
-                max={available}
                 step="0.01"
                 value={amount}
-                onChange={(e) => setAmount(clampAmount(e.target.value))}
+                onChange={(e) => setAmount(e.target.value)}
                 placeholder={`Min ${formatUSD(WITHDRAW_MIN)}`}
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />

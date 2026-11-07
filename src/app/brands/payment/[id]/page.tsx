@@ -137,20 +137,27 @@ export default async function BrandPaymentPage({
         </p>
       </div>
 
-      {/* Private messages to the admin — ask anything, send proof. */}
-      <div className="rounded-3xl border border-fg/10 bg-card p-6 md:p-8">
+      {/* Private chat with the admin — text messages and direct
+          proof screenshot uploads, locked to this campaign. */}
+      <div
+        id="brand-chat"
+        className="scroll-mt-6 rounded-3xl border border-fg/10 bg-card p-6 md:p-8"
+      >
         <h2 className="text-lg font-black text-fg">
-          Message the admin / Send proof
+          Chat with the admin / Send proof
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/60">
           This conversation is private — only you and the admin can see
-          it. Tell the admin you sent the budget, or share your payment
-          screenshot link as proof.
+          it. Tell the admin you sent the budget and upload your payment
+          screenshot here as proof. The admin can reply to you in this
+          chat.
         </p>
         <div className="mt-5">
           <BrandMessageForm
             campaignId={campaign.id}
             initialMessages={messages}
+            viewerIsAdmin={isOwner(profile)}
+            brandName={campaign.brand_name}
           />
         </div>
       </div>

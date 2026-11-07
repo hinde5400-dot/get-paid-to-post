@@ -127,8 +127,9 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* Brand messages — private inbox. Brands message the admin
-          from the payment page and send proof links there. */}
+      {/* Brand messages — private two-way chat. Brands message the
+          admin from the payment page and upload proof screenshots
+          there; the admin replies in the thread. */}
       <section>
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
@@ -139,10 +140,10 @@ export default async function AdminPage() {
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
-          Private messages from brands — payment confirmations and proof
-          links, attached to their campaign. Viewing this inbox marks
-          messages as read. To reply to a brand, contact them on
-          Discord — the inbox here is one-way (brand → admin).
+          Private two-way chat with brands — payment confirmations and
+          proof screenshots, attached to their campaign. Reply to a
+          brand right here in the thread; brands can also reach you on
+          Discord. Viewing this inbox marks messages as read.
         </p>
         <div className="mt-4">
           <AdminMessagesList messages={brandMessages} />

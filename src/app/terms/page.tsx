@@ -46,7 +46,7 @@ export default function TermsPage() {
           <li>
             • <strong className="text-fg">Withdrawable Balance</strong> —
             earnings that have passed the 72-hour hold and can be
-            withdrawn, from a minimum of $10.
+            withdrawn, from a minimum of $15.
           </li>
         </ul>
       </section>
@@ -76,7 +76,7 @@ export default function TermsPage() {
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">5. Withdrawals</h2>
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
-          <li>• Minimum withdrawal is $10.</li>
+          <li>• Minimum withdrawal is $15.</li>
           <li>• A 7% fee applies at withdrawal — you receive amount × 0.93.</li>
           <li>• Payout methods: USDT (TRC20) and USDT (BEP20) only.</li>
           <li>• Payouts are processed by the platform owner from the funded campaign budget.</li>

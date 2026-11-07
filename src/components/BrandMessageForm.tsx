@@ -1,61 +1,106 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BrandMessage } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
 
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+function imageUrl(campaignId: string, messageId: string) {
+  return `/api/campaigns/${campaignId}/messages/${messageId}/image`;
+}
+
+function formatSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 /**
- * Private brand -> admin messages on the payment page. The brand can
- * ask the admin anything and send a proof link (a screenshot hosted
- * on Google Drive / Imgur) after paying the budget. Only the
- * campaign's brand owner and the admin ever see this thread.
+ * Private two-way chat with the admin on the payment page. The brand
+ * sends a text message (e.g. its Transaction ID) and/or uploads a
+ * payment proof screenshot directly — image files only, max 5 MB.
+ * No Drive/Imgur links. Only this campaign's brand and the admin
+ * ever see this thread, and the admin can reply here too.
  */
 export default function BrandMessageForm({
   campaignId,
   initialMessages,
+  viewerIsAdmin,
+  brandName,
 }: {
   campaignId: string;
   initialMessages: BrandMessage[];
+  viewerIsAdmin: boolean;
+  brandName: string;
 }) {
   const { showError, showSuccess } = useToast();
   const [messages, setMessages] = useState<BrandMessage[]>(initialMessages);
   const [text, setText] = useState("");
-  const [proofUrl, setProofUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Keep the thread scrolled to the latest message.
+  useEffect(() => {
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  function isOwn(m: BrandMessage) {
+    return viewerIsAdmin ? m.sender === "admin" : m.sender === "brand";
+  }
+
+  function senderLabel(m: BrandMessage) {
+    if (m.sender === "admin") return viewerIsAdmin ? "You" : "Admin";
+    return viewerIsAdmin ? brandName : "You";
+  }
+
+  function pickFile(f: File | null) {
+    if (!f) {
+      setFile(null);
+      return;
+    }
+    if (!IMAGE_TYPES.includes(f.type)) {
+      showError("Proof must be an image (JPEG, PNG, WebP or GIF).");
+      return;
+    }
+    if (f.size > MAX_IMAGE_BYTES) {
+      showError("Proof image must be 5 MB or smaller.");
+      return;
+    }
+    setFile(f);
+  }
 
   async function send() {
     const message = text.trim();
-    if (message.length < 1 || message.length > 2000) {
-      showError("Write a message first (up to 2000 characters).");
+    if (!message && !file) {
+      showError("Write a message or attach a proof image.");
       return;
     }
-    const proof = proofUrl.trim();
-    if (proof) {
-      try {
-        const url = new URL(proof);
-        if (url.protocol !== "http:" && url.protocol !== "https:") {
-          throw new Error("bad protocol");
-        }
-      } catch {
-        showError("Proof link must be a valid http(s) URL.");
-        return;
-      }
+    if (message.length > 2000) {
+      showError("Message must be 2000 characters or less.");
+      return;
     }
     setBusy(true);
     try {
+      const form = new FormData();
+      form.append("message", message);
+      if (file) form.append("image", file);
       const res = await fetch(`/api/campaigns/${campaignId}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, proofUrl: proof || undefined }),
+        body: form,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not send the message.");
       const saved = data.message as BrandMessage;
       setMessages((prev) => [...prev, saved]);
       setText("");
-      setProofUrl("");
-      showSuccess("Message sent to the admin.");
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+      showSuccess("Message sent.");
     } catch (err) {
       showError(err instanceof Error ? err.message : "Could not send the message.");
     } finally {
@@ -65,33 +110,109 @@ export default function BrandMessageForm({
 
   return (
     <div>
+      {messages.length > 0 && (
+        <div
+          ref={threadRef}
+          className="mb-5 max-h-96 space-y-3 overflow-y-auto rounded-2xl bg-ink/60 p-4"
+        >
+          {messages.map((m) => {
+            const own = isOwn(m);
+            return (
+              <div
+                key={m.id}
+                className={`flex ${own ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                    own
+                      ? "rounded-br-md bg-lime/15"
+                      : "rounded-bl-md bg-fg/5"
+                  }`}
+                >
+                  <p className="text-[11px] font-black uppercase tracking-wider text-fg/50">
+                    {senderLabel(m)}
+                  </p>
+                  {m.message && (
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-fg">
+                      {m.message}
+                    </p>
+                  )}
+                  {m.message_type === "image" && m.image_path && (
+                    <a
+                      href={imageUrl(campaignId, m.id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imageUrl(campaignId, m.id)}
+                        alt="Payment proof"
+                        className="max-h-64 w-auto rounded-xl border border-fg/10"
+                      />
+                      <span className="mt-1 block text-xs font-bold text-lime underline">
+                        Open proof ↗
+                      </span>
+                    </a>
+                  )}
+                  <p className="mt-2 text-[11px] text-fg/40">
+                    {new Date(m.created_at).toLocaleString("en-US")}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <label className="block text-sm font-bold text-fg">
         Your message
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Ask the admin anything — e.g. confirm you sent the budget, or share your payment screenshot link."
+          placeholder="Tell the admin you sent the budget, or paste your Transaction ID."
           rows={3}
           maxLength={2000}
           className="mt-1 w-full resize-y rounded-xl border border-fg/15 bg-ink px-4 py-3 text-sm leading-relaxed text-fg outline-none placeholder:text-fg/30 focus:border-lime"
         />
       </label>
-      <label className="mt-3 block text-sm font-bold text-fg">
-        Proof link (optional)
-        <input
-          type="url"
-          value={proofUrl}
-          onChange={(e) => setProofUrl(e.target.value)}
-          placeholder="Screenshot URL — Google Drive / Imgur link"
-          autoComplete="off"
-          spellCheck={false}
-          className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-lime"
-        />
-        <span className="mt-1 block text-xs font-medium text-fg/50">
-          Paste a link to your payment screenshot. No file upload — just
-          the link.
-        </span>
-      </label>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+      />
+      {file ? (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-fg/5 px-4 py-3">
+          <p className="min-w-0 truncate text-sm font-semibold text-fg">
+            📎 {file.name}{" "}
+            <span className="text-xs font-medium text-fg/50">
+              ({formatSize(file.size)})
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setFile(null);
+              if (fileRef.current) fileRef.current.value = "";
+            }}
+            className="shrink-0 rounded-full bg-fg/10 px-3 py-1 text-xs font-bold text-fg/70"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="mt-3 w-full rounded-xl border border-dashed border-fg/20 bg-fg/5 px-4 py-3 text-sm font-bold text-fg/70 transition hover:border-lime/50 hover:text-fg"
+        >
+          📎 Attach proof screenshot (JPEG, PNG, WebP or GIF — max 5 MB)
+        </button>
+      )}
+
       <button
         type="button"
         onClick={() => void send()}
@@ -106,34 +227,6 @@ export default function BrandMessageForm({
           "Send message"
         )}
       </button>
-
-      {messages.length > 0 && (
-        <div className="mt-6 space-y-3">
-          <p className="text-xs font-black uppercase tracking-wider text-fg/50">
-            Your messages
-          </p>
-          {messages.map((m) => (
-            <div key={m.id} className="rounded-2xl bg-fg/5 px-4 py-3">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">
-                {m.message}
-              </p>
-              {m.proof_url && (
-                <a
-                  href={m.proof_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-block break-all text-sm font-bold text-lime underline"
-                >
-                  View proof ↗
-                </a>
-              )}
-              <p className="mt-2 text-xs text-fg/40">
-                {new Date(m.created_at).toLocaleString("en-US")}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

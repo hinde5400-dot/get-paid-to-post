@@ -145,16 +145,23 @@ export interface Withdrawal {
   created_at: string;
 }
 
-/** Private brand -> admin message (migration 0014). proof_url is an
- *  optional link the brand pastes (e.g. a screenshot on Google Drive
- *  or Imgur). campaign_title / brand_name / payment_tx_id are filled
- *  in from the joined campaign row when the admin inbox loads. */
+/** Private two-way brand <-> admin chat message (migrations
+ *  0014/0015). sender is 'brand' or 'admin'; message_type is 'text'
+ *  or 'image' — proof screenshots are uploaded straight to the
+ *  private 'brand-proofs' Storage bucket and image_path is the
+ *  object path (<campaign_id>/<uuid>.<ext>). proof_url is a legacy
+ *  field from the one-way link inbox and is no longer used.
+ *  campaign_title / brand_name / payment_tx_id are filled in from
+ *  the joined campaign row when the admin inbox loads. */
 export interface BrandMessage {
   id: string;
   campaign_id: string;
   user_id: string;
   message: string;
   proof_url: string | null;
+  sender: "brand" | "admin";
+  message_type: "text" | "image";
+  image_path: string | null;
   created_at: string;
   is_read: boolean;
   campaign_title?: string;

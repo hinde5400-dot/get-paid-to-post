@@ -41,6 +41,11 @@ export default function PaymentForm({
         "Payment submitted. The admin will verify it and your campaign will go LIVE in 1-2 hours."
       );
       setSubmitted(true);
+      // The chat opens below — scroll to it so the brand can attach
+      // the payment screenshot as proof right away.
+      document
+        .getElementById("brand-chat")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (err) {
       showError(err instanceof Error ? err.message : "Could not save the payment.");
     } finally {
@@ -55,7 +60,8 @@ export default function PaymentForm({
         <p className="mt-2 text-lg font-black text-fg">Payment submitted</p>
         <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-fg/70">
           After admin verifies payment, your campaign will go LIVE in 1-2
-          hours.
+          hours. Attach your payment screenshot in the chat below so the
+          admin can verify it faster.
         </p>
         <p className="mx-auto mt-3 max-w-md break-all rounded-xl bg-fg/5 px-4 py-3 font-mono text-xs text-fg">
           {txId.trim()}
