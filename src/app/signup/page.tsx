@@ -5,41 +5,41 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import Logo from "@/components/Logo";
+import { useToast } from "@/components/Toast";
 
 export default function SignupPage() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
-  const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
     setNotice("");
     const supabase = getBrowserClient();
     if (!supabase) {
-      setError("Supabase is not configured yet. Add your keys to .env.local first.");
+      showError("Supabase is not configured yet. Add your keys to .env.local first.");
       return;
     }
     if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
-      setError("Please fill in all fields.");
+      showError("This field is required");
       return;
     }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      showError("Password must be 8+ characters");
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      showError("Passwords do not match.");
       return;
     }
     if (!agreeTerms) {
-      setError("Please agree to the Terms of Service to continue.");
+      showError("Please agree to the Terms of Service to continue.");
       return;
     }
     setBusy(true);
@@ -64,15 +64,17 @@ export default function SignupPage() {
       }
       if (data.session) {
         // Signed straight in — go to onboarding, not the dashboard.
+        showSuccess("Account created!");
         router.push("/onboarding");
         router.refresh();
       } else {
+        showSuccess("Account created! Check your email to confirm.");
         setNotice(
           "Account created! Check your email to confirm, then log in — you will land on the onboarding step where you connect your profiles."
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed.");
+      showError(err instanceof Error ? err.message : "Sign up failed.");
     } finally {
       setBusy(false);
     }
@@ -168,11 +170,6 @@ export default function SignupPage() {
             </Link>
           </span>
         </label>
-        {error && (
-          <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-            {error}
-          </p>
-        )}
         {notice && (
           <p className="mt-4 rounded-xl bg-green-500/15 px-4 py-2.5 text-sm font-semibold text-green-300">
             {notice}

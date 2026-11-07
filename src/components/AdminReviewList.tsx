@@ -6,6 +6,7 @@ import type { Submission } from "@/lib/types";
 import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
+import { useToast } from "@/components/Toast";
 
 export interface AdminSubmission extends Submission {
   creator_email: string;
@@ -20,7 +21,7 @@ export default function AdminReviewList({
   const [views, setViews] = useState<Record<string, string>>({});
   const [likes, setLikes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
+  const { showError, showSuccess } = useToast();
 
   async function call(
     url: string,
@@ -29,7 +30,6 @@ export default function AdminReviewList({
     okMsg: string
   ) {
     setBusy(id);
-    setMessage("");
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -38,10 +38,10 @@ export default function AdminReviewList({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Action failed.");
-      setMessage(data.message ?? okMsg);
+      showSuccess(data.message ?? okMsg);
       router.refresh();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Action failed.");
+      showError(e instanceof Error ? e.message : "Action failed.");
     } finally {
       setBusy(null);
     }
@@ -54,7 +54,7 @@ export default function AdminReviewList({
     const v = Number(views[s.id] ?? s.views ?? 0);
     const l = Number(likes[s.id] ?? s.likes ?? 0);
     if (action === "approve" && (!v || v <= 0)) {
-      setMessage("Enter the verified views before approving.");
+      showError("Enter the verified views before approving.");
       return;
     }
     void call(
@@ -94,11 +94,6 @@ export default function AdminReviewList({
 
   return (
     <div className="space-y-4">
-      {message && (
-        <p className="rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
-          {message}
-        </p>
-      )}
       {submissions.map((s) => (
         <article
           key={s.id}

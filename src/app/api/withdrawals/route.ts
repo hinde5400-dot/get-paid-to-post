@@ -66,18 +66,13 @@ export async function POST(request: Request) {
       : /^0x[a-fA-F0-9]{40}$/.test(details);
   if (!addressOk) {
     return NextResponse.json(
-      {
-        error:
-          method === "usdt_trc20"
-            ? "Enter a valid TRC20 USDT wallet address (starts with T, 34 characters)."
-            : "Enter a valid BEP20 USDT wallet address (starts with 0x, 42 characters).",
-      },
+      { error: "Invalid USDT wallet address" },
       { status: 400 }
     );
   }
   if (amount < WITHDRAW_MIN) {
     return NextResponse.json(
-      { error: `Minimum withdrawal is $${WITHDRAW_MIN}.` },
+      { error: `Minimum withdrawal is $${WITHDRAW_MIN}` },
       { status: 400 }
     );
   }

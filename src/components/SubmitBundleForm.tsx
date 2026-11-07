@@ -10,7 +10,8 @@ import {
   PLATFORM_LABELS,
 } from "@/lib/constants";
 import { countWords, validatePostUrl, VIDEO_RULES } from "@/lib/validate";
-import { playBuzz, playChime } from "@/lib/sounds";
+import { playChime } from "@/lib/sounds";
+import { useToast } from "@/components/Toast";
 
 export interface LastSubmission {
   platform: Platform;
@@ -45,7 +46,7 @@ export default function SubmitBundleForm({
   const [proof, setProof] = useState<string[]>([""]);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { showError } = useToast();
   const [success, setSuccess] = useState<{
     codes: string[];
     message: string;
@@ -79,14 +80,12 @@ export default function SubmitBundleForm({
   }
 
   async function submit() {
-    setError("");
     if (!isLoggedIn) {
-      setError("Please log in first to submit a post.");
+      showError("Please log in first to submit a post.");
       return;
     }
     if (maxReached) {
-      setError(`You have already submitted the maximum of ${campaign.max_posts} posts for this campaign.`);
-      playBuzz();
+      showError(`You have already submitted the maximum of ${campaign.max_posts} posts for this campaign.`);
       return;
     }
     const links: { platform: Platform; url: string }[] = [];
@@ -97,40 +96,34 @@ export default function SubmitBundleForm({
       links.push({ platform: "youtube", url: youtube.trim() });
 
     if (links.length < 2) {
-      setError("Submit at least your TikTok and Instagram links together — they are reviewed and paid as one bundle.");
-      playBuzz();
+      showError("Submit at least your TikTok and Instagram links together — they are reviewed and paid as one bundle.");
       return;
     }
     for (const l of links) {
       const check = validatePostUrl(l.url, l.platform);
       if (!check.ok) {
-        setError(check.error ?? "Invalid link.");
-        playBuzz();
+        showError(check.error ?? "Invalid link.");
         return;
       }
       if (cooldowns.has(l.platform)) {
-        setError(
+        showError(
           `Please wait — you can submit another ${PLATFORM_LABELS[l.platform]} clip in ${formatRemaining(cooldowns.get(l.platform)!)}. One clip per platform every 2 hours.`
         );
-        playBuzz();
         return;
       }
     }
     if (words < HOW_MADE_MIN_WORDS) {
-      setError(
+      showError(
         `Tell us how you made this post — at least ${HOW_MADE_MIN_WORDS} words (you have ${words}).`
       );
-      playBuzz();
       return;
     }
     if (proofFilled.length < 1) {
-      setError("Please add at least one originality-proof screenshot link.");
-      playBuzz();
+      showError("Please add at least one originality-proof screenshot link.");
       return;
     }
     if (!agreed) {
-      setError("Please confirm you followed the campaign rules and this is your own content.");
-      playBuzz();
+      showError("Please confirm you followed the campaign rules and this is your own content.");
       return;
     }
 
@@ -156,8 +149,7 @@ export default function SubmitBundleForm({
         message: data.message ?? "Your post was submitted!",
       });
     } catch (e) {
-      playBuzz();
-      setError(e instanceof Error ? e.message : "Submission failed.");
+      showError(e instanceof Error ? e.message : "Submission failed.");
     } finally {
       setBusy(false);
     }
@@ -287,12 +279,6 @@ export default function SubmitBundleForm({
           />
           I followed the campaign rules and this is my own content.
         </label>
-
-        {error && (
-          <p className="animate-shake rounded-xl bg-red-500/15 px-4 py-3 text-sm font-semibold text-red-300">
-            {error}
-          </p>
-        )}
 
         {isLoggedIn ? (
           <button

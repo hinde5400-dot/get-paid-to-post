@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
-import { BRAND_MIN_BUDGET } from "@/lib/constants";
+import {
+  BRAND_MIN_BUDGET,
+  MAX_PAYOUT_DEFAULT,
+  MAX_PAYOUT_MAX,
+  MAX_PAYOUT_MIN,
+  MIN_RATE_PER_1K,
+} from "@/lib/constants";
 
 const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
 
@@ -30,22 +36,63 @@ export async function POST(request: Request) {
     platform?: string;
     ratePer1k?: number;
     budgetTotal?: number;
+    maxPayoutPerPost?: number;
     description?: string;
     requirements?: string;
   };
+  // Server-side validation mirrors the client form — never trust the
+  // client alone. Every rejection carries the exact message the red
+  // error popup shows.
+  const brandName = String(body.brandName ?? "").trim();
+  const title = String(body.title ?? "").trim();
+  const description = String(body.description ?? "").trim();
+  const requirements = String(body.requirements ?? "").trim();
+  if (!brandName) {
+    return NextResponse.json(
+      { error: "This field is required: Brand name." },
+      { status: 400 }
+    );
+  }
+  if (!title) {
+    return NextResponse.json(
+      { error: "This field is required: Campaign title." },
+      { status: 400 }
+    );
+  }
+  if (!description) {
+    return NextResponse.json(
+      { error: "This field is required: Campaign description." },
+      { status: 400 }
+    );
+  }
+  if (!requirements) {
+    return NextResponse.json(
+      { error: "This field is required: Video requirements." },
+      { status: 400 }
+    );
+  }
   const budgetTotal = Number(body.budgetTotal ?? 0);
   if (budgetTotal < BRAND_MIN_BUDGET) {
     return NextResponse.json(
-      {
-        error: `Minimum budget to launch a campaign is $${BRAND_MIN_BUDGET}.`,
-      },
+      { error: `Error: Minimum budget is $${BRAND_MIN_BUDGET}` },
       { status: 400 }
     );
   }
   const ratePer1k = Number(body.ratePer1k ?? 0);
-  if (ratePer1k <= 0) {
+  if (ratePer1k < MIN_RATE_PER_1K) {
     return NextResponse.json(
-      { error: "Please set a rate per 1,000 views above $0." },
+      {
+        error: `Error: Rate cannot be less than $${MIN_RATE_PER_1K} per 1k views`,
+      },
+      { status: 400 }
+    );
+  }
+  const cap = Number(body.maxPayoutPerPost ?? MAX_PAYOUT_DEFAULT);
+  if (!Number.isFinite(cap) || cap < MAX_PAYOUT_MIN || cap > MAX_PAYOUT_MAX) {
+    return NextResponse.json(
+      {
+        error: `Error: Max payout per post must be between $${MAX_PAYOUT_MIN} and $${MAX_PAYOUT_MAX}`,
+      },
       { status: 400 }
     );
   }
@@ -55,16 +102,10 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (!String(body.brandName ?? "").trim() || !String(body.title ?? "").trim()) {
-    return NextResponse.json(
-      { error: "Brand name and campaign title are required." },
-      { status: 400 }
-    );
-  }
 
   const insertRow: Record<string, unknown> = {
-    brand_name: String(body.brandName).trim(),
-    title: String(body.title).trim(),
+    brand_name: brandName,
+    title,
     // Rate per 1k views drives the per-view bonus; rate per 1M views is
     // the same rate scaled up, so the two fields stay coherent.
     rate_per_1m: Math.round(ratePer1k * 1000 * 100) / 100,
@@ -74,13 +115,15 @@ export async function POST(request: Request) {
     spots_total: 0,
     category: "General",
     platform: String(body.platform),
-    description: String(body.description ?? "").trim(),
-    rules: String(body.requirements ?? "").trim() || null,
+    description,
+    rules: requirements || null,
     base_pay: 10,
     view_bonus_per_1k: ratePer1k,
+    // The per-post cap IS the "earn up to" figure shown on cards.
+    max_payout_per_post: cap,
     views_tracked_days: 14,
     max_posts: 7,
-    earn_up_to: 300,
+    earn_up_to: cap,
     is_funded: false,
     status: "pending",
   };
@@ -92,15 +135,27 @@ export async function POST(request: Request) {
     .insert(insertRow)
     .select("id")
     .single();
-  if (insertResult.error && /logo_url/i.test(insertResult.error.message)) {
-    // The logo_url column comes from migration 0004, which may not have
-    // been run yet. Retry without it instead of failing the submission.
-    const { logo_url: _omit, ...withoutLogo } = insertRow;
-    insertResult = await supabase
-      .from("campaigns")
-      .insert(withoutLogo)
-      .select("id")
-      .single();
+  if (insertResult.error) {
+    // New columns come from migrations (0004 logo_url, 0007
+    // max_payout_per_post) which may not have been run yet. Drop the
+    // column the database complains about and retry once, instead of
+    // failing the submission.
+    const msg = insertResult.error.message;
+    const retryRow: Record<string, unknown> = { ...insertRow };
+    let stripped = false;
+    for (const col of ["logo_url", "max_payout_per_post"] as const) {
+      if (new RegExp(col, "i").test(msg)) {
+        delete retryRow[col];
+        stripped = true;
+      }
+    }
+    if (stripped) {
+      insertResult = await supabase
+        .from("campaigns")
+        .insert(retryRow)
+        .select("id")
+        .single();
+    }
   }
   const { data, error } = insertResult;
   if (error) {

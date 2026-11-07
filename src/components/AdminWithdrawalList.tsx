@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Withdrawal } from "@/lib/types";
 import { WITHDRAW_METHOD_LABELS } from "@/lib/constants";
 import { formatUSD } from "@/lib/money";
+import { useToast } from "@/components/Toast";
 
 export type WithdrawalWithCreator = Withdrawal & { creator_email: string };
 
@@ -21,14 +22,13 @@ export default function AdminWithdrawalList({
   withdrawals: WithdrawalWithCreator[];
 }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
+  const { showError, showSuccess } = useToast();
 
   async function act(
     id: string,
     action: "approve" | "paid" | "reject"
   ) {
     setBusy(id);
-    setMessage("");
     try {
       const res = await fetch("/api/admin/withdrawals", {
         method: "POST",
@@ -37,9 +37,9 @@ export default function AdminWithdrawalList({
       });
       const body = (await res.json()) as { message?: string; error?: string };
       if (!res.ok) throw new Error(body.error ?? "Request failed.");
-      setMessage(body.message ?? "Done.");
+      showSuccess(body.message ?? "Done.");
     } catch (err) {
-      setMessage(
+      showError(
         err instanceof Error ? err.message : "Request failed. Try again."
       );
     } finally {
@@ -57,11 +57,6 @@ export default function AdminWithdrawalList({
 
   return (
     <div className="space-y-3">
-      {message && (
-        <p className="rounded-xl bg-lime/15 px-4 py-2.5 text-sm font-semibold text-lime">
-          {message}
-        </p>
-      )}
       {withdrawals.map((w) => (
         <div
           key={w.id}

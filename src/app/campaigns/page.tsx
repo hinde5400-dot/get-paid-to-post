@@ -26,7 +26,7 @@ function hrefWith(
 export default async function CampaignsPage({
   searchParams,
 }: {
-  searchParams: { platform?: string; sort?: string; tab?: string };
+  searchParams: { platform?: string; sort?: string; tab?: string; message?: string };
 }) {
   const all = await getCampaigns();
   const tab = searchParams.tab === "joined" ? "joined" : "explore";
@@ -60,6 +60,13 @@ export default async function CampaignsPage({
 
   return (
     <div className="space-y-6">
+      {/* Shown when a logged-in user lands on /login or /signup and is
+          bounced here by the middleware. */}
+      {searchParams.message === "already-logged-in" && (
+        <p className="rounded-xl bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime">
+          You are already logged in.
+        </p>
+      )}
       <div>
         <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
           Campaigns

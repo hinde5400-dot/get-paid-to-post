@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { feeFor, finalFor, formatUSD } from "@/lib/money";
 import { WITHDRAW_MIN, WITHDRAW_METHODS, type WithdrawMethod } from "@/lib/constants";
+import { useToast } from "@/components/Toast";
 
 const METHOD_HINTS: Record<WithdrawMethod, string> = {
   usdt_trc20: "Your TRC20 USDT wallet address (starts with T).",
@@ -18,8 +19,10 @@ export function isValidUsdtAddress(method: WithdrawMethod, address: string) {
 }
 
 const ADDRESS_ERRORS: Record<WithdrawMethod, string> = {
-  usdt_trc20: "Enter a valid TRC20 USDT wallet address (starts with T, 34 characters).",
-  usdt_bep20: "Enter a valid BEP20 USDT wallet address (starts with 0x, 42 characters).",
+  usdt_trc20:
+    "Invalid USDT wallet address — TRC20 addresses start with T and are 34 characters.",
+  usdt_bep20:
+    "Invalid USDT wallet address — BEP20 addresses start with 0x and are 42 characters.",
 };
 
 export default function WithdrawModal({
@@ -30,10 +33,10 @@ export default function WithdrawModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<WithdrawMethod>("usdt_trc20");
   const [details, setDetails] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -41,23 +44,18 @@ export default function WithdrawModal({
   const fee = feeFor(amountNum);
   const final = finalFor(amountNum);
   const address = details.trim();
-  const valid =
-    amountNum >= WITHDRAW_MIN &&
-    amountNum <= available &&
-    isValidUsdtAddress(method, address);
 
   async function submit() {
-    setError("");
     if (amountNum < WITHDRAW_MIN) {
-      setError(`Minimum withdrawal is ${formatUSD(WITHDRAW_MIN)}.`);
+      showError(`Minimum withdrawal is $${WITHDRAW_MIN}`);
       return;
     }
     if (amountNum > available) {
-      setError("Amount is more than your withdrawable balance.");
+      showError("Amount is more than your withdrawable balance.");
       return;
     }
     if (!isValidUsdtAddress(method, address)) {
-      setError(ADDRESS_ERRORS[method]);
+      showError("Invalid USDT wallet address");
       return;
     }
     setBusy(true);
@@ -69,10 +67,11 @@ export default function WithdrawModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Withdrawal failed.");
+      showSuccess("Withdrawal request sent. Will be processed in 24-48 hours.");
       setDone(true);
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Withdrawal failed.");
+      showError(e instanceof Error ? e.message : "Withdrawal failed.");
     } finally {
       setBusy(false);
     }
@@ -154,6 +153,9 @@ export default function WithdrawModal({
                 spellCheck={false}
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />
+              <span className="mt-1 block text-xs font-medium text-fg/50">
+                {ADDRESS_ERRORS[method]}
+              </span>
             </label>
 
             {amountNum > 0 && (
@@ -176,15 +178,9 @@ export default function WithdrawModal({
               </div>
             )}
 
-            {error && (
-              <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-                {error}
-              </p>
-            )}
-
             <button
               onClick={submit}
-              disabled={busy || !valid}
+              disabled={busy}
               className="mt-5 w-full rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? "Processing…" : "Confirm withdrawal"}

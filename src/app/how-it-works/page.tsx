@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BRAND_NAME } from "@/lib/constants";
+import { getCurrentUser } from "@/lib/auth";
 
 const STEPS = [
   { n: "1", t: "Sign up free", d: "Create your account with email and password only. No phone, no address, no extra details." },
@@ -11,7 +12,9 @@ const STEPS = [
   { n: "7", t: "Withdraw your earnings", d: "Withdraw from $10 in USDT (TRC20 or BEP20). A 7% fee applies at withdrawal." },
 ];
 
-export default function HowItWorksPage() {
+export default async function HowItWorksPage() {
+  const user = await getCurrentUser();
+
   return (
     <div className="space-y-10">
       <div className="text-center">
@@ -61,12 +64,21 @@ export default function HowItWorksPage() {
       </div>
 
       <div className="text-center">
-        <Link
-          href="/signup"
-          className="inline-block rounded-full bg-lime px-7 py-3.5 text-sm font-bold text-ink transition hover:bg-limedark"
-        >
-          Start earning — sign up free
-        </Link>
+        {user ? (
+          <Link
+            href="/campaigns"
+            className="inline-block rounded-full bg-lime px-7 py-3.5 text-sm font-bold text-ink transition hover:bg-limedark"
+          >
+            Browse campaigns
+          </Link>
+        ) : (
+          <Link
+            href="/signup"
+            className="inline-block rounded-full bg-lime px-7 py-3.5 text-sm font-bold text-ink transition hover:bg-limedark"
+          >
+            Start earning — sign up free
+          </Link>
+        )}
       </div>
     </div>
   );

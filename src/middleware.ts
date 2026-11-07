@@ -28,6 +28,17 @@ export async function middleware(request: NextRequest) {
     url.search = "message=login-required";
     return NextResponse.redirect(url);
   }
+  // Logged-in users never see the auth pages: /login and /signup
+  // bounce them to Discover with "You are already logged in".
+  if (
+    user &&
+    (pathname === "/login" || pathname === "/signup")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/discover";
+    url.search = "message=already-logged-in";
+    return NextResponse.redirect(url);
+  }
   return response;
 }
 

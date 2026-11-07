@@ -22,6 +22,8 @@ export interface Campaign {
   rules?: string | null;
   base_pay: number;
   view_bonus_per_1k: number;
+  /** Most a creator can earn on ONE post, even if views would pay more. */
+  max_payout_per_post: number;
   views_tracked_days: number;
   max_posts: number;
   earn_up_to: number;
@@ -36,6 +38,10 @@ export interface Submission {
   user_id: string;
   campaign_id: string;
   campaign_title?: string;
+  /** Campaign rate at submit time, for the earnings breakdown. */
+  rate_per_1k?: number;
+  /** Campaign per-post cap at submit time, for the breakdown. */
+  max_payout_per_post?: number;
   bundle_id: string;
   post_url: string;
   platform: Platform;

@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getProfile } from "@/lib/auth";
 import { getWallet } from "@/lib/data";
 import { formatUSD } from "@/lib/money";
+import SignOutButton from "@/components/SignOutButton";
 
 const LINKS = [
   { href: "/campaigns", label: "Campaigns", icon: "◎", desc: "Browse funded campaigns" },
@@ -15,12 +16,35 @@ const LINKS = [
 export default async function MorePage() {
   const user = await getCurrentUser();
   const wallet = user ? await getWallet(user.id) : null;
+  const profile = user ? await getProfile(user.id) : null;
+  const metaName = user?.user_metadata?.full_name;
+  const displayName =
+    profile?.full_name ??
+    (typeof metaName === "string" && metaName.trim() ? metaName : null) ??
+    user?.email ??
+    "Creator";
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">
         More
       </h1>
+
+      {/* Profile — name + avatar + logout for logged-in users. */}
+      {user && (
+        <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-fg/10 bg-card p-5">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-lime">
+            {displayName[0].toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-display text-xl font-black text-fg">
+              {displayName}
+            </p>
+            <p className="truncate text-sm text-fg/60">{user.email}</p>
+          </div>
+          <SignOutButton />
+        </div>
+      )}
 
       {/* Balance hero */}
       {user ? (

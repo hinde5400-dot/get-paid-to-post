@@ -11,6 +11,7 @@ import CampaignBanner, { BrandLogoTile } from "@/components/CampaignBanner";
 import CampaignDetailTabs from "@/components/CampaignDetailTabs";
 import { PlatformChips } from "@/components/PlatformIcons";
 import { formatUSD } from "@/lib/money";
+import { payoutForViews } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { VIDEO_RULES } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
@@ -60,6 +61,13 @@ export default async function CampaignDetailPage({
     100,
     Math.round((spent / campaign.budget_total) * 100)
   );
+  // Payout example with the campaign's REAL rate and cap, so a creator
+  // sees the exact math before filming.
+  const example = payoutForViews(
+    50000,
+    campaign.view_bonus_per_1k,
+    campaign.max_payout_per_post
+  );
 
   return (
     <div className="space-y-6 pb-20 md:pb-16">
@@ -75,7 +83,7 @@ export default async function CampaignDetailPage({
         <CampaignBanner
           campaign={campaign}
           size="lg"
-          badge={`${formatUSD(campaign.base_pay)} per post + milestones`}
+          badge={`Up to ${formatUSD(campaign.max_payout_per_post)} per post`}
         />
         <div className="p-6 md:p-8">
           <div className="flex flex-wrap items-center gap-4">
@@ -105,7 +113,7 @@ export default async function CampaignDetailPage({
             <div className="rounded-2xl bg-fg/5 p-4">
               <p className="text-xs text-fg/50">Earn up to</p>
               <p className="mt-1 text-2xl font-black text-lime">
-                {formatUSD(campaign.earn_up_to)}
+                {formatUSD(campaign.max_payout_per_post)}
                 <span className="text-sm font-semibold text-fg/60"> / post</span>
               </p>
             </div>
@@ -184,6 +192,24 @@ export default async function CampaignDetailPage({
                   ))}
                 </ul>
               </div>
+
+              <div className="rounded-3xl border border-lime/40 bg-card p-6">
+                <h2 className="text-lg font-extrabold text-fg">How the payout works</h2>
+                <p className="mt-3 text-sm leading-relaxed text-fg/70">
+                  Your video got 50,000 views at{" "}
+                  {formatUSD(campaign.view_bonus_per_1k)}/1k ={" "}
+                  {formatUSD(example.uncapped)} earned.
+                  {example.capped
+                    ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(example.earnings)}.`
+                    : ` You earned ${formatUSD(example.earnings)}.`}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-fg/70">
+                  A creator never earns more than{" "}
+                  {formatUSD(campaign.max_payout_per_post)} on one post,
+                  even if the views would pay more. Approved earnings sit
+                  in a 72-hour hold, then become withdrawable.
+                </p>
+              </div>
             </div>
 
             <div id="submit" className="scroll-mt-28">
@@ -210,7 +236,7 @@ export default async function CampaignDetailPage({
                 ["Rate", `${formatUSD(campaign.rate_per_1m)} per 1M views`],
                 ["Base pay", `${formatUSD(campaign.base_pay)} per approved post`],
                 ["View bonus", `${formatUSD(campaign.view_bonus_per_1k)} per 1K views`],
-                ["Earn up to", `${formatUSD(campaign.earn_up_to)} per post`],
+                ["Earn up to", `${formatUSD(campaign.max_payout_per_post)} per post`],
                 ["Views tracked", `${campaign.views_tracked_days} days`],
                 ["Max posts", `${campaign.max_posts} per creator`],
                 ["Spots", `${campaign.spots_left} of ${campaign.spots_total} left`],

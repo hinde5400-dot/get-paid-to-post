@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import Logo from "@/components/Logo";
+import { useToast } from "@/components/Toast";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { showError, showSuccess } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Shown when middleware redirects a guest away from a protected page.
@@ -22,14 +23,13 @@ function LoginForm() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
     const supabase = getBrowserClient();
     if (!supabase) {
-      setError("Supabase is not configured yet. Add your keys to .env.local first.");
+      showError("Supabase is not configured yet. Add your keys to .env.local first.");
       return;
     }
     if (!email.trim() || !password) {
-      setError("Enter your email and password.");
+      showError("Enter your email and password.");
       return;
     }
     setBusy(true);
@@ -58,10 +58,11 @@ function LoginForm() {
           );
         }
       }
+      showSuccess("Welcome back!");
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Wrong email or password");
+      showError(err instanceof Error ? err.message : "Wrong email or password");
     } finally {
       setBusy(false);
     }
@@ -126,11 +127,6 @@ function LoginForm() {
             Forgot Password?
           </Link>
         </div>
-        {error && (
-          <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-            {error}
-          </p>
-        )}
         <button
           type="submit"
           disabled={busy}

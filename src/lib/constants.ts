@@ -25,7 +25,7 @@ export const WITHDRAW_METHOD_LABELS: Record<string, string> = {
   usdt_bep20: "USDT (BEP20)",
   // Legacy rows from before the USDT-only change.
   usdt: "USDT",
-  pakistani_bank: "Pakistani Bank",
+  bank_transfer: "Bank Transfer",
   wise: "Wise",
 };
 
@@ -40,6 +40,10 @@ export const PLATFORM_LABELS: Record<string, string> = {
 
 // Money rules — encode these everywhere, never hard-code different numbers.
 export const BRAND_MIN_BUDGET = 500; // USD, minimum to launch a campaign
+export const MIN_RATE_PER_1K = 0.75; // USD, minimum rate per 1,000 views
+export const MAX_PAYOUT_DEFAULT = 75; // USD, default max payout per post
+export const MAX_PAYOUT_MIN = 10; // USD, minimum max payout per post
+export const MAX_PAYOUT_MAX = 200; // USD, maximum max payout per post
 export const WITHDRAW_MIN = 10; // USD, minimum withdrawal
 export const WITHDRAW_FEE_RATE = 0.07; // 7% at withdrawal
 export const HOLD_HOURS = 72; // approved earnings sit in a 72-hour hold

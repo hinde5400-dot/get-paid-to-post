@@ -7,7 +7,7 @@ const FUNDING_STEPS = [
   { n: "1", t: "Create your campaign", d: "Fill in the form below: brand, logo, title, rate per 1K views, budget and brief." },
   { n: "2", t: "Your campaign is saved as pending", d: "Nothing goes live yet. The admin reviews it, and it goes live only after the budget is funded." },
   { n: "3", t: "Agree the rate and budget", d: "The platform owner confirms the rate and the total budget with you." },
-  { n: "4", t: "Fund the budget upfront", d: "Send the budget directly to the platform owner via USDT, Pakistani bank, or Wise." },
+  { n: "4", t: "Fund the budget upfront", d: "Funding happens directly with the platform owner via USDT, Bank Transfer or Wise before campaign goes live." },
   { n: "5", t: "Campaign goes live", d: "Once funding is confirmed, your campaign opens to creators on TikTok, Instagram and YouTube." },
   { n: "6", t: "Creators post and submit", d: "Creators post short vertical clips, submit their links, and earn per view." },
   { n: "7", t: "You pay only for verified views", d: "Approved views are paid from your funded budget. Unspent budget stays yours." },

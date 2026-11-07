@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Submission, SubmissionStatus } from "@/lib/types";
-import { formatUSD } from "@/lib/money";
+import { formatUSD, payoutForViews } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
 
@@ -128,6 +128,24 @@ export default function MyPostsList({
                   <p className="text-xs text-fg/50">Earned</p>
                 </div>
               </div>
+              {/* Earnings breakdown with the per-post cap applied —
+                  the exact math, from the submission's real numbers. */}
+              {s.status === "approved" &&
+                s.views > 0 &&
+                s.rate_per_1k !== undefined && (
+                  <p className="mt-3 rounded-xl bg-lime/10 px-4 py-2.5 text-sm leading-relaxed text-fg/80">
+                    {(() => {
+                      const calc = payoutForViews(
+                        s.views,
+                        s.rate_per_1k as number,
+                        s.max_payout_per_post ?? s.earnings
+                      );
+                      return calc.capped
+                        ? `Your video got ${s.views.toLocaleString()} views at ${formatUSD(s.rate_per_1k as number)}/1k = ${formatUSD(calc.uncapped)} earned. Cap ${formatUSD(s.max_payout_per_post ?? s.earnings)} applied, you earned ${formatUSD(s.earnings)}.`
+                        : `Your video got ${s.views.toLocaleString()} views at ${formatUSD(s.rate_per_1k as number)}/1k = ${formatUSD(s.earnings)} earned.`;
+                    })()}
+                  </p>
+                )}
               <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-fg/60">
                 <span>
                   Submission ID:{" "}

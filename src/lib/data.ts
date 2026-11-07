@@ -20,6 +20,11 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     rules: (row.rules as string | null) ?? null,
     base_pay: Number(row.base_pay ?? 10),
     view_bonus_per_1k: Number(row.view_bonus_per_1k ?? 0.75),
+    // Per-post cap (migration 0007); older rows fall back to the old
+    // per-video / earn-up-to value, then the $75 default.
+    max_payout_per_post: Number(
+      row.max_payout_per_post ?? row.max_per_video ?? row.earn_up_to ?? 75
+    ),
     views_tracked_days: Number(row.views_tracked_days ?? 14),
     max_posts: Number(row.max_posts ?? 7),
     earn_up_to: Number(row.earn_up_to ?? 300),
@@ -170,14 +175,21 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, campaigns(title)")
+    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error || !data) return [];
   return (data as Record<string, unknown>[]).map((row) => {
     const s = mapSubmission(row);
-    const camp = row.campaigns as { title?: string } | null;
+    const camp = row.campaigns as {
+      title?: string;
+      view_bonus_per_1k?: number;
+      max_payout_per_post?: number;
+    } | null;
     s.campaign_title = camp?.title;
+    s.rate_per_1k = Number(camp?.view_bonus_per_1k ?? 0) || undefined;
+    s.max_payout_per_post =
+      Number(camp?.max_payout_per_post ?? 0) || undefined;
     return s;
   });
 }
@@ -188,14 +200,21 @@ export async function getAllSubmissions(): Promise<Submission[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, campaigns(title)")
+    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post)")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error || !data) return [];
   return (data as Record<string, unknown>[]).map((row) => {
     const s = mapSubmission(row);
-    const camp = row.campaigns as { title?: string } | null;
+    const camp = row.campaigns as {
+      title?: string;
+      view_bonus_per_1k?: number;
+      max_payout_per_post?: number;
+    } | null;
     s.campaign_title = camp?.title;
+    s.rate_per_1k = Number(camp?.view_bonus_per_1k ?? 0) || undefined;
+    s.max_payout_per_post =
+      Number(camp?.max_payout_per_post ?? 0) || undefined;
     return s;
   });
 }

@@ -6,6 +6,7 @@ import type { Campaign } from "@/lib/types";
 import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { BrandLogoTile } from "./CampaignBanner";
+import { useToast } from "@/components/Toast";
 
 /**
  * Owner-only pending-campaign review list (Admin Review page).
@@ -20,10 +21,9 @@ export default function AdminCampaignList({
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const { showError, showSuccess } = useToast();
 
   async function act(campaign: Campaign, action: "approve" | "reject") {
-    setError("");
     setBusyId(campaign.id);
     try {
       const res = await fetch("/api/admin/campaigns", {
@@ -33,9 +33,14 @@ export default function AdminCampaignList({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Action failed.");
+      showSuccess(
+        action === "approve"
+          ? "Campaign approved — it is now live."
+          : "Campaign rejected."
+      );
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed.");
+      showError(err instanceof Error ? err.message : "Action failed.");
     } finally {
       setBusyId(null);
     }
@@ -43,11 +48,6 @@ export default function AdminCampaignList({
 
   return (
     <div className="space-y-3">
-      {error && (
-        <p className="rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-          {error}
-        </p>
-      )}
       {campaigns.map((c) => (
         <div
           key={c.id}

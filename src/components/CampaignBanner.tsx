@@ -76,7 +76,7 @@ export default function CampaignBanner({
   campaign: Campaign;
   size?: "sm" | "md" | "lg";
   showLive?: boolean;
-  /** Rate badge overlaid on the banner, e.g. "$10 per post + milestones". */
+  /** Cap badge overlaid on the banner, e.g. "Up to $75 per post". */
   badge?: string;
 }) {
   const [from, to] = GRADIENTS[hashBrand(campaign.brand_name) % GRADIENTS.length];

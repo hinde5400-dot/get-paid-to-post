@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCampaigns, getCampaignStatsMap } from "@/lib/data";
+import { getCurrentUser } from "@/lib/auth";
 import CampaignGrid from "@/components/CampaignGrid";
 import CampaignBanner from "@/components/CampaignBanner";
 import AdSlot from "@/components/AdSlot";
@@ -18,7 +19,7 @@ const FAQS = [
   },
   {
     q: "How much can I earn per post?",
-    a: "Every approved post earns a $10 base pay, plus $0.75 per 1,000 views. Featured campaigns pay up to $300 per post. Views are tracked for 14 days.",
+    a: "Every approved post earns a $10 base pay, plus $0.75 per 1,000 views. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
   },
   {
     q: "What are the video rules?",
@@ -39,6 +40,7 @@ export default async function HomePage() {
   const featured = campaigns[0];
   const rest = campaigns.slice(1, 7);
   const stats = await getCampaignStatsMap(rest.map((c) => c.id));
+  const user = await getCurrentUser();
 
   return (
     <div className="space-y-14">
@@ -58,18 +60,37 @@ export default async function HomePage() {
           clip is all you need.
         </p>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/signup"
-            className="rounded-full bg-lime px-7 py-3.5 text-sm font-black text-black transition hover:bg-limedark"
-          >
-            Start Earning — Sign Up Free
-          </Link>
-          <Link
-            href="/campaigns"
-            className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
-          >
-            Browse campaigns
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/campaigns"
+                className="rounded-full bg-lime px-7 py-3.5 text-sm font-black text-black transition hover:bg-limedark"
+              >
+                Browse Campaigns
+              </Link>
+              <Link
+                href="/dashboard"
+                className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+              >
+                Go to Dashboard
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/signup"
+                className="rounded-full bg-lime px-7 py-3.5 text-sm font-black text-black transition hover:bg-limedark"
+              >
+                Start Earning — Sign Up Free
+              </Link>
+              <Link
+                href="/campaigns"
+                className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+              >
+                Browse campaigns
+              </Link>
+            </>
+          )}
         </div>
         <p className="mt-8 text-sm font-bold text-fg/50">
           <span className="font-black text-lime">
@@ -97,7 +118,7 @@ export default async function HomePage() {
             <CampaignBanner
               campaign={featured}
               size="lg"
-              badge={`${formatUSD(featured.base_pay)} per post + milestones`}
+              badge={`Up to ${formatUSD(featured.max_payout_per_post)} per post`}
             />
             <div className="p-6 md:p-8">
               <h3 className="max-w-xl font-display text-2xl font-black tracking-tight text-fg md:text-3xl">
@@ -110,7 +131,7 @@ export default async function HomePage() {
                 <div>
                   <p className="text-xs text-fg/50">Earn up to</p>
                   <p className="font-display text-3xl font-black text-lime">
-                    {formatUSD(featured.earn_up_to)}
+                    {formatUSD(featured.max_payout_per_post)}
                     <span className="text-base font-semibold text-fg/60"> / post</span>
                   </p>
                 </div>

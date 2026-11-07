@@ -67,27 +67,28 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
-          <p className="text-xs text-fg/50">Available balance</p>
-          <p className="mt-1 text-2xl font-black text-lime">
-            {formatUSD(wallet?.available_balance ?? 0)}
+          <p className="text-xs text-fg/50">Total Earned</p>
+          <p className="mt-1 text-2xl font-black text-fg">
+            {formatUSD(totalEarned)}
           </p>
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
-          <p className="text-xs text-fg/50">Pending (72-hour hold)</p>
+          <p className="text-xs text-fg/50">Pending Balance</p>
           <p className="mt-1 text-2xl font-black text-fg">
             {formatUSD(wallet?.pending_balance ?? 0)}
+          </p>
+          <p className="mt-1 text-xs text-fg/50">72-hour hold</p>
+        </div>
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Withdrawable Balance</p>
+          <p className="mt-1 text-2xl font-black text-lime">
+            {formatUSD(wallet?.available_balance ?? 0)}
           </p>
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
           <p className="text-xs text-fg/50">Total views</p>
           <p className="mt-1 text-2xl font-black text-fg">
             {totalViews.toLocaleString()}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-fg/10 bg-card p-5">
-          <p className="text-xs text-fg/50">Total earned</p>
-          <p className="mt-1 text-2xl font-black text-fg">
-            {formatUSD(totalEarned)}
           </p>
         </div>
       </div>

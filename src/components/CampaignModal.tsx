@@ -62,7 +62,7 @@ export default function CampaignModal({
         <div className="relative">
           <CampaignBanner
             campaign={campaign}
-            badge={`${formatUSD(campaign.base_pay)} per post + milestones`}
+            badge={`Up to ${formatUSD(campaign.max_payout_per_post)} per post`}
           />
           <button
             type="button"
@@ -126,10 +126,10 @@ export default function CampaignModal({
             </div>
             <div className="rounded-2xl bg-fg/5 p-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
-                Earn up to
+                Max per post
               </p>
               <p className="mt-1 font-display text-lg font-black text-lime">
-                {formatUSD(campaign.earn_up_to)}
+                {formatUSD(campaign.max_payout_per_post)}
               </p>
             </div>
           </div>

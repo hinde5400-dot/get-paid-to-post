@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { BRAND_NAME, SITE_DOMAIN } from "@/lib/constants";
+import { getCurrentUser } from "@/lib/auth";
 import Logo from "./Logo";
 import DiscordButton from "./DiscordButton";
 
-export default function Footer() {
+export default async function Footer() {
+  const user = await getCurrentUser();
+
   return (
     <footer className="border-t border-fg/10 bg-card/60 pb-24 md:pb-8">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 md:grid-cols-4">
@@ -22,7 +25,9 @@ export default function Footer() {
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             <li><Link href="/campaigns" className="hover:text-lime">Campaigns</Link></li>
             <li><Link href="/how-it-works" className="hover:text-lime">How It Works</Link></li>
-            <li><Link href="/signup" className="hover:text-lime">Sign up free</Link></li>
+            {!user && (
+              <li><Link href="/signup" className="hover:text-lime">Sign up free</Link></li>
+            )}
             <li><Link href="/earnings" className="hover:text-lime">Earnings</Link></li>
           </ul>
         </div>
@@ -42,9 +47,15 @@ export default function Footer() {
           </ul>
         </div>
       </div>
-      <div className="border-t border-fg/10 py-4 text-center text-xs text-fg/40">
-        © 2026 {BRAND_NAME}. All rights reserved. TikTok, Instagram and
-        YouTube only — no Facebook.
+      <div className="border-t border-fg/10 py-4 text-center text-xs leading-relaxed text-fg/40">
+        <p className="mx-auto max-w-2xl px-4">
+          Funding happens directly with the platform owner via USDT, Bank
+          Transfer or Wise before campaign goes live.
+        </p>
+        <p className="mt-2">
+          © 2026 {BRAND_NAME}. All rights reserved. TikTok, Instagram and
+          YouTube only — no Facebook.
+        </p>
       </div>
     </footer>
   );

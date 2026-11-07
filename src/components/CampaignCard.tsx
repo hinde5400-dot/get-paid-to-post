@@ -42,7 +42,7 @@ export default function CampaignCard({
     >
       <CampaignBanner
         campaign={campaign}
-        badge={`${formatUSD(campaign.base_pay)} per post + milestones`}
+        badge={`Up to ${formatUSD(campaign.max_payout_per_post)} per post`}
       />
       <div className="flex flex-1 flex-col p-5">
         {/* Brand row */}
@@ -90,9 +90,14 @@ export default function CampaignCard({
           </div>
         </div>
 
-        {/* Platform chips + spots */}
-        <div className="mt-4 flex items-center justify-between">
+        {/* Platform chips + spots + per-post cap */}
+        <div className="mt-4 flex items-center justify-between gap-2">
           <PlatformChips platform={campaign.platform} />
+          <span className="shrink-0 rounded-full bg-lime/15 px-2.5 py-1 text-[11px] font-black text-lime">
+            Up to {formatUSD(campaign.max_payout_per_post)} / post
+          </span>
+        </div>
+        <div className="mt-2 text-right">
           <span className="text-xs font-bold text-fg/60">
             {campaign.spots_left} spots left
           </span>

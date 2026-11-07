@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
-import { earningsForViews, holdUntil } from "@/lib/money";
+import { holdUntil, payoutForViews } from "@/lib/money";
 import { HOLD_HOURS } from "@/lib/constants";
 
 interface ReviewBody {
@@ -100,14 +100,24 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-    const rate = Number(campaign.rate_per_1m ?? 0);
+    const ratePer1k = Number(campaign.rate_per_1m ?? 0) / 1000;
     const budgetLeft = Number(campaign.budget_left ?? 0);
-    const maxPerVideo = Number(
-      campaign.max_per_video ?? campaign.earn_up_to ?? 300
+    // The per-post cap (migration 0007) — a creator never earns more
+    // than this on one post, even if the views would pay more. Older
+    // campaigns fall back to the old per-video / earn-up-to value.
+    const cap = Number(
+      campaign.max_payout_per_post ??
+        campaign.max_per_video ??
+        campaign.earn_up_to ??
+        300
     );
-    let earnings = earningsForViews(views, rate);
-    // Never pay beyond the per-video cap or the remaining campaign budget.
-    earnings = Math.min(earnings, maxPerVideo, budgetLeft);
+    const { uncapped, earnings: cappedEarnings, capped } = payoutForViews(
+      views,
+      ratePer1k,
+      cap
+    );
+    // Never pay beyond the per-post cap or the remaining campaign budget.
+    let earnings = Math.min(cappedEarnings, budgetLeft);
     earnings = Math.max(0, Math.round(earnings * 100) / 100);
 
     const hold = holdUntil(new Date());
@@ -146,8 +156,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: `Approved — $${earnings.toFixed(2)} credited to the creator's ${HOLD_HOURS}-hour hold.`,
+      message: capped
+        ? `Approved — $${earnings.toFixed(2)} credited to the creator's ${HOLD_HOURS}-hour hold. Cap of $${cap.toFixed(2)} applied: ${views.toLocaleString()} views at $${ratePer1k.toFixed(2)}/1k would have earned $${uncapped.toFixed(2)}.`
+        : `Approved — $${earnings.toFixed(2)} credited to the creator's ${HOLD_HOURS}-hour hold.`,
       earnings,
+      uncappedEarnings: uncapped,
+      cap,
+      capped,
     });
   }
 
