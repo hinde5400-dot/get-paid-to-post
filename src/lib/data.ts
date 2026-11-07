@@ -11,6 +11,9 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
   return {
     id: String(row.id),
     brand_name: String(row.brand_name ?? ""),
+    // Campaign owner (migration 0013) and payment Transaction ID.
+    user_id: (row.user_id as string | null) ?? null,
+    payment_tx_id: (row.payment_tx_id as string | null) ?? null,
     // logo_url is optional (added by migration 0004) — brand initials
     // are shown when it is empty.
     logo_url: (row.logo_url as string | null) ?? null,
@@ -26,7 +29,7 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     description: String(row.description ?? ""),
     rules: (row.rules as string | null) ?? null,
     base_pay: Number(row.base_pay ?? 10),
-    view_bonus_per_1k: Number(row.view_bonus_per_1k ?? 0.75),
+    view_bonus_per_1k: Number(row.view_bonus_per_1k ?? 0),
     // Per-post cap (migration 0007); older rows fall back to the old
     // per-video / earn-up-to value, then the $75 default.
     max_payout_per_post: Number(
@@ -336,4 +339,30 @@ export async function getAllWithdrawals(): Promise<Withdrawal[]> {
     .limit(200);
   if (error || !data) return [];
   return (data as Record<string, unknown>[]).map(mapWithdrawal);
+}
+
+/**
+ * The admin's USDT (TRC20) wallet address brands send their campaign
+ * budget to (migration 0013, site_settings key 'admin_usdt_wallet').
+ * Public-read by RLS, so the brand payment page can show it. Returns
+ * null when no address is saved yet, or when the migration has not
+ * run yet (same silent no-op pattern as releaseMaturedHolds).
+ */
+export async function getAdminUsdtWallet(): Promise<string | null> {
+  const supabase = getServerClient();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "admin_usdt_wallet")
+      .single();
+    if (error || !data) return null;
+    const value = String(
+      (data as Record<string, unknown>).value ?? ""
+    ).trim();
+    return value || null;
+  } catch {
+    return null;
+  }
 }

@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals } from "@/lib/data";
+import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewList";
 import AdminCampaignList from "@/components/AdminCampaignList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
+import AdminSettingsForm from "@/components/AdminSettingsForm";
 
 export default async function AdminPage() {
   if (!isSupabaseConfigured) {
@@ -37,6 +38,7 @@ export default async function AdminPage() {
   const submissions = await getAllSubmissions();
   const pendingCampaigns = await getPendingCampaigns();
   const withdrawals = await getAllWithdrawals();
+  const adminWallet = await getAdminUsdtWallet();
 
   // Creator emails for the review list (owner can read all users).
   const supabase = getServerClient();
@@ -77,6 +79,22 @@ export default async function AdminPage() {
         </p>
       </div>
 
+      {/* Admin settings — USDT wallet brands pay their budget to */}
+      <section>
+        <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+          Admin Settings
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Save your USDT (TRC20) wallet address here. Brands send their
+          campaign budget to this address and paste their Transaction ID
+          on the payment page. Until you save an address, the payment
+          page tells brands to contact you on Discord instead.
+        </p>
+        <div className="mt-4">
+          <AdminSettingsForm currentWallet={adminWallet} />
+        </div>
+      </section>
+
       {/* Pending campaigns — owner-only, same check as this whole page */}
       <section>
         <div className="flex flex-wrap items-center gap-3">
@@ -88,10 +106,12 @@ export default async function AdminPage() {
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
-          Approve a campaign <strong className="text-fg">only after the
-          brand&apos;s budget has actually reached you</strong> —
-          approving marks it funded and live on Discover. Rejecting hides it
-          forever; it is never shown anywhere.
+          Check the Transaction ID on each campaign — it proves the
+          brand sent the budget. Approve a campaign{" "}
+          <strong className="text-fg">only after the brand&apos;s
+          budget has actually reached you</strong> — approving marks it
+          funded and live on Discover. Rejecting hides it forever; it is
+          never shown anywhere.
         </p>
         <div className="mt-4">
           {pendingCampaigns.length === 0 ? (

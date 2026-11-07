@@ -44,13 +44,14 @@ export default async function Footer() {
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             <li><Link href="/terms" className="hover:text-lime">Terms of Service</Link></li>
             <li><Link href="/privacy" className="hover:text-lime">Privacy Policy</Link></li>
+            <li><Link href="/refund" className="hover:text-lime">Refund Policy</Link></li>
+            <li><Link href="/contact" className="hover:text-lime">Contact</Link></li>
           </ul>
         </div>
       </div>
       <div className="border-t border-fg/10 py-4 text-center text-xs leading-relaxed text-fg/40">
         <p className="mx-auto max-w-2xl px-4">
-          Funding happens directly with the platform owner via USDT, Bank
-          Transfer or Wise before campaign goes live.
+          Campaigns are funded in USDT (TRC20) before they go live.
         </p>
         <p className="mt-2">
           © 2026 {BRAND_NAME}. All rights reserved. TikTok, Instagram and

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
-  MIN_RATE_PER_1K,
 } from "@/lib/constants";
 import type { Platform } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -19,15 +19,16 @@ import {
 /**
  * Brand campaign form — Brand Name, Brand Logo (optional), Campaign
  * Title, Platforms (pick any of TikTok / Instagram / YouTube, at
- * least one), Rate per 1k views (min $0.75), Total Budget (any amount
- * above $0 — there is no minimum budget), Max Payout Per Post
- * (default $75, $10–$200), Campaign Description, Video
- * Requirements. Saves with status "pending" — nothing goes live
- * until the admin approves it (after the budget is funded).
+ * least one), Rate per 1k views (any rate above $0 — your choice),
+ * Total Budget (any amount above $0 — your choice, no minimum),
+ * Max Payout Per Post (default $75, $10–$200), Campaign
+ * Description, Video Requirements. Saves with status "pending" —
+ * nothing goes live until the brand pays the budget in USDT on the
+ * payment page and the admin approves it.
  *
  * Every validation failure shows the red error popup + shake + buzz
- * and blocks submit; a saved campaign shows the green "Success!"
- * popup. The API re-validates everything server-side too.
+ * and blocks submit; a saved campaign redirects to the payment page.
+ * The API re-validates everything server-side too.
  */
 export default function BrandForm({
   isLoggedIn,
@@ -37,6 +38,7 @@ export default function BrandForm({
   initialBrandName?: string | null;
 }) {
   const { showError, showSuccess } = useToast();
+  const router = useRouter();
   const [brandName, setBrandName] = useState(initialBrandName ?? "");
   const [logoUrl, setLogoUrl] = useState("");
   const [title, setTitle] = useState("");
@@ -83,17 +85,15 @@ export default function BrandForm({
     if (platforms.length === 0) {
       return fail("platforms", "Select at least one platform");
     }
-    // Money rules — any budget above $0; there is no minimum budget.
+    // Money rules — any budget above $0 and any rate above $0.
+    // There is no minimum budget and no minimum rate: your choice.
     const budgetNum = Number(budget);
     if (!Number.isFinite(budgetNum) || budgetNum <= 0) {
       return fail("budget", "Error: Budget must be more than $0");
     }
     const rateNum = Number(ratePer1k);
-    if (!Number.isFinite(rateNum) || rateNum < MIN_RATE_PER_1K) {
-      return fail(
-        "ratePer1k",
-        `Error: Rate cannot be less than $${MIN_RATE_PER_1K} per 1k views`
-      );
+    if (!Number.isFinite(rateNum) || rateNum <= 0) {
+      return fail("ratePer1k", "Error: Rate must be more than $0 per 1k views");
     }
     const capNum = Number(maxPayout);
     if (
@@ -154,6 +154,9 @@ export default function BrandForm({
         "Your campaign is under review. Admin will approve it soon."
       );
       setDone(true);
+      // Next step is payment: the campaign stays pending until the
+      // brand sends the budget in USDT on the payment page.
+      if (data.id) router.push(`/brands/payment/${data.id}`);
     } catch (err) {
       showError(
         err instanceof Error ? err.message : "Could not save the campaign."
@@ -179,12 +182,31 @@ export default function BrandForm({
           Your campaign is under review. Admin will approve it soon.
         </p>
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-fg/50">
+          Next step: send your budget in USDT on the payment page. Your
+          campaign goes live once the admin verifies your payment.
+        </p>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-fg/50">
           Once approved and funded, your campaign goes live to creators
           on the platforms you chose.
         </p>
       </div>
     );
   }
+
+  // Live calculation example, updating as the brand types the rate
+  // and budget. Defaults ($1 per 1k, $200 budget) show the exact
+  // example while the fields are empty.
+  const exampleRate =
+    Number.isFinite(Number(ratePer1k)) && Number(ratePer1k) > 0
+      ? Number(ratePer1k)
+      : 1;
+  const exampleBudget =
+    Number.isFinite(Number(budget)) && Number(budget) > 0
+      ? Number(budget)
+      : 200;
+  const exampleViews = Math.round((exampleBudget / exampleRate) * 1000);
+  const fmtChoice = (n: number) =>
+    `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
   return (
     <form
@@ -195,8 +217,9 @@ export default function BrandForm({
         Create your campaign
       </h2>
       <p className="mt-1 text-sm text-fg/60">
-        Set any budget — your campaign stays pending until the admin
-        approves it and the budget is funded.
+        Set any rate and any budget — no minimums. After you submit,
+        you will send your budget in USDT on the payment page; your
+        campaign goes live once the admin verifies your payment.
       </p>
       {!isLoggedIn && (
         <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
@@ -282,32 +305,32 @@ export default function BrandForm({
           )}
         </div>
         <label className="block text-sm font-bold text-fg">
-          Rate per 1k views (USD)
+          Rate Per 1000 Views (Your Choice)
           <input
             type="number"
-            min={MIN_RATE_PER_1K}
+            min={0}
             step="0.01"
             value={ratePer1k}
             onChange={(e) => setRatePer1k(e.target.value)}
-            placeholder="e.g. 2"
+            placeholder="e.g. 1"
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium text-fg/50">
-            Minimum ${MIN_RATE_PER_1K} per 1,000 views.
+            Higher rate = More creators will join fast.
           </span>
           {fieldErrors.ratePer1k && (
             <span className={errCls}>{fieldErrors.ratePer1k}</span>
           )}
         </label>
         <label className="block text-sm font-bold text-fg">
-          Total Budget (USD)
+          Budget (Your Choice)
           <input
             type="number"
             min={1}
             step="1"
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
-            placeholder="e.g. 500"
+            placeholder="e.g. 200"
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium text-fg/50">
@@ -392,6 +415,12 @@ export default function BrandForm({
           )}
         </label>
       </div>
+      {/* Live calculation example — updates as the brand types. */}
+      <div className="mt-4 rounded-2xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
+        Example: If you set {fmtChoice(exampleRate)} per 1k and budget{" "}
+        {fmtChoice(exampleBudget)}, you will get approx{" "}
+        {exampleViews.toLocaleString("en-US")} views.
+      </div>
       <label className="mt-4 block text-sm font-bold text-fg">
         Campaign Description
         <span className="mt-1 block text-xs font-medium text-fg/50">
@@ -448,8 +477,9 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
         )}
       </button>
       <p className="mt-3 text-center text-xs text-fg/40">
-        No payment is taken here. Funding happens directly with the platform
-        owner via USDT, Bank Transfer or Wise before campaign goes live.
+        No payment is taken here. After you submit, send your budget in
+        USDT (TRC20) to the admin wallet on the payment page — your
+        campaign goes live once the admin verifies your payment.
       </p>
     </form>
   );

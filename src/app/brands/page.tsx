@@ -4,10 +4,10 @@ import BrandForm from "@/components/BrandForm";
 
 const FUNDING_STEPS = [
   { n: "1", t: "Create your campaign", d: "Fill in the form below: brand, logo, title, rate per 1K views, budget and brief." },
-  { n: "2", t: "Your campaign is saved as pending", d: "Nothing goes live yet. The admin reviews it, and it goes live only after the budget is funded." },
-  { n: "3", t: "Agree the rate and budget", d: "The platform owner confirms the rate and the total budget with you." },
-  { n: "4", t: "Fund the budget upfront", d: "Funding happens directly with the platform owner via USDT, Bank Transfer or Wise before campaign goes live." },
-  { n: "5", t: "Campaign goes live", d: "Once funding is confirmed, your campaign opens to creators on TikTok, Instagram and YouTube." },
+  { n: "2", t: "Your campaign is saved as pending", d: "Nothing goes live yet. After you submit, send your budget in USDT on the payment page — the admin reviews it and it goes live only after payment is verified." },
+  { n: "3", t: "Set your rate and budget", d: "You choose any rate and any budget — no minimums. Higher rate = more creators join fast." },
+  { n: "4", t: "Fund the budget in USDT", d: "Send your budget in USDT (TRC20) to the admin wallet and paste your Transaction ID on the payment page." },
+  { n: "5", t: "Campaign goes live", d: "Once payment is verified, your campaign opens to creators on TikTok, Instagram and YouTube." },
   { n: "6", t: "Creators post and submit", d: "Creators post short vertical clips, submit their links, and earn per view." },
   { n: "7", t: "You pay only for verified views", d: "Approved views are paid from your funded budget. Unspent budget stays yours." },
 ];
@@ -113,44 +113,53 @@ export default async function BrandsPage() {
         </div>
       </section>
 
-      {/* Benefit & risk */}
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-3xl border border-fg/10 bg-card p-6">
-          <h2 className="text-lg font-extrabold text-fg">
-            Why brands use Get Paid To Post
-          </h2>
-          <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
-            <li>• Real creators, no follower minimum.</li>
-            <li>• You pay only for verified views — never per post alone.</li>
-            <li>• Every campaign budget is funded upfront.</li>
-            <li>• Every clip comes with proof, so you can see what ran.</li>
-            <li>• Unspent budget stays yours.</li>
-          </ul>
-        </div>
-        <div className="rounded-3xl border border-fg/10 bg-card p-6">
-          <h2 className="text-lg font-extrabold text-fg">
-            How your budget is protected
-          </h2>
-          <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
-            <li>• Budgets are kept separate from operating money.</li>
-            <li>• Payouts go only to approved views, from your funded budget.</li>
-            <li>• Every payout is recorded and can be shown to you.</li>
-            <li>• Fake engagement will lead to the creator&apos;s account being strictly blocked or banned.</li>
-          </ul>
-        </div>
+      {/* Benefit */}
+      <section className="rounded-3xl border border-fg/10 bg-card p-6">
+        <h2 className="text-lg font-extrabold text-fg">
+          Why brands use Get Paid To Post
+        </h2>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
+          <li>• Real creators, no follower minimum.</li>
+          <li>• You pay only for verified views — never per post alone.</li>
+          <li>• Every campaign budget is funded upfront.</li>
+          <li>• Every clip comes with proof, so you can see what ran.</li>
+          <li>• Unspent budget stays yours.</li>
+        </ul>
+      </section>
+
+      {/* How brand funds are protected */}
+      <section className="rounded-3xl border border-lime/40 bg-card p-6 md:p-8">
+        <h2 className="text-xl font-extrabold text-fg">
+          How brand funds are protected
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-fg/70">
+          Your budget is funded before your campaign goes live. Creators
+          are paid only for verified views at the rate you set — never for
+          promises. Any budget left unspent when your campaign ends stays
+          yours. We never spend your budget on anything else, and we never
+          charge you for views that were not verified.
+        </p>
+        <ul className="mt-4 space-y-2 text-sm leading-relaxed text-fg/70">
+          <li>• Budgets are kept separate from operating money.</li>
+          <li>• Payouts go only to approved views, from your funded budget.</li>
+          <li>• Every payout is recorded and can be shown to you.</li>
+          <li>• Fake engagement will lead to the creator&apos;s account being strictly blocked or banned.</li>
+        </ul>
       </section>
 
       {/* Trust section — above the form */}
       <section className="rounded-3xl border border-lime/40 bg-card p-6 text-center md:p-8">
         <p className="text-sm leading-relaxed text-fg/80">
           We are a professional creator marketplace. All campaigns are
-          funded before going live. Creators are paid for real views only.
+          funded before going live. Creators are paid for real verified
+          views only. Your brand link is 100% safe to check on VirusTotal
+          / Google Safe Browsing.
         </p>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
           {[
-            "🛡️ No Gambling, No Betting",
-            "✅ 100% Real Brands, Funded Campaigns Only",
-            "🔒 Secure Payments via USDT",
+            "No Gambling, No Betting",
+            "100% Funded Campaigns Only - Campaign goes live only after payment received",
+            "Secure Payments via USDT - No card, no hidden charges",
           ].map((badge) => (
             <span
               key={badge}

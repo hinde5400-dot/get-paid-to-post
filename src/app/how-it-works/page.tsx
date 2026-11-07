@@ -43,7 +43,7 @@ export default async function HowItWorksPage() {
         <h2 className="text-lg font-extrabold text-fg">The money rules</h2>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Base pay: $10 per approved post.</li>
-          <li>• View bonus: $0.75 per 1,000 views, tracked for 14 days.</li>
+          <li>• View bonus: the campaign&apos;s rate per 1,000 views, tracked for 14 days.</li>
           <li>• Approved earnings sit in a 72-hour hold, then become available.</li>
           <li>• Minimum withdrawal: $10. Withdrawal fee: 7%.</li>
           <li>• Payouts: USDT (TRC20 or BEP20) only.</li>

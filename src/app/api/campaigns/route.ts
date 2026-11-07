@@ -4,7 +4,6 @@ import {
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
-  MIN_RATE_PER_1K,
 } from "@/lib/constants";
 import type { Platform } from "@/lib/types";
 
@@ -15,8 +14,9 @@ const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
  * is_funded = false — nothing goes live until the owner approves it
  * in /admin (after the budget is funded). "Rate per 1k views"
  * maps to view_bonus_per_1k, and rate_per_1m stays consistent at
- * rate-per-1k × 1000. There is no minimum budget — any amount above
- * $0 is accepted. Platforms are stored in campaigns.platforms
+ * rate-per-1k × 1000. There is no minimum budget and no minimum
+ * rate — any budget above $0 and any rate above $0 are accepted.
+ * Platforms are stored in campaigns.platforms
  * (migration 0012) with the legacy platform column kept in sync:
  * "all" when all three are chosen, otherwise the first chosen.
  */
@@ -86,12 +86,11 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Any rate above $0 — there is no minimum rate.
   const ratePer1k = Number(body.ratePer1k ?? 0);
-  if (ratePer1k < MIN_RATE_PER_1K) {
+  if (!Number.isFinite(ratePer1k) || ratePer1k <= 0) {
     return NextResponse.json(
-      {
-        error: `Error: Rate cannot be less than $${MIN_RATE_PER_1K} per 1k views`,
-      },
+      { error: "Error: Rate must be more than $0 per 1k views" },
       { status: 400 }
     );
   }
@@ -167,6 +166,9 @@ export async function POST(request: Request) {
   const insertRow: Record<string, unknown> = {
     brand_name: brandName,
     title,
+    // The campaign owner (migration 0013) — the payment page and
+    // the payment Transaction ID update both check this.
+    user_id: auth.user.id,
     // Rate per 1k views drives the per-view bonus; rate per 1M views is
     // the same rate scaled up, so the two fields stay coherent.
     rate_per_1m: Math.round(ratePer1k * 1000 * 100) / 100,
@@ -206,9 +208,9 @@ export async function POST(request: Request) {
   if (insertResult.error) {
     // New columns come from migrations (0004 logo_url, 0007
     // max_payout_per_post, 0009 brief/thumbnail/duration, 0012
-    // platforms) which may not have been run yet. Drop the column the
-    // database complains about and retry once, instead of failing the
-    // submission.
+    // platforms, 0013 user_id) which may not have been run yet. Drop
+    // the column the database complains about and retry once,
+    // instead of failing the submission.
     const msg = insertResult.error.message;
     const retryRow: Record<string, unknown> = { ...insertRow };
     let stripped = false;
@@ -219,6 +221,7 @@ export async function POST(request: Request) {
       "thumbnail_url",
       "duration_days",
       "platforms",
+      "user_id",
     ] as const) {
       if (new RegExp(col, "i").test(msg)) {
         delete retryRow[col];

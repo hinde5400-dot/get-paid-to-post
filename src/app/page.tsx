@@ -20,7 +20,7 @@ const FAQS = [
   },
   {
     q: "How much can I earn per post?",
-    a: "Every approved post earns a $10 base pay, plus $0.75 per 1,000 views. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
+    a: "Every approved post earns a $10 base pay, plus the campaign's rate per 1,000 views. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
   },
   {
     q: "What are the video rules?",
@@ -33,6 +33,22 @@ const FAQS = [
   {
     q: "What happens with fake engagement?",
     a: "Fake engagement will lead to your account being strictly blocked or banned. Only real views from real people count.",
+  },
+  {
+    q: "Is Get Paid To Post safe?",
+    a: "Yes. Every campaign is funded by the brand before it goes live, creators are paid only for verified views, and creators never pay anything to join, post, or earn. The site runs over secure HTTPS, and support is available on Discord.",
+  },
+  {
+    q: "What happens to my unspent budget?",
+    a: "It stays yours. Your budget is funded before your campaign goes live, creators are paid only for verified views at the rate you set, and any budget left unspent when your campaign ends remains yours. We never spend your budget on anything else.",
+  },
+  {
+    q: "What if my clip is rejected by mistake?",
+    a: "You can appeal once through Discord support. A person will review your appeal and reply within 10 business days. Earnings that have already settled to your Withdrawable Balance are never reversed; only unsettled earnings can be returned to the campaign budget.",
+  },
+  {
+    q: "Do you guarantee views or earnings?",
+    a: "No. We do not guarantee any number of views, earnings, or campaign availability. Earnings depend on the verified views your clips receive and on the campaign's remaining budget.",
   },
 ];
 

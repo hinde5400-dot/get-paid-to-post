@@ -63,6 +63,10 @@ export type SubmissionStatus =
 export interface Campaign {
   id: string;
   brand_name: string;
+  /** Who owns the campaign (migration 0013); null on rows written before it. */
+  user_id?: string | null;
+  /** Transaction ID / hash the brand pasted after paying (migration 0013). */
+  payment_tx_id?: string | null;
   logo_url: string | null;
   title: string;
   rate_per_1m: number;

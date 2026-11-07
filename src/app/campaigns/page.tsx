@@ -76,7 +76,7 @@ export default async function CampaignsPage({
         </h1>
         <p className="mt-2 text-sm text-fg/60">
           Funded campaigns only. Pick one, post your clip, get paid per view.
-          Base pay $10 per approved post, plus $0.75 per 1,000 views.
+          Base pay $10 per approved post, plus the campaign&apos;s rate per 1,000 views.
         </p>
       </div>
 

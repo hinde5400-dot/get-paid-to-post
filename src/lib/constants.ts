@@ -39,8 +39,8 @@ export const PLATFORM_LABELS: Record<string, string> = {
 };
 
 // Money rules — encode these everywhere, never hard-code different numbers.
-// There is NO minimum campaign budget: a brand sets any budget above $0.
-export const MIN_RATE_PER_1K = 0.75; // USD, minimum rate per 1,000 views
+// There is NO minimum campaign budget and NO minimum rate: a brand sets
+// any budget above $0 and any rate above $0 per 1,000 views.
 export const MAX_PAYOUT_DEFAULT = 75; // USD, default max payout per post
 export const MAX_PAYOUT_MIN = 10; // USD, minimum max payout per post
 export const MAX_PAYOUT_MAX = 200; // USD, maximum max payout per post
@@ -48,7 +48,6 @@ export const WITHDRAW_MIN = 10; // USD, minimum withdrawal
 export const WITHDRAW_FEE_RATE = 0.07; // 7% at withdrawal
 export const HOLD_HOURS = 72; // approved earnings sit in a 72-hour hold
 export const BASE_PAY = 10; // USD per approved post
-export const VIEW_BONUS_PER_1K = 0.75; // USD per 1,000 views
 export const VIEWS_TRACKED_DAYS = 14; // views tracked for 14 days
 export const MAX_POSTS_PER_CAMPAIGN = 7;
 export const COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours, per platform

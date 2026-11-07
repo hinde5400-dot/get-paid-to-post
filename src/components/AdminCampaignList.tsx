@@ -109,6 +109,22 @@ export default function AdminCampaignList({
             </p>
           )}
 
+          {/* Payment Transaction ID — the proof the budget was sent. */}
+          <div className="mt-3 rounded-xl bg-fg/5 px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
+              Transaction ID
+            </p>
+            {c.payment_tx_id ? (
+              <p className="mt-1 break-all font-mono text-xs font-bold text-lime">
+                {c.payment_tx_id}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs font-semibold text-fg/50">
+                Not submitted yet
+              </p>
+            )}
+          </div>
+
           <div className="mt-4 flex gap-2">
             <button
               type="button"
