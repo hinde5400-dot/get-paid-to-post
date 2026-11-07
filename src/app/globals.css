@@ -3,18 +3,42 @@
 @tailwind utilities;
 
 /* Get Paid To Post — brand theme.
-   Near-black #0A0A0B background, cards #141417, full yellow #FFDE00
-   accent. Headings use Archivo (font-display), body uses Inter.
+   Dark (default): pure black #0A0A0A background, cards #1A1A1A,
+   white text, lime green #C6FF00 accent.
+   Light: white #FFFFFF background, cards #F4F4F5, near-black text,
+   same lime accent. The theme flips with data-theme on <html>
+   (see ThemeToggle) — every themed utility below reads these vars,
+   so all pages follow the toggle.
+   Headings use Archivo (font-display), body uses Inter.
    Fonts come from next/font/google (bundled + self-hosted at build
    time) — there is intentionally no runtime fetch to Google Fonts, so
    first paint is never blocked. */
+
+/* Default (dark) theme variables. */
+:root,
+[data-theme="dark"] {
+  --bg: 10 10 10;
+  --card: 26 26 26;
+  --cardlight: 34 34 34;
+  --fg: 255 255 255;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: 255 255 255;
+  --card: 244 244 245;
+  --cardlight: 232 232 236;
+  --fg: 10 10 10;
+  color-scheme: light;
+}
+
 html {
   scroll-behavior: smooth;
 }
 
 body {
-  background-color: #0a0a0b;
-  color: #ffffff;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--fg));
   font-family:
     var(--font-inter),
     system-ui,
@@ -26,8 +50,8 @@ body {
 }
 
 ::selection {
-  background: #ffde00;
-  color: #0a0a0b;
+  background: #c6ff00;
+  color: #0a0a0a;
 }
 
 /* Skeleton loading shimmer (campaign lists, like TryShoot's loading state) */
@@ -42,12 +66,20 @@ body {
 .skeleton {
   background: linear-gradient(
     90deg,
-    #1d1d21 25%,
-    #26262b 50%,
-    #1d1d21 75%
+    rgb(var(--cardlight)) 25%,
+    rgb(var(--card)) 50%,
+    rgb(var(--cardlight)) 75%
   );
   background-size: 800px 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+[data-theme="light"] .skeleton {
+  background: linear-gradient(
+    90deg,
+    #e4e4e7 25%,
+    #f4f4f5 50%,
+    #e4e4e7 75%
+  );
 }
 
 /* Slide-in sidebar drawer */
@@ -72,6 +104,21 @@ body {
 }
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
+}
+
+/* Modal pop-in */
+@keyframes modal-in {
+  from {
+    transform: translateY(12px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+.animate-modal-in {
+  animation: modal-in 0.25s ease-out;
 }
 
 /* Submit success popup */
@@ -129,6 +176,7 @@ body {
   .animate-shake,
   .animate-drawer-in,
   .animate-fade-in,
+  .animate-modal-in,
   .skeleton {
     animation: none;
   }

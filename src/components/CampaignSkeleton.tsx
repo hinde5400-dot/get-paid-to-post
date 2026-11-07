@@ -5,7 +5,7 @@ export default function CampaignSkeleton({ count = 6 }: { count?: number }) {
       {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
-          className="overflow-hidden rounded-2xl border border-white/10 bg-card"
+          className="overflow-hidden rounded-2xl border border-fg/10 bg-card"
           aria-hidden
         >
           <div className="skeleton h-40 w-full" />

@@ -15,8 +15,8 @@ export default function HowItWorksPage() {
   return (
     <div className="space-y-10">
       <div className="text-center">
-        <h1 className="font-display text-4xl font-black uppercase tracking-tight text-white">How It Works</h1>
-        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-white/70">
+        <h1 className="font-display text-4xl font-black uppercase tracking-tight text-fg">How It Works</h1>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-fg/70">
           {BRAND_NAME} in seven simple steps — from signup to payout.
         </p>
       </div>
@@ -25,20 +25,20 @@ export default function HowItWorksPage() {
         {STEPS.map((s) => (
           <div
             key={s.n}
-            className="rounded-2xl border border-white/10 bg-card p-5"
+            className="rounded-2xl border border-fg/10 bg-card p-5"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sun text-lg font-black text-ink">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-lime text-lg font-black text-ink">
               {s.n}
             </span>
-            <h2 className="mt-3 font-bold text-white">{s.t}</h2>
-            <p className="mt-1 text-sm leading-relaxed text-white/60">{s.d}</p>
+            <h2 className="mt-3 font-bold text-fg">{s.t}</h2>
+            <p className="mt-1 text-sm leading-relaxed text-fg/60">{s.d}</p>
           </div>
         ))}
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-card p-6">
-        <h2 className="text-lg font-extrabold text-white">The money rules</h2>
-        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-white/70">
+      <div className="rounded-3xl border border-fg/10 bg-card p-6">
+        <h2 className="text-lg font-extrabold text-fg">The money rules</h2>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Base pay: $10 per approved post.</li>
           <li>• View bonus: $0.75 per 1,000 views, tracked for 14 days.</li>
           <li>• Approved earnings sit in a 72-hour hold, then become available.</li>
@@ -49,9 +49,9 @@ export default function HowItWorksPage() {
         </ul>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-card p-6">
-        <h2 className="text-lg font-extrabold text-white">Video rules</h2>
-        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-white/70">
+      <div className="rounded-3xl border border-fg/10 bg-card p-6">
+        <h2 className="text-lg font-extrabold text-fg">Video rules</h2>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Vertical video only — 9:16 format.</li>
           <li>• Add captions to your clip.</li>
           <li>• Hook viewers in the first 3 seconds.</li>
@@ -63,7 +63,7 @@ export default function HowItWorksPage() {
       <div className="text-center">
         <Link
           href="/signup"
-          className="inline-block rounded-full bg-sun px-7 py-3.5 text-sm font-bold text-ink transition hover:bg-sundark"
+          className="inline-block rounded-full bg-lime px-7 py-3.5 text-sm font-bold text-ink transition hover:bg-limedark"
         >
           Start earning — sign up free
         </Link>

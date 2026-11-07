@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Archivo, Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import BottomNav from "@/components/BottomNav";
 import { BRAND_NAME, SITE_URL } from "@/lib/constants";
 import "./globals.css";
 
@@ -35,19 +36,30 @@ export const metadata: Metadata = {
   },
 };
 
+// Runs before first paint so the saved theme applies without a flash:
+// reads localStorage ("gptp-theme", "dark" | "light") and sets
+// data-theme on <html>. Default is dark.
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("gptp-theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${inter.variable}`}>
-      <body className="min-h-screen bg-ink font-sans text-white antialiased">
+    <html
+      lang="en"
+      data-theme="dark"
+      className={`${archivo.variable} ${inter.variable}`}
+    >
+      <body className="min-h-screen bg-ink font-sans text-fg antialiased">
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <Navbar />
-        <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-16 pt-6 md:pb-10">
+        <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-24 pt-6 md:pb-10">
           {children}
         </main>
         <Footer />
+        <BottomNav />
       </body>
     </html>
   );

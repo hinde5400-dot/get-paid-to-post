@@ -25,7 +25,7 @@ function formatRemaining(ms: number): string {
   return `${m}m`;
 }
 
-const CONFETTI_COLORS = ["#FFDE00", "#FFFFFF", "#7C5CFF", "#FF6B9D", "#3ED598"];
+const CONFETTI_COLORS = ["#C6FF00", "#FFFFFF", "#7C5CFF", "#FF6B9D", "#3ED598"];
 
 export default function SubmitBundleForm({
   campaign,
@@ -164,12 +164,12 @@ export default function SubmitBundleForm({
   }
 
   const inputCls =
-    "mt-1 w-full rounded-xl border border-white/15 bg-ink px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-sun";
+    "mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none placeholder:text-fg/30 focus:border-lime";
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-card p-6">
-      <h2 className="text-xl font-extrabold text-white">Submit a post</h2>
-      <p className="mt-1 text-sm text-white/60">
+    <div className="rounded-3xl border border-fg/10 bg-card p-6">
+      <h2 className="text-xl font-extrabold text-fg">Submit a post</h2>
+      <p className="mt-1 text-sm text-fg/60">
         TikTok + Instagram together, YouTube optional — one bundle, reviewed
         and paid together. Max {campaign.max_posts} posts per campaign.
       </p>
@@ -179,7 +179,7 @@ export default function SubmitBundleForm({
           {Array.from(cooldowns.entries()).map(([p, ms]) => (
             <p
               key={p}
-              className="rounded-xl bg-sun/10 px-4 py-2.5 text-sm font-semibold text-sun"
+              className="rounded-xl bg-lime/10 px-4 py-2.5 text-sm font-semibold text-lime"
             >
               ⏳ {PLATFORM_LABELS[p]}: next submit in {formatRemaining(ms)} —
               one clip per platform every 2 hours.
@@ -196,7 +196,7 @@ export default function SubmitBundleForm({
       )}
 
       <div className="mt-5 space-y-4">
-        <label className="block text-sm font-bold text-white">
+        <label className="block text-sm font-bold text-fg">
           TikTok link *
           <input
             value={tiktok}
@@ -205,7 +205,7 @@ export default function SubmitBundleForm({
             className={inputCls}
           />
         </label>
-        <label className="block text-sm font-bold text-white">
+        <label className="block text-sm font-bold text-fg">
           Instagram link *
           <input
             value={instagram}
@@ -214,8 +214,8 @@ export default function SubmitBundleForm({
             className={inputCls}
           />
         </label>
-        <label className="block text-sm font-bold text-white">
-          YouTube link <span className="font-medium text-white/50">(optional)</span>
+        <label className="block text-sm font-bold text-fg">
+          YouTube link <span className="font-medium text-fg/50">(optional)</span>
           <input
             value={youtube}
             onChange={(e) => setYoutube(e.target.value)}
@@ -224,9 +224,9 @@ export default function SubmitBundleForm({
           />
         </label>
 
-        <label className="block text-sm font-bold text-white">
+        <label className="block text-sm font-bold text-fg">
           How you made this post{" "}
-          <span className="font-medium text-white/50">
+          <span className="font-medium text-fg/50">
             ({words}/{HOW_MADE_MIN_WORDS} words minimum)
           </span>
           <textarea
@@ -239,13 +239,13 @@ export default function SubmitBundleForm({
         </label>
 
         <div>
-          <p className="text-sm font-bold text-white">
+          <p className="text-sm font-bold text-fg">
             Originality proof — screenshot links{" "}
-            <span className="font-medium text-white/50">
+            <span className="font-medium text-fg/50">
               ({proofFilled.length}/{MAX_PROOF_SCREENSHOTS})
             </span>
           </p>
-          <p className="mt-1 text-xs text-white/50">
+          <p className="mt-1 text-xs text-fg/50">
             Link to a screenshot of your live post or your editing project as
             proof this is your own content. At least one is required.
           </p>
@@ -262,28 +262,28 @@ export default function SubmitBundleForm({
             <button
               type="button"
               onClick={() => setProof((prev) => [...prev, ""])}
-              className="mt-2 text-sm font-bold text-sun hover:underline"
+              className="mt-2 text-sm font-bold text-lime hover:underline"
             >
               + Add another proof link
             </button>
           )}
         </div>
 
-        <div className="rounded-2xl bg-white/5 p-4">
-          <p className="text-sm font-bold text-white">Campaign rules</p>
-          <ul className="mt-2 space-y-1 text-sm text-white/70">
+        <div className="rounded-2xl bg-fg/5 p-4">
+          <p className="text-sm font-bold text-fg">Campaign rules</p>
+          <ul className="mt-2 space-y-1 text-sm text-fg/70">
             {VIDEO_RULES.map((r) => (
               <li key={r}>• {r}</li>
             ))}
           </ul>
         </div>
 
-        <label className="flex items-start gap-3 text-sm font-semibold text-white">
+        <label className="flex items-start gap-3 text-sm font-semibold text-fg">
           <input
             type="checkbox"
             checked={agreed}
             onChange={(e) => setAgreed(e.target.checked)}
-            className="mt-0.5 h-5 w-5 accent-[#FFDE00]"
+            className="mt-0.5 h-5 w-5 accent-[#C6FF00]"
           />
           I followed the campaign rules and this is my own content.
         </label>
@@ -298,14 +298,14 @@ export default function SubmitBundleForm({
           <button
             onClick={submit}
             disabled={busy || maxReached}
-            className="w-full rounded-full bg-sun py-3.5 text-sm font-bold text-ink transition hover:bg-sundark disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-full bg-lime py-3.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? "Submitting…" : "Submit bundle"}
           </button>
         ) : (
           <Link
             href="/login"
-            className="block rounded-full bg-sun py-3.5 text-center text-sm font-bold text-ink transition hover:bg-sundark"
+            className="block rounded-full bg-lime py-3.5 text-center text-sm font-bold text-ink transition hover:bg-limedark"
           >
             Log in to submit your post
           </Link>
@@ -314,7 +314,7 @@ export default function SubmitBundleForm({
 
       {success && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="animate-pop relative w-full max-w-md overflow-hidden rounded-3xl border border-sun/40 bg-card p-8 text-center shadow-2xl">
+          <div className="animate-pop relative w-full max-w-md overflow-hidden rounded-3xl border border-lime/40 bg-card p-8 text-center shadow-2xl">
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
               {Array.from({ length: 24 }).map((_, i) => (
                 <span
@@ -330,17 +330,17 @@ export default function SubmitBundleForm({
               ))}
             </div>
             <p className="text-5xl">🎉</p>
-            <h3 className="mt-3 text-2xl font-black text-white">
+            <h3 className="mt-3 text-2xl font-black text-fg">
               Post submitted!
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-white/70">
+            <p className="mt-2 text-sm leading-relaxed text-fg/70">
               {success.message} Your bundle is Under Review and shows $0 until
               it is approved — approved earnings then move into your 72-hour
               hold.
             </p>
             {success.codes.length > 0 && (
-              <div className="mt-4 rounded-xl bg-white/5 p-3 text-left text-xs text-white/70">
-                <p className="font-bold text-white">Submission IDs</p>
+              <div className="mt-4 rounded-xl bg-fg/5 p-3 text-left text-xs text-fg/70">
+                <p className="font-bold text-fg">Submission IDs</p>
                 {success.codes.map((code) => (
                   <p key={code} className="mt-1 font-mono">
                     {code}
@@ -351,13 +351,13 @@ export default function SubmitBundleForm({
             <div className="mt-5 flex gap-3">
               <Link
                 href="/my-posts"
-                className="flex-1 rounded-full bg-sun py-3 text-sm font-bold text-ink"
+                className="flex-1 rounded-full bg-lime py-3 text-sm font-bold text-ink"
               >
                 View My Posts
               </Link>
               <button
                 onClick={() => setSuccess(null)}
-                className="flex-1 rounded-full border border-white/20 py-3 text-sm font-bold text-white"
+                className="flex-1 rounded-full border border-fg/20 py-3 text-sm font-bold text-fg"
               >
                 Keep browsing
               </button>

@@ -64,12 +64,12 @@ export default function WithdrawModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-card p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-3xl border border-fg/10 bg-card p-6 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-extrabold text-white">Request Withdrawal</h2>
+          <h2 className="text-lg font-extrabold text-fg">Request Withdrawal</h2>
           <button
             onClick={onClose}
-            className="rounded-full bg-white/10 px-3 py-1 text-sm font-bold text-white/70"
+            className="rounded-full bg-fg/10 px-3 py-1 text-sm font-bold text-fg/70"
             aria-label="Close"
           >
             ✕
@@ -79,25 +79,25 @@ export default function WithdrawModal({
         {done ? (
           <div className="py-6 text-center">
             <p className="text-4xl">🎉</p>
-            <p className="mt-3 text-lg font-bold text-white">Withdrawal requested</p>
-            <p className="mt-1 text-sm text-white/60">
+            <p className="mt-3 text-lg font-bold text-fg">Withdrawal requested</p>
+            <p className="mt-1 text-sm text-fg/60">
               Your payout of {formatUSD(final)} is being processed. It will be
               sent to the details you provided.
             </p>
             <button
               onClick={onClose}
-              className="mt-5 rounded-full bg-sun px-5 py-2.5 text-sm font-bold text-ink"
+              className="mt-5 rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
             >
               Done
             </button>
           </div>
         ) : (
           <>
-            <p className="mt-2 text-sm text-white/60">
+            <p className="mt-2 text-sm text-fg/60">
               Available balance:{" "}
-              <span className="font-bold text-sun">{formatUSD(available)}</span>
+              <span className="font-bold text-lime">{formatUSD(available)}</span>
             </p>
-            <label className="mt-4 block text-sm font-bold text-white">
+            <label className="mt-4 block text-sm font-bold text-fg">
               Amount (USD)
               <input
                 type="number"
@@ -106,15 +106,15 @@ export default function WithdrawModal({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder={`Min ${formatUSD(WITHDRAW_MIN)}`}
-                className="mt-1 w-full rounded-xl border border-white/15 bg-ink px-4 py-3 text-white outline-none focus:border-sun"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />
             </label>
-            <label className="mt-4 block text-sm font-bold text-white">
+            <label className="mt-4 block text-sm font-bold text-fg">
               Payout method
               <select
                 value={method}
                 onChange={(e) => setMethod(e.target.value as Method)}
-                className="mt-1 w-full rounded-xl border border-white/15 bg-ink px-4 py-3 text-white outline-none focus:border-sun"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               >
                 {METHODS.map((m) => (
                   <option key={m.key} value={m.key}>
@@ -123,7 +123,7 @@ export default function WithdrawModal({
                 ))}
               </select>
             </label>
-            <label className="mt-4 block text-sm font-bold text-white">
+            <label className="mt-4 block text-sm font-bold text-fg">
               Payout details
               <input
                 type="text"
@@ -132,23 +132,23 @@ export default function WithdrawModal({
                 placeholder={
                   METHODS.find((m) => m.key === method)?.hint ?? ""
                 }
-                className="mt-1 w-full rounded-xl border border-white/15 bg-ink px-4 py-3 text-white outline-none focus:border-sun"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />
             </label>
 
             {amountNum > 0 && (
-              <div className="mt-4 rounded-xl bg-white/5 p-4 text-sm text-white/70">
+              <div className="mt-4 rounded-xl bg-fg/5 p-4 text-sm text-fg/70">
                 <div className="flex justify-between">
                   <span>Amount</span>
-                  <span className="font-bold text-white">{formatUSD(amountNum)}</span>
+                  <span className="font-bold text-fg">{formatUSD(amountNum)}</span>
                 </div>
                 <div className="mt-1 flex justify-between">
                   <span>Fee (7%)</span>
-                  <span className="font-bold text-white">−{formatUSD(fee)}</span>
+                  <span className="font-bold text-fg">−{formatUSD(fee)}</span>
                 </div>
-                <div className="mt-2 flex justify-between border-t border-white/10 pt-2 text-base">
-                  <span className="font-bold text-white">You receive</span>
-                  <span className="font-black text-sun">{formatUSD(final)}</span>
+                <div className="mt-2 flex justify-between border-t border-fg/10 pt-2 text-base">
+                  <span className="font-bold text-fg">You receive</span>
+                  <span className="font-black text-lime">{formatUSD(final)}</span>
                 </div>
               </div>
             )}
@@ -162,11 +162,11 @@ export default function WithdrawModal({
             <button
               onClick={submit}
               disabled={busy || !valid}
-              className="mt-5 w-full rounded-full bg-sun py-3 text-sm font-bold text-ink transition hover:bg-sundark disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-5 w-full rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? "Processing…" : "Confirm withdrawal"}
             </button>
-            <p className="mt-3 text-center text-xs text-white/40">
+            <p className="mt-3 text-center text-xs text-fg/40">
               Payouts are processed by the platform owner from the funded
               campaign budget.
             </p>

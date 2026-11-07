@@ -5,8 +5,8 @@ import { isSupabaseConfigured } from "./client";
 
 /**
  * Server Supabase client (reads the session from cookies).
- * Returns null when env vars are not configured — pages fall back to
- * sample data and show a setup notice instead of crashing.
+ * Returns null when env vars are not configured — pages return empty
+ * results and show a setup notice instead of crashing.
  */
 export function getServerClient(): SupabaseClient | null {
   if (!isSupabaseConfigured) return null;

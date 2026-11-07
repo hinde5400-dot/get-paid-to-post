@@ -11,13 +11,13 @@ import { formatUSD } from "@/lib/money";
 export default async function DashboardPage() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-card p-8 text-center">
-        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Dashboard</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/60">
+      <div className="mx-auto max-w-lg rounded-3xl border border-fg/10 bg-card p-8 text-center">
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">Dashboard</h1>
+        <p className="mt-3 text-sm leading-relaxed text-fg/60">
           Supabase is not configured yet. Add{" "}
-          <code className="text-sun">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code className="text-sun">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
-          <code className="text-sun">.env.local</code> and restart the server —
+          <code className="text-lime">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+          <code className="text-lime">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
+          <code className="text-lime">.env.local</code> and restart the server —
           see the README for the exact steps.
         </p>
       </div>
@@ -36,34 +36,34 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Dashboard</h1>
-        <p className="mt-1 text-sm text-white/60">
+        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Dashboard</h1>
+        <p className="mt-1 text-sm text-fg/60">
           Welcome back, {profile?.email ?? user.email}
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-white/10 bg-card p-5">
-          <p className="text-xs text-white/50">Available balance</p>
-          <p className="mt-1 text-2xl font-black text-sun">
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Available balance</p>
+          <p className="mt-1 text-2xl font-black text-lime">
             {formatUSD(wallet?.available_balance ?? 0)}
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-card p-5">
-          <p className="text-xs text-white/50">Pending (72-hour hold)</p>
-          <p className="mt-1 text-2xl font-black text-white">
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Pending (72-hour hold)</p>
+          <p className="mt-1 text-2xl font-black text-fg">
             {formatUSD(wallet?.pending_balance ?? 0)}
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-card p-5">
-          <p className="text-xs text-white/50">Total views</p>
-          <p className="mt-1 text-2xl font-black text-white">
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Total views</p>
+          <p className="mt-1 text-2xl font-black text-fg">
             {totalViews.toLocaleString()}
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-card p-5">
-          <p className="text-xs text-white/50">Total earned</p>
-          <p className="mt-1 text-2xl font-black text-white">
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Total earned</p>
+          <p className="mt-1 text-2xl font-black text-fg">
             {formatUSD(totalEarned)}
           </p>
         </div>
@@ -72,42 +72,42 @@ export default async function DashboardPage() {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/campaigns"
-          className="rounded-full bg-sun px-5 py-2.5 text-sm font-bold text-ink"
+          className="rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
         >
           Find a campaign
         </Link>
         <Link
           href="/earnings"
-          className="rounded-full border border-white/20 px-5 py-2.5 text-sm font-bold text-white hover:border-sun hover:text-sun"
+          className="rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-lime"
         >
           Earnings &amp; withdrawals
         </Link>
         <Link
           href="/connect"
-          className="rounded-full border border-white/20 px-5 py-2.5 text-sm font-bold text-white hover:border-sun hover:text-sun"
+          className="rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-lime"
         >
           My accounts
         </Link>
       </div>
 
       <section>
-        <h2 className="mb-4 text-xl font-extrabold text-white">My Posts</h2>
+        <h2 className="mb-4 text-xl font-extrabold text-fg">My Posts</h2>
         <MyPostsList submissions={submissions} />
       </section>
 
       <section
         id="refer"
-        className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sun/40 bg-card p-5"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-lime/40 bg-card p-5"
       >
         <div>
-          <h2 className="font-display text-lg font-black uppercase tracking-tight text-white">
+          <h2 className="font-display text-lg font-black uppercase tracking-tight text-fg">
             Refer a friend
           </h2>
-          <p className="mt-1 max-w-md text-sm text-white/60">
+          <p className="mt-1 max-w-md text-sm text-fg/60">
             Know a creator who should get paid for their clips? Share the
             site link with them.
           </p>
-          <p className="mt-2 truncate rounded-lg bg-ink px-3 py-2 text-sm font-bold text-sun">
+          <p className="mt-2 truncate rounded-lg bg-ink px-3 py-2 text-sm font-bold text-lime">
             {SITE_URL}
           </p>
         </div>

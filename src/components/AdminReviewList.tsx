@@ -83,9 +83,9 @@ export default function AdminReviewList({
 
   if (submissions.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-card p-8 text-center">
-        <p className="font-bold text-white">No submissions yet</p>
-        <p className="mt-1 text-sm text-white/60">
+      <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
+        <p className="font-bold text-fg">No submissions yet</p>
+        <p className="mt-1 text-sm text-fg/60">
           Creator submissions will appear here for approval.
         </p>
       </div>
@@ -95,33 +95,33 @@ export default function AdminReviewList({
   return (
     <div className="space-y-4">
       {message && (
-        <p className="rounded-xl bg-sun/10 px-4 py-3 text-sm font-semibold text-sun">
+        <p className="rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
           {message}
         </p>
       )}
       {submissions.map((s) => (
         <article
           key={s.id}
-          className="rounded-2xl border border-white/10 bg-card p-5"
+          className="rounded-2xl border border-fg/10 bg-card p-5"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-sun">
+              <p className="text-xs font-bold uppercase tracking-wider text-lime">
                 {PLATFORM_LABELS[s.platform]} · {s.creator_email}
               </p>
-              <h3 className="mt-1 font-bold text-white">
+              <h3 className="mt-1 font-bold text-fg">
                 {s.campaign_title ?? "Campaign"}
               </h3>
               <a
                 href={s.post_url}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-1 block max-w-md truncate text-sm text-white/60 underline"
+                className="mt-1 block max-w-md truncate text-sm text-fg/60 underline"
               >
                 {s.post_url}
               </a>
-              <p className="mt-1 text-xs text-white/50">
-                ID: <span className="font-mono text-white">{s.submission_code || s.id.slice(0, 8)}</span>
+              <p className="mt-1 text-xs text-fg/50">
+                ID: <span className="font-mono text-fg">{s.submission_code || s.id.slice(0, 8)}</span>
                 {" · "}
                 {new Date(s.created_at).toLocaleString("en-US")}
               </p>
@@ -135,20 +135,20 @@ export default function AdminReviewList({
             </p>
           )}
 
-          <p className="mt-3 text-sm text-white/70">
-            <span className="font-bold text-white">How they made it: </span>
+          <p className="mt-3 text-sm text-fg/70">
+            <span className="font-bold text-fg">How they made it: </span>
             {s.how_made || "—"}
           </p>
           {s.proof_screenshots.length > 0 && (
             <div className="mt-2 text-sm">
-              <span className="font-bold text-white">Proof: </span>
+              <span className="font-bold text-fg">Proof: </span>
               {s.proof_screenshots.map((p) => (
                 <a
                   key={p}
                   href={p}
                   target="_blank"
                   rel="noreferrer"
-                  className="mr-3 text-sun underline"
+                  className="mr-3 text-lime underline"
                 >
                   screenshot
                 </a>
@@ -157,7 +157,7 @@ export default function AdminReviewList({
           )}
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs font-bold text-white">
+            <label className="block text-xs font-bold text-fg">
               Verified views
               <input
                 type="number"
@@ -166,10 +166,10 @@ export default function AdminReviewList({
                 onChange={(e) =>
                   setViews((prev) => ({ ...prev, [s.id]: e.target.value }))
                 }
-                className="mt-1 w-full rounded-xl border border-white/15 bg-ink px-3 py-2.5 text-white outline-none focus:border-sun"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
               />
             </label>
-            <label className="block text-xs font-bold text-white">
+            <label className="block text-xs font-bold text-fg">
               Likes
               <input
                 type="number"
@@ -178,11 +178,11 @@ export default function AdminReviewList({
                 onChange={(e) =>
                   setLikes((prev) => ({ ...prev, [s.id]: e.target.value }))
                 }
-                className="mt-1 w-full rounded-xl border border-white/15 bg-ink px-3 py-2.5 text-white outline-none focus:border-sun"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
               />
             </label>
           </div>
-          <p className="mt-2 text-xs text-white/50">
+          <p className="mt-2 text-xs text-fg/50">
             Current earnings: {formatUSD(s.earnings)} · Views:{" "}
             {s.views.toLocaleString()} · Likes: {s.likes.toLocaleString()}
           </p>
@@ -191,7 +191,7 @@ export default function AdminReviewList({
             <button
               onClick={() => review(s, "approve")}
               disabled={busy === s.id}
-              className="rounded-full bg-sun px-4 py-2 text-sm font-bold text-ink disabled:opacity-40"
+              className="rounded-full bg-lime px-4 py-2 text-sm font-bold text-ink disabled:opacity-40"
             >
               Approve
             </button>
@@ -205,7 +205,7 @@ export default function AdminReviewList({
             <button
               onClick={() => review(s, "revoke")}
               disabled={busy === s.id}
-              className="rounded-full border border-white/20 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+              className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg disabled:opacity-40"
             >
               Revoke
             </button>

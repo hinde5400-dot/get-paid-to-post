@@ -14,17 +14,17 @@ export default function Faq({ items }: { items: FaqItem[] }) {
       {items.map((item, i) => (
         <div
           key={i}
-          className="overflow-hidden rounded-2xl border border-white/10 bg-card"
+          className="overflow-hidden rounded-2xl border border-fg/10 bg-card"
         >
           <button
             onClick={() => setOpen(open === i ? null : i)}
-            className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-bold text-white"
+            className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-bold text-fg"
           >
             {item.q}
-            <span className="text-sun">{open === i ? "−" : "+"}</span>
+            <span className="text-lime">{open === i ? "−" : "+"}</span>
           </button>
           {open === i && (
-            <p className="px-5 pb-5 text-sm leading-relaxed text-white/70">
+            <p className="px-5 pb-5 text-sm leading-relaxed text-fg/70">
               {item.a}
             </p>
           )}

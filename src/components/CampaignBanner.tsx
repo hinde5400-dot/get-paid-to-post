@@ -31,14 +31,53 @@ export function brandInitials(brandName: string): string {
   return (first + second).toUpperCase();
 }
 
+/**
+ * Brand logo tile: the brand's logo image when a logo_url exists
+ * (from the brand form, migration 0004), otherwise the brand
+ * initials on a lime tile.
+ */
+export function BrandLogoTile({
+  campaign,
+  size = "md",
+}: {
+  campaign: Campaign;
+  size?: "sm" | "md" | "lg";
+}) {
+  const cls =
+    size === "lg"
+      ? "h-14 w-14 rounded-2xl text-2xl"
+      : size === "sm"
+        ? "h-9 w-9 rounded-xl text-sm"
+        : "h-11 w-11 rounded-2xl text-lg";
+  if (campaign.logo_url) {
+    return (
+      <img
+        src={campaign.logo_url}
+        alt={`${campaign.brand_name} logo`}
+        className={`${cls} relative shrink-0 object-cover`}
+      />
+    );
+  }
+  return (
+    <span
+      className={`relative flex ${cls} shrink-0 items-center justify-center bg-lime font-display font-black text-black`}
+    >
+      {brandInitials(campaign.brand_name)}
+    </span>
+  );
+}
+
 export default function CampaignBanner({
   campaign,
   size = "md",
   showLive = true,
+  badge,
 }: {
   campaign: Campaign;
   size?: "sm" | "md" | "lg";
   showLive?: boolean;
+  /** Rate badge overlaid on the banner, e.g. "$10 per post + milestones". */
+  badge?: string;
 }) {
   const [from, to] = GRADIENTS[hashBrand(campaign.brand_name) % GRADIENTS.length];
   const height =
@@ -69,7 +108,7 @@ export default function CampaignBanner({
       </span>
       <div className="relative">
         {showLive && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-sun px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-black">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-lime px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-black">
             <span className="h-1.5 w-1.5 rounded-full bg-black" />
             Live
           </span>
@@ -81,9 +120,12 @@ export default function CampaignBanner({
           {campaign.category}
         </p>
       </div>
-      <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sun font-display text-lg font-black text-black">
-        {brandInitials(campaign.brand_name)}
-      </span>
+      {badge && (
+        <span className="absolute right-3 top-3 rounded-full bg-lime px-3 py-1.5 text-xs font-black text-black shadow-lg">
+          {badge}
+        </span>
+      )}
+      <BrandLogoTile campaign={campaign} />
     </div>
   );
 }

@@ -19,51 +19,51 @@ export default async function EarningsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Earnings</h1>
-        <p className="mt-2 text-sm text-white/60">
+        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Earnings</h1>
+        <p className="mt-2 text-sm text-fg/60">
           Approved earnings sit in a {HOLD_HOURS}-hour hold, then become
           available to withdraw.
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-card p-5">
-          <p className="text-xs text-white/50">Available to withdraw</p>
-          <p className="mt-1 text-3xl font-black text-sun">
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Available to withdraw</p>
+          <p className="mt-1 text-3xl font-black text-lime">
             {formatUSD(available)}
           </p>
           <div className="mt-4">
             <WithdrawButton available={available} />
           </div>
           {available < WITHDRAW_MIN && (
-            <p className="mt-2 text-xs text-white/50">
+            <p className="mt-2 text-xs text-fg/50">
               Minimum withdrawal is {formatUSD(WITHDRAW_MIN)}.
             </p>
           )}
         </div>
-        <div className="rounded-2xl border border-white/10 bg-card p-5">
-          <p className="text-xs text-white/50">Pending ({HOLD_HOURS}h hold)</p>
-          <p className="mt-1 text-3xl font-black text-white">
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Pending ({HOLD_HOURS}h hold)</p>
+          <p className="mt-1 text-3xl font-black text-fg">
             {formatUSD(pending)}
           </p>
-          <p className="mt-4 text-xs text-white/50">
+          <p className="mt-4 text-xs text-fg/50">
             Approved earnings become available after the {HOLD_HOURS}-hour hold.
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-card p-5">
-          <p className="text-xs text-white/50">Withdrawn</p>
-          <p className="mt-1 text-3xl font-black text-white">
+        <div className="rounded-2xl border border-fg/10 bg-card p-5">
+          <p className="text-xs text-fg/50">Withdrawn</p>
+          <p className="mt-1 text-3xl font-black text-fg">
             {formatUSD(withdrawn)}
           </p>
-          <p className="mt-4 text-xs text-white/50">
+          <p className="mt-4 text-xs text-fg/50">
             Total paid out to you so far.
           </p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-card p-6">
-        <h2 className="text-lg font-extrabold text-white">Payout info</h2>
-        <ul className="mt-3 space-y-2 text-sm text-white/70">
+      <div className="rounded-2xl border border-fg/10 bg-card p-6">
+        <h2 className="text-lg font-extrabold text-fg">Payout info</h2>
+        <ul className="mt-3 space-y-2 text-sm text-fg/70">
           <li>• Minimum withdrawal: {formatUSD(WITHDRAW_MIN)}.</li>
           <li>• Withdrawal fee: 7% — you receive amount × 0.93.</li>
           <li>• Methods: USDT (Ethereum), Pakistani bank (bank name + IBAN), Wise (USD / GBP / EUR).</li>
@@ -73,40 +73,40 @@ export default async function EarningsPage() {
       </div>
 
       <div>
-        <h2 className="mb-4 text-xl font-extrabold text-white">
+        <h2 className="mb-4 text-xl font-extrabold text-fg">
           Withdrawal history
         </h2>
         {withdrawals.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-card p-8 text-center">
-            <p className="font-bold text-white">No withdrawals yet</p>
-            <p className="mt-1 text-sm text-white/60">
+          <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
+            <p className="font-bold text-fg">No withdrawals yet</p>
+            <p className="mt-1 text-sm text-fg/60">
               Your withdrawal requests will appear here.
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-card">
+          <div className="overflow-hidden rounded-2xl border border-fg/10 bg-card">
             {withdrawals.map((w) => (
               <div
                 key={w.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 px-5 py-3.5 text-sm last:border-0"
+                className="flex flex-wrap items-center justify-between gap-2 border-b border-fg/5 px-5 py-3.5 text-sm last:border-0"
               >
-                <span className="font-bold text-white">
+                <span className="font-bold text-fg">
                   {w.method === "usdt"
                     ? "USDT"
                     : w.method === "pakistani_bank"
                       ? "Pakistani Bank"
                       : "Wise"}{" "}
-                  <span className="font-medium text-white/50">
+                  <span className="font-medium text-fg/50">
                     · {new Date(w.created_at).toLocaleDateString("en-US")}
                   </span>
                 </span>
-                <span className="text-white/70">
+                <span className="text-fg/70">
                   {formatUSD(w.amount)} − {formatUSD(w.fee)} fee ={" "}
-                  <span className="font-black text-sun">
+                  <span className="font-black text-lime">
                     {formatUSD(w.final_amount)}
                   </span>
                 </span>
-                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold capitalize text-white/70">
+                <span className="rounded-full bg-fg/10 px-2.5 py-1 text-xs font-bold capitalize text-fg/70">
                   {w.status}
                 </span>
               </div>
@@ -114,7 +114,7 @@ export default async function EarningsPage() {
           </div>
         )}
         <p className="mt-4 text-sm">
-          <Link href="/my-posts" className="font-bold text-sun hover:underline">
+          <Link href="/my-posts" className="font-bold text-lime hover:underline">
             View My Posts →
           </Link>
         </p>

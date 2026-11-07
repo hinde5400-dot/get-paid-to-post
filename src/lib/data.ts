@@ -5,6 +5,9 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
   return {
     id: String(row.id),
     brand_name: String(row.brand_name ?? ""),
+    // logo_url is optional (added by migration 0004) — brand initials
+    // are shown when it is empty.
+    logo_url: (row.logo_url as string | null) ?? null,
     title: String(row.title ?? ""),
     rate_per_1m: Number(row.rate_per_1m ?? 0),
     budget_total: Number(row.budget_total ?? 0),
@@ -21,7 +24,7 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     max_posts: Number(row.max_posts ?? 7),
     earn_up_to: Number(row.earn_up_to ?? 300),
     is_funded: Boolean(row.is_funded),
-    status: String(row.status ?? "draft"),
+    status: String(row.status ?? "pending"),
     created_at: String(row.created_at ?? ""),
   };
 }
@@ -83,6 +86,82 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
     if (!error && data) return mapCampaign(data as Record<string, unknown>);
   }
   return null;
+}
+
+/** Campaigns waiting for admin review (status = "pending"), oldest first. */
+export async function getPendingCampaigns(): Promise<Campaign[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map(mapCampaign);
+}
+
+/**
+ * Real per-campaign stats, or null when they cannot be computed.
+ * Uses the SECURITY DEFINER function public.campaign_stats (see
+ * supabase/migrations/0003_campaign_stats.sql) so the numbers are real
+ * for every viewer. Until that migration is run, the owner still gets
+ * real numbers from the RLS-visible rows; anyone else gets null and
+ * the UI omits the stat instead of inventing one.
+ */
+export interface CampaignStats {
+  total: number;
+  approved: number;
+  members: number;
+  active30d: number;
+}
+
+export async function getCampaignStats(
+  campaignId: string
+): Promise<CampaignStats | null> {
+  const supabase = getServerClient();
+  if (!supabase) return null;
+  // 1) Public stats function (needs migration 0003).
+  const { data, error } = await supabase.rpc("campaign_stats", {
+    p_campaign_id: campaignId,
+  });
+  if (!error && Array.isArray(data) && data.length > 0) {
+    const row = data[0] as Record<string, unknown>;
+    return {
+      total: Number(row.total ?? 0),
+      approved: Number(row.approved ?? 0),
+      members: Number(row.members ?? 0),
+      active30d: Number(row.active_30d ?? 0),
+    };
+  }
+  // 2) Fallback: the owner can read every submission via RLS.
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+  if (isAdmin !== true) return null;
+  const { data: rows, error: qError } = await supabase
+    .from("submissions")
+    .select("user_id, status, created_at")
+    .eq("campaign_id", campaignId);
+  if (qError || !rows) return null;
+  const list = rows as Record<string, unknown>[];
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return {
+    total: list.length,
+    approved: list.filter((r) => r.status === "approved").length,
+    members: new Set(list.map((r) => String(r.user_id))).size,
+    active30d: list.filter(
+      (r) => new Date(String(r.created_at)).getTime() >= cutoff
+    ).length,
+  };
+}
+
+export async function getCampaignStatsMap(
+  campaignIds: string[]
+): Promise<Record<string, CampaignStats | null>> {
+  const out: Record<string, CampaignStats | null> = {};
+  for (const id of campaignIds) {
+    out[id] = await getCampaignStats(id);
+  }
+  return out;
 }
 
 /** A creator's submissions, newest first. Empty when Supabase is not set up. */

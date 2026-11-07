@@ -49,27 +49,27 @@ export default function LoginPage() {
   }
 
   const inputCls =
-    "mt-1 w-full rounded-xl border border-white/15 bg-ink px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-sun";
+    "mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none placeholder:text-fg/30 focus:border-lime";
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-white">
+      <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
         Welcome back
       </h1>
-      <p className="mt-2 text-sm text-white/60">
+      <p className="mt-2 text-sm text-fg/60">
         Log in to your Get Paid To Post account.
       </p>
       {!isSupabaseConfigured && (
-        <p className="mt-4 rounded-xl bg-sun/10 px-4 py-3 text-sm font-semibold text-sun">
+        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
           Supabase is not configured yet — add NEXT_PUBLIC_SUPABASE_URL and
           NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local (see README).
         </p>
       )}
       <form
         onSubmit={submit}
-        className="mt-6 rounded-3xl border border-white/10 bg-card p-6"
+        className="mt-6 rounded-3xl border border-fg/10 bg-card p-6"
       >
-        <label className="block text-sm font-bold text-white">
+        <label className="block text-sm font-bold text-fg">
           Email
           <input
             type="email"
@@ -80,7 +80,7 @@ export default function LoginPage() {
             className={inputCls}
           />
         </label>
-        <label className="mt-4 block text-sm font-bold text-white">
+        <label className="mt-4 block text-sm font-bold text-fg">
           Password
           <input
             type="password"
@@ -99,13 +99,13 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={busy}
-          className="mt-6 w-full rounded-full bg-sun py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-sundark disabled:opacity-40"
+          className="mt-6 w-full rounded-full bg-lime py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-limedark disabled:opacity-40"
         >
           {busy ? "Logging in…" : "Log in"}
         </button>
-        <p className="mt-4 text-center text-sm text-white/60">
+        <p className="mt-4 text-center text-sm text-fg/60">
           No account yet?{" "}
-          <Link href="/signup" className="font-bold text-sun hover:underline">
+          <Link href="/signup" className="font-bold text-lime hover:underline">
             Sign up free
           </Link>
         </p>

@@ -9,13 +9,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // TryShoot-style near-black theme. Full yellow #FFDE00 stays the
-        // brand accent; the old dark purple (#120826 / #1E1233) is gone.
-        ink: "#0A0A0B",
-        card: "#141417",
-        cardlight: "#1D1D21",
-        sun: "#FFDE00",
-        sundark: "#E6C800",
+        // TryShoot-style theme. Accent is lime green #C6FF00.
+        // bg / card / fg are CSS variables (defined in globals.css) so
+        // the Light Mode toggle (data-theme on <html>) flips the whole
+        // palette: dark is pure black #0A0A0A / cards #1A1A1A, light is
+        // white #FFFFFF / cards #F4F4F5. Lime stays the accent in both.
+        ink: "rgb(var(--bg) / <alpha-value>)",
+        card: "rgb(var(--card) / <alpha-value>)",
+        cardlight: "rgb(var(--cardlight) / <alpha-value>)",
+        lime: "#C6FF00",
+        limedark: "#A8D400",
+        fg: "rgb(var(--fg) / <alpha-value>)",
       },
       fontFamily: {
         // Loaded with next/font/google in layout.tsx — the fonts are

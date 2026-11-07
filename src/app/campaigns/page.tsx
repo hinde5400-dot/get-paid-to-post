@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { getCampaigns, getUserSubmissions } from "@/lib/data";
+import {
+  getCampaigns,
+  getCampaignStatsMap,
+  getUserSubmissions,
+} from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
-import CampaignCard from "@/components/CampaignCard";
+import CampaignGrid from "@/components/CampaignGrid";
 import CampaignFilters from "@/components/CampaignFilters";
 import AdSlot from "@/components/AdSlot";
-import { BRAND_MIN_BUDGET } from "@/lib/constants";
 import type { Campaign } from "@/lib/types";
 
 function hrefWith(
@@ -53,21 +56,22 @@ export default async function CampaignsPage({
   }
 
   const hasAny = all.length > 0;
+  const stats = await getCampaignStatsMap(list.map((c) => c.id));
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-white">
+        <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
           Campaigns
         </h1>
-        <p className="mt-2 text-sm text-white/60">
+        <p className="mt-2 text-sm text-fg/60">
           Funded campaigns only. Pick one, post your clip, get paid per view.
           Base pay $10 per approved post, plus $0.75 per 1,000 views.
         </p>
       </div>
 
       {/* Explore / Joined toggle pills */}
-      <div className="flex rounded-full border border-white/15 bg-card p-1">
+      <div className="flex rounded-full border border-fg/15 bg-card p-1">
         {[
           { key: "explore", label: "Explore" },
           { key: "joined", label: "Joined" },
@@ -77,8 +81,8 @@ export default async function CampaignsPage({
             href={hrefWith(searchParams, { tab: t.key })}
             className={`flex-1 rounded-full py-2.5 text-center text-sm font-black transition ${
               tab === t.key
-                ? "bg-sun text-black"
-                : "text-white/70 hover:text-white"
+                ? "bg-lime text-black"
+                : "text-fg/70 hover:text-fg"
             }`}
           >
             {t.label}
@@ -91,44 +95,46 @@ export default async function CampaignsPage({
       <AdSlot />
 
       {!hasAny ? (
-        <div className="rounded-3xl border border-white/10 bg-card p-10 text-center">
-          <p className="font-display text-2xl font-black uppercase tracking-tight text-white">
-            No funded campaigns yet
+        <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">
+          <p className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-lime/15 text-3xl">
+            📣
           </p>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/60">
-            A campaign goes live only after a brand funds ${BRAND_MIN_BUDGET}+
-            upfront. Check back soon — or launch one yourself.
+          <p className="mt-4 font-display text-2xl font-black uppercase tracking-tight text-fg">
+            No Live Campaigns Yet
+          </p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+            New campaigns from brands will appear here soon. Check back later.
           </p>
           <Link
             href="/brands"
-            className="mt-6 inline-block rounded-full bg-sun px-6 py-3 text-sm font-black text-black transition hover:bg-sundark"
+            className="mt-6 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
           >
             I am a Brand — launch a campaign
           </Link>
         </div>
       ) : tab === "joined" && !user ? (
-        <div className="rounded-3xl border border-white/10 bg-card p-10 text-center">
-          <p className="font-display text-2xl font-black uppercase tracking-tight text-white">
+        <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">
+          <p className="font-display text-2xl font-black uppercase tracking-tight text-fg">
             Log in to see joined campaigns
           </p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-white/60">
+          <p className="mx-auto mt-2 max-w-md text-sm text-fg/60">
             Campaigns you have joined will appear here.
           </p>
           <Link
             href="/login"
-            className="mt-6 inline-block rounded-full bg-sun px-6 py-3 text-sm font-black text-black transition hover:bg-sundark"
+            className="mt-6 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
           >
             Log in
           </Link>
         </div>
       ) : list.length === 0 ? (
-        <div className="rounded-3xl border border-white/10 bg-card p-10 text-center">
-          <p className="font-display text-2xl font-black uppercase tracking-tight text-white">
+        <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">
+          <p className="font-display text-2xl font-black uppercase tracking-tight text-fg">
             {tab === "joined"
               ? "No campaigns joined yet"
               : "No campaigns match"}
           </p>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-2 text-sm text-fg/60">
             {tab === "joined"
               ? "Pick a campaign from Explore, post your clip, and it will show up here."
               : "Try a different platform or sort order."}
@@ -136,15 +142,11 @@ export default async function CampaignsPage({
         </div>
       ) : (
         <>
-          <p className="text-sm font-semibold text-white/50">
+          <p className="text-sm font-semibold text-fg/50">
             {list.length} campaign{list.length === 1 ? "" : "s"}
             {tab === "joined" ? " joined" : " live"}
           </p>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {list.map((c) => (
-              <CampaignCard key={c.id} campaign={c} />
-            ))}
-          </div>
+          <CampaignGrid campaigns={list} stats={stats} />
         </>
       )}
     </div>

@@ -80,22 +80,22 @@ export default function ConnectPage() {
   }
 
   const inputCls =
-    "mt-1 w-full rounded-xl border border-white/15 bg-ink px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-sun";
+    "mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none placeholder:text-fg/30 focus:border-lime";
 
   if (loading) {
-    return <p className="text-white/60">Loading…</p>;
+    return <p className="text-fg/60">Loading…</p>;
   }
 
   if (!loggedIn) {
     return (
       <div className="mx-auto max-w-md text-center">
-        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Please log in first</h1>
-        <p className="mt-2 text-sm text-white/60">
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">Please log in first</h1>
+        <p className="mt-2 text-sm text-fg/60">
           Connect your social profiles after you log in.
         </p>
         <Link
           href="/login"
-          className="mt-5 inline-block rounded-full bg-sun px-6 py-3 text-sm font-bold text-ink"
+          className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink"
         >
           Log in
         </Link>
@@ -105,16 +105,16 @@ export default function ConnectPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Connect your profiles</h1>
-      <p className="mt-2 text-sm text-white/60">
+      <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
+      <p className="mt-2 text-sm text-fg/60">
         Step 2 — paste your TikTok, Instagram and YouTube profile links so
         your submitted clips can be matched to you.
       </p>
       <form
         onSubmit={save}
-        className="mt-6 rounded-3xl border border-white/10 bg-card p-6"
+        className="mt-6 rounded-3xl border border-fg/10 bg-card p-6"
       >
-        <label className="block text-sm font-bold text-white">
+        <label className="block text-sm font-bold text-fg">
           TikTok profile link
           <input
             value={tiktok}
@@ -123,7 +123,7 @@ export default function ConnectPage() {
             className={inputCls}
           />
         </label>
-        <label className="mt-4 block text-sm font-bold text-white">
+        <label className="mt-4 block text-sm font-bold text-fg">
           Instagram profile link
           <input
             value={instagram}
@@ -132,7 +132,7 @@ export default function ConnectPage() {
             className={inputCls}
           />
         </label>
-        <label className="mt-4 block text-sm font-bold text-white">
+        <label className="mt-4 block text-sm font-bold text-fg">
           YouTube channel link
           <input
             value={youtube}
@@ -149,14 +149,14 @@ export default function ConnectPage() {
         <button
           type="submit"
           disabled={busy}
-          className="mt-6 w-full rounded-full bg-sun py-3 text-sm font-bold text-ink transition hover:bg-sundark disabled:opacity-40"
+          className="mt-6 w-full rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
         >
           {busy ? "Saving…" : "Save & go to dashboard"}
         </button>
         <button
           type="button"
           onClick={() => router.push("/dashboard")}
-          className="mt-3 w-full text-sm font-bold text-white/60 hover:text-sun"
+          className="mt-3 w-full text-sm font-bold text-fg/60 hover:text-lime"
         >
           Skip for now
         </button>

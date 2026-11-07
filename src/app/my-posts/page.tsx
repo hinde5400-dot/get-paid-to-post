@@ -11,8 +11,8 @@ export default async function MyPostsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">My Posts</h1>
-        <p className="mt-2 text-sm text-white/60">
+        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">My Posts</h1>
+        <p className="mt-2 text-sm text-fg/60">
           Every clip you submitted, with views, likes and earnings. Metrics
           update once a day.
         </p>

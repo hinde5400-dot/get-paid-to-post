@@ -9,6 +9,7 @@ export type SubmissionStatus =
 export interface Campaign {
   id: string;
   brand_name: string;
+  logo_url: string | null;
   title: string;
   rate_per_1m: number;
   budget_total: number;

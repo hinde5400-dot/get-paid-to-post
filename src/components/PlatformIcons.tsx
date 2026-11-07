@@ -58,7 +58,7 @@ export function PlatformChips({
           <span
             key={p}
             title={PLATFORM_LABELS[p]}
-            className={`flex items-center justify-center rounded-full bg-white/10 text-white ${
+            className={`flex items-center justify-center rounded-full bg-fg/10 text-fg ${
               size === "sm" ? "h-6 w-6" : "h-7 w-7"
             }`}
           >

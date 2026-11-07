@@ -18,7 +18,7 @@ export default function WithdrawButton({ available }: { available: number }) {
             ? `Minimum withdrawal is ${formatUSD(WITHDRAW_MIN)}`
             : "Request a withdrawal"
         }
-        className="rounded-full bg-sun px-5 py-2.5 text-sm font-bold text-ink transition hover:bg-sundark disabled:cursor-not-allowed disabled:opacity-40"
+        className="rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
       >
         Request Withdrawal
       </button>

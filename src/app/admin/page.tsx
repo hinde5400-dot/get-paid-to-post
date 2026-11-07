@@ -1,16 +1,17 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getAllSubmissions } from "@/lib/data";
+import { getAllSubmissions, getPendingCampaigns } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewList";
+import AdminCampaignList from "@/components/AdminCampaignList";
 
 export default async function AdminPage() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-card p-8 text-center">
-        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Admin Review</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/60">
+      <div className="mx-auto max-w-lg rounded-3xl border border-fg/10 bg-card p-8 text-center">
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">Admin Review</h1>
+        <p className="mt-3 text-sm leading-relaxed text-fg/60">
           Supabase is not configured yet. Add your keys to .env.local first.
         </p>
       </div>
@@ -22,9 +23,9 @@ export default async function AdminPage() {
   const profile = await getProfile(user.id);
   if (!isOwner(profile)) {
     return (
-      <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-card p-8 text-center">
-        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">Access denied</h1>
-        <p className="mt-3 text-sm text-white/60">
+      <div className="mx-auto max-w-lg rounded-3xl border border-fg/10 bg-card p-8 text-center">
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">Access denied</h1>
+        <p className="mt-3 text-sm text-fg/60">
           Admin Review is owner-only. The first account created on the site
           is the owner.
         </p>
@@ -33,6 +34,7 @@ export default async function AdminPage() {
   }
 
   const submissions = await getAllSubmissions();
+  const pendingCampaigns = await getPendingCampaigns();
 
   // Creator emails for the review list (owner can read all users).
   const supabase = getServerClient();
@@ -52,19 +54,54 @@ export default async function AdminPage() {
   const pending = items.filter((s) => s.status === "pending").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-white">Admin Review</h1>
-        <p className="mt-2 text-sm text-white/60">
+        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Admin Review</h1>
+        <p className="mt-2 text-sm text-fg/60">
           Owner-only. Submissions stay Pending at $0 until you enter verified
           views and approve them. Approved earnings go into the creator&apos;s
           72-hour hold.
         </p>
-        <p className="mt-2 inline-block rounded-full bg-sun/15 px-3 py-1 text-xs font-bold text-sun">
+        <p className="mt-2 inline-block rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
           {pending} pending · {items.length} total submissions
         </p>
       </div>
-      <AdminReviewList submissions={items} />
+
+      {/* Pending campaigns — owner-only, same check as this whole page */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Pending campaigns
+          </h2>
+          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+            {pendingCampaigns.length} waiting for review
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Approve a campaign <strong className="text-fg">only after the
+          brand&apos;s $500+ budget has actually reached you</strong> —
+          approving marks it funded and live on Discover. Rejecting hides it
+          forever; it is never shown anywhere.
+        </p>
+        <div className="mt-4">
+          {pendingCampaigns.length === 0 ? (
+            <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center text-sm text-fg/60">
+              No campaigns waiting for review.
+            </div>
+          ) : (
+            <AdminCampaignList campaigns={pendingCampaigns} />
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+          Submission review
+        </h2>
+        <div className="mt-4">
+          <AdminReviewList submissions={items} />
+        </div>
+      </section>
     </div>
   );
 }

@@ -21,7 +21,7 @@ export default function CampaignFilters() {
   }
 
   const selectCls =
-    "w-full appearance-none rounded-full border border-white/15 bg-card px-4 py-2.5 text-sm font-bold text-white outline-none transition focus:border-sun [&>option]:bg-card";
+    "w-full appearance-none rounded-full border border-fg/15 bg-card px-4 py-2.5 text-sm font-bold text-fg outline-none transition focus:border-lime [&>option]:bg-card";
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -38,7 +38,7 @@ export default function CampaignFilters() {
           <option value="instagram">Instagram</option>
           <option value="youtube">YouTube</option>
         </select>
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white/50">
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-fg/50">
           ⌄
         </span>
       </label>
@@ -55,7 +55,7 @@ export default function CampaignFilters() {
           <option value="budget">Biggest Budget</option>
           <option value="spots">Most Spots</option>
         </select>
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white/50">
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-fg/50">
           ⌄
         </span>
       </label>

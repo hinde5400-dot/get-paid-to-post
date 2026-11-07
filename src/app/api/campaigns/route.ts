@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { BRAND_MIN_BUDGET } from "@/lib/constants";
 
+const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
+
+/**
+ * Brand campaign submission. Saves with status "pending" and
+ * is_funded = false — nothing goes live until the owner approves it
+ * in /admin (after the $500+ budget is funded). "Rate per 1k views"
+ * maps to view_bonus_per_1k, and rate_per_1m stays consistent at
+ * rate-per-1k × 1000.
+ */
 export async function POST(request: Request) {
   const supabase = getServerClient();
   if (!supabase) {
@@ -16,12 +25,13 @@ export async function POST(request: Request) {
   }
   const body = (await request.json()) as {
     brandName?: string;
+    logoUrl?: string | null;
     title?: string;
-    ratePer1m?: number;
-    budgetTotal?: number;
-    category?: string;
     platform?: string;
+    ratePer1k?: number;
+    budgetTotal?: number;
     description?: string;
+    requirements?: string;
   };
   const budgetTotal = Number(body.budgetTotal ?? 0);
   if (budgetTotal < BRAND_MIN_BUDGET) {
@@ -32,10 +42,16 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const ratePer1m = Number(body.ratePer1m ?? 0);
-  if (ratePer1m <= 0) {
+  const ratePer1k = Number(body.ratePer1k ?? 0);
+  if (ratePer1k <= 0) {
     return NextResponse.json(
-      { error: "Please set a rate per 1M views above $0." },
+      { error: "Please set a rate per 1,000 views above $0." },
+      { status: 400 }
+    );
+  }
+  if (!PLATFORMS.includes((body.platform ?? "") as (typeof PLATFORMS)[number])) {
+    return NextResponse.json(
+      { error: "Platform must be TikTok, Instagram or YouTube." },
       { status: 400 }
     );
   }
@@ -45,29 +61,48 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const { data, error } = await supabase
+
+  const insertRow: Record<string, unknown> = {
+    brand_name: String(body.brandName).trim(),
+    title: String(body.title).trim(),
+    // Rate per 1k views drives the per-view bonus; rate per 1M views is
+    // the same rate scaled up, so the two fields stay coherent.
+    rate_per_1m: Math.round(ratePer1k * 1000 * 100) / 100,
+    budget_total: budgetTotal,
+    budget_left: budgetTotal,
+    spots_left: 0,
+    spots_total: 0,
+    category: "General",
+    platform: String(body.platform),
+    description: String(body.description ?? "").trim(),
+    rules: String(body.requirements ?? "").trim() || null,
+    base_pay: 10,
+    view_bonus_per_1k: ratePer1k,
+    views_tracked_days: 14,
+    max_posts: 7,
+    earn_up_to: 300,
+    is_funded: false,
+    status: "pending",
+  };
+  const logoUrl = String(body.logoUrl ?? "").trim();
+  if (logoUrl) insertRow.logo_url = logoUrl;
+
+  let insertResult = await supabase
     .from("campaigns")
-    .insert({
-      brand_name: String(body.brandName).trim(),
-      title: String(body.title).trim(),
-      rate_per_1m: ratePer1m,
-      budget_total: budgetTotal,
-      budget_left: budgetTotal,
-      spots_left: 0,
-      spots_total: 0,
-      category: String(body.category ?? "General"),
-      platform: String(body.platform ?? "all"),
-      description: String(body.description ?? "").trim(),
-      base_pay: 10,
-      view_bonus_per_1k: 0.75,
-      views_tracked_days: 14,
-      max_posts: 7,
-      earn_up_to: 300,
-      is_funded: false,
-      status: "draft",
-    })
+    .insert(insertRow)
     .select("id")
     .single();
+  if (insertResult.error && /logo_url/i.test(insertResult.error.message)) {
+    // The logo_url column comes from migration 0004, which may not have
+    // been run yet. Retry without it instead of failing the submission.
+    const { logo_url: _omit, ...withoutLogo } = insertRow;
+    insertResult = await supabase
+      .from("campaigns")
+      .insert(withoutLogo)
+      .select("id")
+      .single();
+  }
+  const { data, error } = insertResult;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
@@ -75,6 +110,6 @@ export async function POST(request: Request) {
     ok: true,
     id: (data as { id: string }).id,
     message:
-      "Campaign saved as an unfunded draft. It goes live only after the budget is funded.",
+      "Your campaign is under review. Admin will approve it soon.",
   });
 }
