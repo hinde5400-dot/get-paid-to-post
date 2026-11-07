@@ -144,13 +144,16 @@ alter table public.wallets
   add column if not exists withdrawn_total numeric(12,2) not null default 0;
 
 -- Withdrawal requests.
+-- NOTE: method was ('usdt', 'pakistani_bank', 'wise') in 0002; the
+-- live check is USDT-only since 0006 (usdt_trc20 / usdt_bep20).
+-- Migrations 0005–0011 supersede parts of this consolidated file.
 create table if not exists public.withdrawals (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
   amount numeric(12,2) not null check (amount >= 10),
   fee numeric(12,2) not null default 0,
   final_amount numeric(12,2) not null,
-  method text not null check (method in ('usdt', 'pakistani_bank', 'wise')),
+  method text not null check (method in ('usdt_trc20', 'usdt_bep20')),
   details text not null,
   status text not null default 'pending',
   created_at timestamptz not null default now()

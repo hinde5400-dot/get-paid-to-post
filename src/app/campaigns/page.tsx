@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   getCampaigns,
   getCampaignStatsMap,
@@ -97,7 +98,16 @@ export default async function CampaignsPage({
         ))}
       </div>
 
-      <CampaignFilters />
+      <Suspense
+        fallback={
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="h-11 rounded-2xl border border-fg/10 bg-card" />
+            <div className="h-11 rounded-2xl border border-fg/10 bg-card" />
+          </div>
+        }
+      >
+        <CampaignFilters />
+      </Suspense>
 
       <AdSlot />
 
@@ -112,12 +122,6 @@ export default async function CampaignsPage({
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
             New campaigns from brands will appear here soon. Check back later.
           </p>
-          <Link
-            href="/brands"
-            className="mt-6 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
-          >
-            I am a Brand — launch a campaign
-          </Link>
         </div>
       ) : tab === "joined" && !user ? (
         <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">

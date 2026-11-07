@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { getBrowserClient } from "@/lib/supabase/client";
 import Logo from "@/components/Logo";
+import Spinner from "@/components/Spinner";
 
 /** Forgot password — enter your email and we send a reset link. */
 export default function ForgotPasswordPage() {
@@ -96,9 +97,15 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={busy}
-            className="mt-6 w-full rounded-full bg-lime py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-limedark disabled:opacity-40"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-limedark disabled:opacity-40"
           >
-            {busy ? "Sending…" : "Send reset link"}
+            {busy ? (
+              <>
+                <Spinner /> Sending…
+              </>
+            ) : (
+              "Send reset link"
+            )}
           </button>
           <p className="mt-4 text-center text-sm text-fg/60">
             Remembered it?{" "}

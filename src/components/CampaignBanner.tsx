@@ -83,29 +83,48 @@ export default function CampaignBanner({
   const height =
     size === "lg" ? "h-56 md:h-72" : size === "sm" ? "h-32" : "h-40";
   const bigText = size === "lg" ? "text-7xl md:text-8xl" : "text-5xl";
+  // When the brand pasted a thumbnail image link (migration 0009),
+  // it becomes the banner photo; otherwise the typographic gradient
+  // banner is used. No stock photos, no invented imagery.
+  const thumbnail = campaign.thumbnail_url?.trim() || null;
   return (
     <div
       className={`relative flex items-end justify-between overflow-hidden ${height} p-5`}
-      style={{
-        background: `linear-gradient(120deg, ${from} 0%, ${to} 70%)`,
-      }}
+      style={
+        thumbnail
+          ? undefined
+          : { background: `linear-gradient(120deg, ${from} 0%, ${to} 70%)` }
+      }
     >
-      {/* subtle dot pattern */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-20"
-        style={{
-          backgroundImage:
-            "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)",
-          backgroundSize: "18px 18px",
-        }}
-      />
-      {/* giant initials watermark */}
-      <span
-        className={`pointer-events-none absolute -right-2 -top-4 font-display font-black uppercase leading-none text-white/[0.07] ${bigText}`}
-        aria-hidden
-      >
-        {brandInitials(campaign.brand_name)}
-      </span>
+      {thumbnail ? (
+        <>
+          <img
+            src={thumbnail}
+            alt={`${campaign.brand_name} campaign thumbnail`}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+        </>
+      ) : (
+        <>
+          {/* subtle dot pattern */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-20"
+            style={{
+              backgroundImage:
+                "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)",
+              backgroundSize: "18px 18px",
+            }}
+          />
+          {/* giant initials watermark */}
+          <span
+            className={`pointer-events-none absolute -right-2 -top-4 font-display font-black uppercase leading-none text-white/[0.07] ${bigText}`}
+            aria-hidden
+          >
+            {brandInitials(campaign.brand_name)}
+          </span>
+        </>
+      )}
       <div className="relative">
         {showLive && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-lime px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-black">

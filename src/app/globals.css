@@ -106,6 +106,21 @@ body {
   animation: fade-in 0.2s ease-out;
 }
 
+/* Dropdown open animation — fade + slight rise */
+@keyframes dropdown-in {
+  from {
+    transform: translateY(-4px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+.animate-dropdown-in {
+  animation: dropdown-in 0.18s ease-out;
+}
+
 /* Modal pop-in */
 @keyframes modal-in {
   from {
@@ -177,6 +192,7 @@ body {
   .animate-drawer-in,
   .animate-fade-in,
   .animate-modal-in,
+  .animate-dropdown-in,
   .skeleton {
     animation: none;
   }

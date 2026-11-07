@@ -69,7 +69,8 @@ export default async function AdminPage() {
         <p className="mt-2 text-sm text-fg/60">
           Owner-only. Submissions stay Pending at $0 until you enter verified
           views and approve them. Approved earnings go into the creator&apos;s
-          72-hour hold.
+          72-hour hold and are released to their withdrawable balance
+          automatically once the hold ends.
         </p>
         <p className="mt-2 inline-block rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
           {pending} pending · {items.length} total submissions
@@ -115,8 +116,9 @@ export default async function AdminPage() {
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
-          Mark a request as paid only after the USDT has actually been sent
-          to the creator&apos;s wallet. Rejecting refunds the amount to the
+          Send USDT from your wallet, then mark as Paid here. Mark a
+          request as paid only after the USDT has actually been sent to
+          the creator&apos;s wallet. Rejecting refunds the amount to the
           creator&apos;s withdrawable balance.
         </p>
         <div className="mt-4">

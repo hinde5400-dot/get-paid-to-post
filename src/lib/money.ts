@@ -50,3 +50,24 @@ export function holdUntil(from: Date = new Date()): Date {
 export function holdReleasedAt(holdUntilIso: string | null): Date | null {
   return holdUntilIso ? new Date(holdUntilIso) : null;
 }
+
+/**
+ * Countdown text for a campaign end date: "Ends in 6d 4h",
+ * "Ends in 3h 12m", "Ends in 9m", or "Ended" once it is past.
+ * Returns null when there is no end date (runs until budget ends).
+ */
+export function formatTimeLeft(
+  endsAt: string | null | undefined,
+  now: number = Date.now()
+): string | null {
+  if (!endsAt) return null;
+  const ms = new Date(endsAt).getTime() - now;
+  if (ms <= 0) return "Ended";
+  const totalMin = Math.floor(ms / 60000);
+  const d = Math.floor(totalMin / (60 * 24));
+  const h = Math.floor((totalMin % (60 * 24)) / 60);
+  const m = totalMin % 60;
+  if (d > 0) return `Ends in ${d}d ${h}h`;
+  if (h > 0) return `Ends in ${h}h ${m}m`;
+  return `Ends in ${m}m`;
+}

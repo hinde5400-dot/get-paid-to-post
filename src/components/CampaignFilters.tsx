@@ -1,12 +1,57 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import Dropdown, { type DropdownOption } from "./Dropdown";
+import { TikTokIcon, InstagramIcon, YouTubeIcon } from "./PlatformIcons";
 
 /**
- * TryShoot-style filter dropdowns: platform ("All platforms") and sort
- * ("Best match"). Changing a dropdown updates the URL query params so
- * the server page re-filters.
+ * Premium filter dropdowns (TryShoot-style): dark #1A1A1A cards,
+ * rounded 16px, small icons, lime checkmark on the selected option,
+ * smooth animation, shadow. Changing an option updates the URL query
+ * params so the server page re-filters / re-sorts the real list.
+ * A small grey explainer under each dropdown says what it does.
  */
+
+const SORT_OPTIONS: DropdownOption[] = [
+  { value: "best", label: "Best Match", icon: <span aria-hidden>✦</span> },
+  { value: "highest", label: "Highest Pay", icon: <span aria-hidden>$</span> },
+  { value: "budget", label: "Biggest Budget", icon: <span aria-hidden>▦</span> },
+  { value: "spots", label: "Most Spots", icon: <span aria-hidden>●</span> },
+];
+
+const SORT_EXPLAIN: Record<string, string> = {
+  best: "Best Match — our pick: a mix of rate, budget and spots left.",
+  highest: "Highest Pay shows the best rate per 1,000 views first.",
+  budget: "Biggest Budget shows the largest funded budgets first.",
+  spots: "Most Spots shows campaigns with the most creator spots left first.",
+};
+
+const PLATFORM_OPTIONS: DropdownOption[] = [
+  { value: "all", label: "All Platforms", icon: <span aria-hidden>◎</span> },
+  {
+    value: "tiktok",
+    label: "TikTok",
+    icon: <TikTokIcon className="h-4 w-4" />,
+  },
+  {
+    value: "instagram",
+    label: "Instagram",
+    icon: <InstagramIcon className="h-4 w-4" />,
+  },
+  {
+    value: "youtube",
+    label: "YouTube",
+    icon: <YouTubeIcon className="h-4 w-4" />,
+  },
+];
+
+const PLATFORM_EXPLAIN: Record<string, string> = {
+  all: "Show campaigns for every platform.",
+  tiktok: "Only campaigns that pay for TikTok clips.",
+  instagram: "Only campaigns that pay for Instagram Reels.",
+  youtube: "Only campaigns that pay for YouTube Shorts.",
+};
+
 export default function CampaignFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -20,45 +65,30 @@ export default function CampaignFilters() {
     router.push(`/campaigns${qs ? `?${qs}` : ""}`);
   }
 
-  const selectCls =
-    "w-full appearance-none rounded-full border border-fg/15 bg-card px-4 py-2.5 text-sm font-bold text-fg outline-none transition focus:border-lime [&>option]:bg-card";
-
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <label className="relative block">
-        <span className="sr-only">Filter by platform</span>
-        <select
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <Dropdown
           value={platform}
-          onChange={(e) => update({ platform: e.target.value })}
-          className={selectCls}
-          aria-label="Filter by platform"
-        >
-          <option value="all">All platforms</option>
-          <option value="tiktok">TikTok</option>
-          <option value="instagram">Instagram</option>
-          <option value="youtube">YouTube</option>
-        </select>
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-fg/50">
-          ⌄
-        </span>
-      </label>
-      <label className="relative block">
-        <span className="sr-only">Sort campaigns</span>
-        <select
+          options={PLATFORM_OPTIONS}
+          onChange={(v) => update({ platform: v })}
+          ariaLabel="Filter by platform"
+        />
+        <p className="mt-1.5 px-1 text-xs text-fg/50">
+          {PLATFORM_EXPLAIN[platform] ?? PLATFORM_EXPLAIN.all}
+        </p>
+      </div>
+      <div>
+        <Dropdown
           value={sort}
-          onChange={(e) => update({ sort: e.target.value })}
-          className={selectCls}
-          aria-label="Sort campaigns"
-        >
-          <option value="best">Best match</option>
-          <option value="highest">Highest Pay</option>
-          <option value="budget">Biggest Budget</option>
-          <option value="spots">Most Spots</option>
-        </select>
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-fg/50">
-          ⌄
-        </span>
-      </label>
+          options={SORT_OPTIONS}
+          onChange={(v) => update({ sort: v })}
+          ariaLabel="Sort campaigns"
+        />
+        <p className="mt-1.5 px-1 text-xs text-fg/50">
+          {SORT_EXPLAIN[sort] ?? SORT_EXPLAIN.best}
+        </p>
+      </div>
     </div>
   );
 }

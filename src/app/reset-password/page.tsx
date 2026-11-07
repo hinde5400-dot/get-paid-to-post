@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/client";
 import Logo from "@/components/Logo";
+import Spinner from "@/components/Spinner";
 
 /**
  * Reset password — reached from the email link, which lands on
@@ -166,9 +167,15 @@ export default function ResetPasswordPage() {
           <button
             type="submit"
             disabled={busy}
-            className="mt-6 w-full rounded-full bg-lime py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-limedark disabled:opacity-40"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-limedark disabled:opacity-40"
           >
-            {busy ? "Saving…" : "Reset password"}
+            {busy ? (
+              <>
+                <Spinner /> Saving…
+              </>
+            ) : (
+              "Reset password"
+            )}
           </button>
         </form>
       )}

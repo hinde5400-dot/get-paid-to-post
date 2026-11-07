@@ -32,6 +32,10 @@ export default async function EarningsPage() {
           Approved earnings sit in a {HOLD_HOURS}-hour hold, then become
           available to withdraw. Payouts are USDT only.
         </p>
+        <p className="mt-2 max-w-2xl rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
+          You can withdraw anytime when your Withdrawable balance is above{" "}
+          {formatUSD(WITHDRAW_MIN)} — no need to wait for a campaign to end.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

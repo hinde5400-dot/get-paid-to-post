@@ -5,6 +5,7 @@ import type { Withdrawal } from "@/lib/types";
 import { WITHDRAW_METHOD_LABELS } from "@/lib/constants";
 import { formatUSD } from "@/lib/money";
 import { useToast } from "@/components/Toast";
+import Spinner from "@/components/Spinner";
 
 export type WithdrawalWithCreator = Withdrawal & { creator_email: string };
 
@@ -22,6 +23,7 @@ export default function AdminWithdrawalList({
   withdrawals: WithdrawalWithCreator[];
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const { showError, showSuccess } = useToast();
 
   async function act(
@@ -29,6 +31,7 @@ export default function AdminWithdrawalList({
     action: "approve" | "paid" | "reject"
   ) {
     setBusy(id);
+    setBusyAction(action);
     try {
       const res = await fetch("/api/admin/withdrawals", {
         method: "POST",
@@ -44,6 +47,7 @@ export default function AdminWithdrawalList({
       );
     } finally {
       setBusy(null);
+      setBusyAction(null);
     }
   }
 
@@ -92,17 +96,29 @@ export default function AdminWithdrawalList({
                 type="button"
                 disabled={busy === w.id}
                 onClick={() => void act(w.id, "approve")}
-                className="rounded-full bg-lime px-4 py-2 text-xs font-black text-black transition hover:bg-limedark disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full bg-lime px-4 py-2 text-xs font-black text-black transition hover:bg-limedark disabled:opacity-40"
               >
-                Approve
+                {busy === w.id && busyAction === "approve" ? (
+                  <>
+                    <Spinner /> Working…
+                  </>
+                ) : (
+                  "Approve"
+                )}
               </button>
               <button
                 type="button"
                 disabled={busy === w.id}
                 onClick={() => void act(w.id, "reject")}
-                className="rounded-full border border-red-500/50 px-4 py-2 text-xs font-black text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-xs font-black text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
               >
-                Reject + refund
+                {busy === w.id && busyAction === "reject" ? (
+                  <>
+                    <Spinner /> Working…
+                  </>
+                ) : (
+                  "Reject + refund"
+                )}
               </button>
             </div>
           )}
@@ -112,17 +128,29 @@ export default function AdminWithdrawalList({
                 type="button"
                 disabled={busy === w.id}
                 onClick={() => void act(w.id, "paid")}
-                className="rounded-full bg-lime px-4 py-2 text-xs font-black text-black transition hover:bg-limedark disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full bg-lime px-4 py-2 text-xs font-black text-black transition hover:bg-limedark disabled:opacity-40"
               >
-                Mark paid
+                {busy === w.id && busyAction === "paid" ? (
+                  <>
+                    <Spinner /> Working…
+                  </>
+                ) : (
+                  "Mark paid"
+                )}
               </button>
               <button
                 type="button"
                 disabled={busy === w.id}
                 onClick={() => void act(w.id, "reject")}
-                className="rounded-full border border-red-500/50 px-4 py-2 text-xs font-black text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-xs font-black text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
               >
-                Reject + refund
+                {busy === w.id && busyAction === "reject" ? (
+                  <>
+                    <Spinner /> Working…
+                  </>
+                ) : (
+                  "Reject + refund"
+                )}
               </button>
             </div>
           )}

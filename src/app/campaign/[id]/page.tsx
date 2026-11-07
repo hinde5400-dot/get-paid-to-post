@@ -4,13 +4,14 @@ import {
   getCampaign,
   getCampaignStats,
   getUserSubmissions,
+  isCampaignLive,
 } from "@/lib/data";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import SubmitBundleForm, { type LastSubmission } from "@/components/SubmitBundleForm";
 import CampaignBanner, { BrandLogoTile } from "@/components/CampaignBanner";
 import CampaignDetailTabs from "@/components/CampaignDetailTabs";
 import { PlatformChips } from "@/components/PlatformIcons";
-import { formatUSD } from "@/lib/money";
+import { formatUSD, formatTimeLeft } from "@/lib/money";
 import { payoutForViews } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { VIDEO_RULES } from "@/lib/validate";
@@ -31,10 +32,11 @@ export default async function CampaignDetailPage({
   if (!campaign) notFound();
 
   const user = await getCurrentUser();
-  // Only live, funded campaigns are public — a pending, rejected or
-  // unfunded campaign must never render for creators. The owner can
-  // still preview any campaign from the admin panel.
-  if (!(campaign.is_funded && campaign.status === "live")) {
+  // Only live, funded campaigns are public — a pending, rejected,
+  // unfunded, expired or out-of-budget campaign must never render
+  // for creators. The owner can still preview any campaign from the
+  // admin panel.
+  if (!isCampaignLive(campaign)) {
     const profile = user ? await getProfile(user.id) : null;
     if (!isOwner(profile)) notFound();
   }
@@ -68,6 +70,8 @@ export default async function CampaignDetailPage({
     campaign.view_bonus_per_1k,
     campaign.max_payout_per_post
   );
+  const timeLeft = formatTimeLeft(campaign.ends_at);
+  const example20k = 20 * campaign.view_bonus_per_1k;
 
   return (
     <div className="space-y-6 pb-20 md:pb-16">
@@ -158,6 +162,11 @@ export default async function CampaignDetailPage({
               <span>👀 Views tracked {campaign.views_tracked_days} days</span>
               <span>📹 Max posts: {campaign.max_posts}</span>
               <span>🎯 {campaign.spots_left} spots left</span>
+              <span className="font-bold text-lime">
+                {timeLeft
+                  ? `⏳ ${timeLeft}`
+                  : "Runs until the budget ends"}
+              </span>
             </div>
           </div>
         </div>
@@ -202,6 +211,14 @@ export default async function CampaignDetailPage({
                   {example.capped
                     ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(example.earnings)}.`
                     : ` You earned ${formatUSD(example.earnings)}.`}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-fg/70">
+                  Example: 20,000 views ×{" "}
+                  {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
+                  <span className="font-bold text-fg">
+                    {formatUSD(example20k)} earned
+                  </span>
+                  .
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   A creator never earns more than{" "}

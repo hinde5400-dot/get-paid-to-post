@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { feeFor, finalFor, formatUSD } from "@/lib/money";
 import { WITHDRAW_MIN, WITHDRAW_METHODS, type WithdrawMethod } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
+import Spinner from "@/components/Spinner";
 
 const METHOD_HINTS: Record<WithdrawMethod, string> = {
   usdt_trc20: "Your TRC20 USDT wallet address (starts with T).",
@@ -181,9 +182,15 @@ export default function WithdrawModal({
             <button
               onClick={submit}
               disabled={busy}
-              className="mt-5 w-full rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy ? "Processing…" : "Confirm withdrawal"}
+              {busy ? (
+                <>
+                  <Spinner /> Processing…
+                </>
+              ) : (
+                "Confirm withdrawal"
+              )}
             </button>
             <p className="mt-3 text-center text-xs text-fg/40">
               Payouts are processed by the platform owner from the funded

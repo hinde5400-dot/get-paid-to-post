@@ -9,6 +9,7 @@ import {
   MIN_RATE_PER_1K,
 } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
+import Spinner from "@/components/Spinner";
 
 /**
  * Brand campaign form — Brand Name, Brand Logo (optional), Campaign
@@ -22,9 +23,15 @@ import { useToast } from "@/components/Toast";
  * and blocks submit; a saved campaign shows the green "Success!"
  * popup. The API re-validates everything server-side too.
  */
-export default function BrandForm({ isLoggedIn }: { isLoggedIn: boolean }) {
+export default function BrandForm({
+  isLoggedIn,
+  initialBrandName,
+}: {
+  isLoggedIn: boolean;
+  initialBrandName?: string | null;
+}) {
   const { showError, showSuccess } = useToast();
-  const [brandName, setBrandName] = useState("");
+  const [brandName, setBrandName] = useState(initialBrandName ?? "");
   const [logoUrl, setLogoUrl] = useState("");
   const [title, setTitle] = useState("");
   const [platform, setPlatform] = useState("tiktok");
@@ -33,6 +40,9 @@ export default function BrandForm({ isLoggedIn }: { isLoggedIn: boolean }) {
   const [maxPayout, setMaxPayout] = useState(String(MAX_PAYOUT_DEFAULT));
   const [description, setDescription] = useState("");
   const [requirements, setRequirements] = useState("");
+  const [briefUrl, setBriefUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [durationDays, setDurationDays] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -86,6 +96,19 @@ export default function BrandForm({ isLoggedIn }: { isLoggedIn: boolean }) {
         "Brand logo must be a full URL starting with http:// or https://."
       );
     }
+    // Optional links — if given, they must be full URLs.
+    if (briefUrl.trim() && !/^https?:\/\//i.test(briefUrl.trim())) {
+      return fail(
+        "briefUrl",
+        "Campaign Brief link must be a full URL starting with http:// or https://."
+      );
+    }
+    if (thumbnailUrl.trim() && !/^https?:\/\//i.test(thumbnailUrl.trim())) {
+      return fail(
+        "thumbnailUrl",
+        "Thumbnail Image Link must be a full URL starting with http:// or https://."
+      );
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/campaigns", {
@@ -101,6 +124,9 @@ export default function BrandForm({ isLoggedIn }: { isLoggedIn: boolean }) {
           maxPayoutPerPost: capNum,
           description: description.trim(),
           requirements: requirements.trim(),
+          briefUrl: briefUrl.trim() || null,
+          thumbnailUrl: thumbnailUrl.trim() || null,
+          durationDays: durationDays === "" ? null : Number(durationDays),
         }),
       });
       const data = await res.json();
@@ -267,6 +293,58 @@ export default function BrandForm({ isLoggedIn }: { isLoggedIn: boolean }) {
             <span className={errCls}>{fieldErrors.maxPayout}</span>
           )}
         </label>
+        <label className="block text-sm font-bold text-fg md:col-span-2">
+          Campaign Duration
+          <select
+            value={durationDays}
+            onChange={(e) => setDurationDays(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Until Budget Ends</option>
+            <option value="7">7 Days</option>
+            <option value="14">14 Days</option>
+            <option value="30">30 Days</option>
+          </select>
+          <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
+            Your campaign ends when the duration finishes or the budget
+            runs out — whichever comes first.
+          </span>
+        </label>
+        <label className="block text-sm font-bold text-fg md:col-span-2">
+          Campaign Brief / Google Drive Link{" "}
+          <span className="font-medium text-fg/50">(optional)</span>
+          <input
+            value={briefUrl}
+            onChange={(e) => setBriefUrl(e.target.value)}
+            placeholder="https://drive.google.com/..."
+            inputMode="url"
+            className={inputCls}
+          />
+          <span className="mt-1 block text-xs font-medium text-fg/50">
+            Paste your Drive link with videos, logos, assets for creators.
+          </span>
+          {fieldErrors.briefUrl && (
+            <span className={errCls}>{fieldErrors.briefUrl}</span>
+          )}
+        </label>
+        <label className="block text-sm font-bold text-fg md:col-span-2">
+          Thumbnail Image Link{" "}
+          <span className="font-medium text-fg/50">(optional)</span>
+          <input
+            value={thumbnailUrl}
+            onChange={(e) => setThumbnailUrl(e.target.value)}
+            placeholder="https://yourbrand.com/campaign-thumbnail.jpg"
+            inputMode="url"
+            className={inputCls}
+          />
+          <span className="mt-1 block text-xs font-medium text-fg/50">
+            Paste an image link — it will be used as the campaign banner
+            image. There is no file upload; link only.
+          </span>
+          {fieldErrors.thumbnailUrl && (
+            <span className={errCls}>{fieldErrors.thumbnailUrl}</span>
+          )}
+        </label>
       </div>
       <label className="mt-4 block text-sm font-bold text-fg">
         Campaign Description
@@ -313,9 +391,15 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
       <button
         type="submit"
         disabled={busy}
-        className="mt-6 w-full rounded-full bg-lime py-3.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {busy ? "Submitting…" : "Submit campaign for review"}
+        {busy ? (
+          <>
+            <Spinner /> Submitting…
+          </>
+        ) : (
+          "Submit campaign for review"
+        )}
       </button>
       <p className="mt-3 text-center text-xs text-fg/40">
         No payment is taken here. Funding happens directly with the platform

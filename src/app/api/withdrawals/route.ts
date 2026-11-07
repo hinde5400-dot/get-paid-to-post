@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
+import { releaseMaturedHolds } from "@/lib/data";
 import { feeFor, finalFor } from "@/lib/money";
 import { WITHDRAW_MIN } from "@/lib/constants";
 
@@ -76,6 +77,9 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Release matured 72-hour holds first, so the balance checked below
+  // is never stale (see migration 0011).
+  await releaseMaturedHolds();
   const { data: wallet } = await supabase
     .from("wallets")
     .select("*")

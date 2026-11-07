@@ -12,6 +12,7 @@ import {
 import { countWords, validatePostUrl, VIDEO_RULES } from "@/lib/validate";
 import { playChime } from "@/lib/sounds";
 import { useToast } from "@/components/Toast";
+import Spinner from "@/components/Spinner";
 
 export interface LastSubmission {
   platform: Platform;
@@ -284,9 +285,15 @@ export default function SubmitBundleForm({
           <button
             onClick={submit}
             disabled={busy || maxReached}
-            className="w-full rounded-full bg-lime py-3.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {busy ? "Submitting…" : "Submit bundle"}
+            {busy ? (
+              <>
+                <Spinner /> Submitting…
+              </>
+            ) : (
+              "Submit bundle"
+            )}
           </button>
         ) : (
           <Link

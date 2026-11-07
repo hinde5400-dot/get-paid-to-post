@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { Campaign } from "@/lib/types";
 import type { CampaignStats } from "@/lib/data";
-import { formatUSD } from "@/lib/money";
+import { formatUSD, formatTimeLeft } from "@/lib/money";
 import CampaignBanner from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -35,6 +35,8 @@ export default function CampaignModal({
     stats && stats.total > 0
       ? Math.round((stats.approved / stats.total) * 100)
       : null;
+  const timeLeft = formatTimeLeft(campaign.ends_at);
+  const example20k = 20 * campaign.view_bonus_per_1k;
 
   // Close on Escape, and lock body scroll while the modal is open.
   useEffect(() => {
@@ -148,6 +150,18 @@ export default function CampaignModal({
           <p className="mt-3 text-xs text-fg/50">
             Views tracked {campaign.views_tracked_days} days · Max{" "}
             {campaign.max_posts} posts · {campaign.spots_left} spots left
+          </p>
+          <p className="mt-2 text-xs font-semibold text-fg/70">
+            {timeLeft ? (
+              <span className="font-bold text-lime">⏳ {timeLeft}</span>
+            ) : (
+              "Runs until the budget ends"
+            )}
+            {" · "}Example: 20k views ×{" "}
+            {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
+            <span className="font-bold text-fg">
+              {formatUSD(example20k)} earned
+            </span>
           </p>
 
           <Link

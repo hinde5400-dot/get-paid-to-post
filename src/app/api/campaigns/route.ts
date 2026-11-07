@@ -39,6 +39,9 @@ export async function POST(request: Request) {
     maxPayoutPerPost?: number;
     description?: string;
     requirements?: string;
+    briefUrl?: string | null;
+    thumbnailUrl?: string | null;
+    durationDays?: number | null;
   };
   // Server-side validation mirrors the client form — never trust the
   // client alone. Every rejection carries the exact message the red
@@ -102,6 +105,39 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Optional new fields (migration 0009): a Drive brief link, a
+  // thumbnail image link, and the campaign duration in days (null =
+  // runs until the budget ends).
+  const briefUrl = String(body.briefUrl ?? "").trim();
+  const thumbnailUrl = String(body.thumbnailUrl ?? "").trim();
+  const durationDays =
+    body.durationDays === null || body.durationDays === undefined
+      ? null
+      : Number(body.durationDays);
+  if (briefUrl && !/^https?:\/\/.+\..+/.test(briefUrl)) {
+    return NextResponse.json(
+      {
+        error:
+          "Error: Campaign Brief link must be a valid URL (starts with http:// or https://).",
+      },
+      { status: 400 }
+    );
+  }
+  if (thumbnailUrl && !/^https?:\/\/.+\..+/.test(thumbnailUrl)) {
+    return NextResponse.json(
+      {
+        error:
+          "Error: Thumbnail Image Link must be a valid URL (starts with http:// or https://).",
+      },
+      { status: 400 }
+    );
+  }
+  if (durationDays !== null && ![7, 14, 30].includes(durationDays)) {
+    return NextResponse.json(
+      { error: "Campaign Duration must be 7, 14 or 30 days, or until the budget ends." },
+      { status: 400 }
+    );
+  }
 
   const insertRow: Record<string, unknown> = {
     brand_name: brandName,
@@ -129,6 +165,9 @@ export async function POST(request: Request) {
   };
   const logoUrl = String(body.logoUrl ?? "").trim();
   if (logoUrl) insertRow.logo_url = logoUrl;
+  if (briefUrl) insertRow.brief_url = briefUrl;
+  if (thumbnailUrl) insertRow.thumbnail_url = thumbnailUrl;
+  if (durationDays !== null) insertRow.duration_days = durationDays;
 
   let insertResult = await supabase
     .from("campaigns")
@@ -137,13 +176,19 @@ export async function POST(request: Request) {
     .single();
   if (insertResult.error) {
     // New columns come from migrations (0004 logo_url, 0007
-    // max_payout_per_post) which may not have been run yet. Drop the
-    // column the database complains about and retry once, instead of
-    // failing the submission.
+    // max_payout_per_post, 0009 brief/thumbnail/duration) which may
+    // not have been run yet. Drop the column the database complains
+    // about and retry once, instead of failing the submission.
     const msg = insertResult.error.message;
     const retryRow: Record<string, unknown> = { ...insertRow };
     let stripped = false;
-    for (const col of ["logo_url", "max_payout_per_post"] as const) {
+    for (const col of [
+      "logo_url",
+      "max_payout_per_post",
+      "brief_url",
+      "thumbnail_url",
+      "duration_days",
+    ] as const) {
       if (new RegExp(col, "i").test(msg)) {
         delete retryRow[col];
         stripped = true;

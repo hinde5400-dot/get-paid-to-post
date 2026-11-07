@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { Campaign } from "@/lib/types";
-import { formatUSD } from "@/lib/money";
+import { formatUSD, formatTimeLeft } from "@/lib/money";
 import CampaignBanner, { BrandLogoTile } from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -10,6 +11,8 @@ import { PlatformChips } from "./PlatformIcons";
  * rate badge on it, brand row, title, budget progress bar, platform
  * chips and a lime View button. Clicking anywhere on the card opens
  * the campaign popup modal (via onOpen) instead of navigating away.
+ * Shows a live countdown while the campaign runs, and an example
+ * payout computed from the campaign's real rate.
  */
 export default function CampaignCard({
   campaign,
@@ -23,6 +26,15 @@ export default function CampaignCard({
     100,
     Math.round((spent / campaign.budget_total) * 100)
   );
+  // Ticking clock for the countdown (re-renders every minute).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const timeLeft = formatTimeLeft(campaign.ends_at, now);
+  // Example payout from the campaign's real rate: 20,000 views.
+  const example20k = 20 * campaign.view_bonus_per_1k;
 
   function onKey(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
@@ -87,6 +99,22 @@ export default function CampaignCard({
               className="h-full rounded-full bg-lime"
               style={{ width: `${fundedPct}%` }}
             />
+          </div>
+          {/* Countdown + example payout (real rate, real cap) */}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+            {timeLeft ? (
+              <span className="font-bold text-lime">⏳ {timeLeft}</span>
+            ) : (
+              <span className="font-bold text-fg/60">
+                Runs until the budget ends
+              </span>
+            )}
+            <span className="font-semibold text-fg/60">
+              20k views × {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
+              <span className="font-bold text-fg">
+                {formatUSD(example20k)} earned
+              </span>
+            </span>
           </div>
         </div>
 

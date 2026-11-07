@@ -7,6 +7,7 @@ import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { BrandLogoTile } from "./CampaignBanner";
 import { useToast } from "@/components/Toast";
+import Spinner from "@/components/Spinner";
 
 /**
  * Owner-only pending-campaign review list (Admin Review page).
@@ -110,9 +111,15 @@ export default function AdminCampaignList({
               type="button"
               disabled={busyId === c.id}
               onClick={() => void act(c, "approve")}
-              className="flex-1 rounded-full bg-lime py-2.5 text-sm font-black text-black transition hover:bg-limedark disabled:opacity-40"
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-lime py-2.5 text-sm font-black text-black transition hover:bg-limedark disabled:opacity-40"
             >
-              {busyId === c.id ? "Working…" : "Approve — go live"}
+              {busyId === c.id ? (
+                <>
+                  <Spinner /> Working…
+                </>
+              ) : (
+                "Approve — go live"
+              )}
             </button>
             <button
               type="button"

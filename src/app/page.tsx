@@ -6,6 +6,7 @@ import CampaignBanner from "@/components/CampaignBanner";
 import AdSlot from "@/components/AdSlot";
 import Faq from "@/components/Faq";
 import DiscordButton from "@/components/DiscordButton";
+import RoleCards from "@/components/RoleCards";
 import { formatUSD } from "@/lib/money";
 
 const FAQS = [
@@ -76,22 +77,21 @@ export default async function HomePage() {
               </Link>
             </>
           ) : (
-            <>
-              <Link
-                href="/signup"
-                className="rounded-full bg-lime px-7 py-3.5 text-sm font-black text-black transition hover:bg-limedark"
-              >
-                Start Earning — Sign Up Free
-              </Link>
-              <Link
-                href="/campaigns"
-                className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
-              >
-                Browse campaigns
-              </Link>
-            </>
+            <Link
+              href="/campaigns"
+              className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            >
+              Browse campaigns
+            </Link>
           )}
         </div>
+        {/* Guest signup entry — ONLY the two role cards, no other
+            signup button. */}
+        {!user && (
+          <div className="mx-auto mt-8 max-w-2xl">
+            <RoleCards />
+          </div>
+        )}
         <p className="mt-8 text-sm font-bold text-fg/50">
           <span className="font-black text-lime">
             {campaigns.length} live campaign{campaigns.length === 1 ? "" : "s"}
@@ -177,12 +177,6 @@ export default async function HomePage() {
               later.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                href="/brands"
-                className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
-              >
-                I am a Brand — launch a campaign
-              </Link>
               <Link
                 href="/how-it-works"
                 className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"

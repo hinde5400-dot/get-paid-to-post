@@ -7,6 +7,7 @@ import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
 import { useToast } from "@/components/Toast";
+import Spinner from "@/components/Spinner";
 
 export interface AdminSubmission extends Submission {
   creator_email: string;
@@ -21,6 +22,7 @@ export default function AdminReviewList({
   const [views, setViews] = useState<Record<string, string>>({});
   const [likes, setLikes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const { showError, showSuccess } = useToast();
 
   async function call(
@@ -44,6 +46,7 @@ export default function AdminReviewList({
       showError(e instanceof Error ? e.message : "Action failed.");
     } finally {
       setBusy(null);
+      setBusyAction(null);
     }
   }
 
@@ -57,6 +60,7 @@ export default function AdminReviewList({
       showError("Enter the verified views before approving.");
       return;
     }
+    setBusyAction(action);
     void call(
       "/api/admin/review",
       { submissionId: s.id, action, views: v, likes: l },
@@ -73,6 +77,7 @@ export default function AdminReviewList({
     ) {
       return;
     }
+    setBusyAction("block");
     void call(
       "/api/admin/block",
       { userId: s.user_id },
@@ -186,30 +191,54 @@ export default function AdminReviewList({
             <button
               onClick={() => review(s, "approve")}
               disabled={busy === s.id}
-              className="rounded-full bg-lime px-4 py-2 text-sm font-bold text-ink disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full bg-lime px-4 py-2 text-sm font-bold text-ink disabled:opacity-40"
             >
-              Approve
+              {busy === s.id && busyAction === "approve" ? (
+                <>
+                  <Spinner /> Working…
+                </>
+              ) : (
+                "Approve"
+              )}
             </button>
             <button
               onClick={() => review(s, "reject")}
               disabled={busy === s.id}
-              className="rounded-full bg-red-500/20 px-4 py-2 text-sm font-bold text-red-300 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full bg-red-500/20 px-4 py-2 text-sm font-bold text-red-300 disabled:opacity-40"
             >
-              Reject
+              {busy === s.id && busyAction === "reject" ? (
+                <>
+                  <Spinner /> Working…
+                </>
+              ) : (
+                "Reject"
+              )}
             </button>
             <button
               onClick={() => review(s, "revoke")}
               disabled={busy === s.id}
-              className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg disabled:opacity-40"
             >
-              Revoke
+              {busy === s.id && busyAction === "revoke" ? (
+                <>
+                  <Spinner /> Working…
+                </>
+              ) : (
+                "Revoke"
+              )}
             </button>
             <button
               onClick={() => blockCreator(s)}
               disabled={busy === `block-${s.user_id}`}
-              className="ml-auto rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 disabled:opacity-40"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 disabled:opacity-40"
             >
-              Block creator
+              {busy === `block-${s.user_id}` && busyAction === "block" ? (
+                <>
+                  <Spinner /> Working…
+                </>
+              ) : (
+                "Block creator"
+              )}
             </button>
           </div>
         </article>

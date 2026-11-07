@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/client";
+import Spinner from "@/components/Spinner";
+import { useToast } from "@/components/Toast";
 
 /** Step 2 after signup: connect TikTok / Instagram / YouTube profile links. */
 export default function ConnectPage() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [tiktok, setTiktok] = useState("");
   const [instagram, setInstagram] = useState("");
   const [youtube, setYoutube] = useState("");
@@ -58,6 +61,9 @@ export default function ConnectPage() {
       return;
     }
     setBusy(true);
+    // Keep the "Saving..." state visible for at least ~1.5 seconds so
+    // the button never looks frozen — then go to the dashboard.
+    const started = Date.now();
     try {
       const { data } = await supabase.auth.getUser();
       if (!data.user) throw new Error("Please log in first.");
@@ -70,10 +76,18 @@ export default function ConnectPage() {
         })
         .eq("id", data.user.id);
       if (upError) throw upError;
+      const elapsed = Date.now() - started;
+      if (elapsed < 1500) {
+        await new Promise((resolve) => setTimeout(resolve, 1500 - elapsed));
+      }
+      showSuccess("Profiles saved!");
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save links.");
+      const message =
+        err instanceof Error ? err.message : "Could not save links.";
+      setError(message);
+      showError(message);
     } finally {
       setBusy(false);
     }
@@ -149,9 +163,15 @@ export default function ConnectPage() {
         <button
           type="submit"
           disabled={busy}
-          className="mt-6 w-full rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
         >
-          {busy ? "Saving…" : "Save & go to dashboard"}
+          {busy ? (
+            <>
+              <Spinner /> Saving…
+            </>
+          ) : (
+            "Save & go to dashboard"
+          )}
         </button>
         <button
           type="button"

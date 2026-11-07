@@ -9,6 +9,8 @@ import {
   InstagramIcon,
   YouTubeIcon,
 } from "@/components/PlatformIcons";
+import Spinner from "@/components/Spinner";
+import { useToast } from "@/components/Toast";
 
 /**
  * Onboarding — the step every new user lands on right after signup
@@ -61,6 +63,7 @@ const FIELD: Record<PlatformKey, "tiktok_url" | "instagram_url" | "youtube_url">
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [urls, setUrls] = useState<Record<PlatformKey, string>>({
     tiktok: "",
     instagram: "",
@@ -74,6 +77,7 @@ export default function OnboardingPage() {
   const [profileExists, setProfileExists] = useState(false);
   const [error, setError] = useState("");
   const [busyKey, setBusyKey] = useState<PlatformKey | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
 
@@ -125,11 +129,15 @@ export default function OnboardingPage() {
     const platform = PLATFORMS.find((p) => p.key === key)!;
     const url = urls[key].trim();
     if (!url) {
-      setError(`Paste your ${platform.name} profile link first.`);
+      const message = `Paste your ${platform.name} profile link first.`;
+      setError(message);
+      showError(message);
       return;
     }
     if (!url.toLowerCase().includes(platform.domain)) {
-      setError(`That does not look like a ${platform.name} link — it should contain ${platform.domain}.`);
+      const message = `That does not look like a ${platform.name} link — it should contain ${platform.domain}.`;
+      setError(message);
+      showError(message);
       return;
     }
     const supabase = getBrowserClient();
@@ -158,8 +166,11 @@ export default function OnboardingPage() {
         setProfileExists(true);
       }
       setConnected((c) => ({ ...c, [key]: true }));
+      showSuccess(`${platform.name} connected!`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save link.");
+      const message = err instanceof Error ? err.message : "Could not save link.";
+      setError(message);
+      showError(message);
     } finally {
       setBusyKey(null);
     }
@@ -251,13 +262,17 @@ export default function OnboardingPage() {
               type="button"
               onClick={() => void connectOne(key)}
               disabled={busyKey === key}
-              className="mt-3 w-full rounded-full bg-lime py-3 text-sm font-black text-black transition hover:bg-limedark disabled:opacity-40"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-black text-black transition hover:bg-limedark disabled:opacity-40"
             >
-              {busyKey === key
-                ? "Connecting…"
-                : connected[key]
-                  ? `Update ${name} link`
-                  : `Connect ${name}`}
+              {busyKey === key ? (
+                <>
+                  <Spinner /> Connecting…
+                </>
+              ) : connected[key] ? (
+                `Update ${name} link`
+              ) : (
+                `Connect ${name}`
+              )}
             </button>
           </div>
         ))}
@@ -271,18 +286,37 @@ export default function OnboardingPage() {
 
       <button
         type="button"
-        onClick={() => router.push("/campaigns")}
-        disabled={connectedCount < 1}
-        className="mt-6 w-full rounded-full bg-lime py-3.5 text-base font-black text-black transition hover:bg-limedark disabled:opacity-40"
+        onClick={() => {
+          setLeaving(true);
+          router.push("/campaigns");
+        }}
+        disabled={connectedCount < 1 || leaving}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3.5 text-base font-black text-black transition hover:bg-limedark disabled:opacity-40"
       >
-        Welcome! Now Browse Campaigns →
+        {leaving ? (
+          <>
+            <Spinner /> Loading campaigns…
+          </>
+        ) : (
+          "Welcome! Now Browse Campaigns →"
+        )}
       </button>
       <button
         type="button"
-        onClick={() => router.push("/campaigns")}
-        className="mt-3 w-full text-sm font-bold text-fg/60 transition hover:text-lime"
+        onClick={() => {
+          setLeaving(true);
+          router.push("/campaigns");
+        }}
+        disabled={leaving}
+        className="mt-3 flex w-full items-center justify-center gap-2 text-sm font-bold text-fg/60 transition hover:text-lime disabled:opacity-40"
       >
-        Skip for now
+        {leaving ? (
+          <>
+            <Spinner /> Loading…
+          </>
+        ) : (
+          "Skip for now"
+        )}
       </button>
       {connectedCount < 1 && (
         <p className="mt-3 text-center text-xs text-fg/40">

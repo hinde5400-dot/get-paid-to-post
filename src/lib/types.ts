@@ -30,6 +30,16 @@ export interface Campaign {
   is_funded: boolean;
   status: string;
   created_at?: string;
+  /** Optional brief / asset link pasted by the brand (migration 0009). */
+  brief_url?: string | null;
+  /** Optional thumbnail image link used as the card banner (0009). */
+  thumbnail_url?: string | null;
+  /** Campaign length in days; null = runs until the budget ends (0009). */
+  duration_days?: number | null;
+  /** Set when the admin approves the campaign (0009). */
+  started_at?: string | null;
+  /** started_at + duration_days; null when duration is open-ended. */
+  ends_at?: string | null;
 }
 
 export interface Submission {
@@ -79,6 +89,10 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name: string | null;
+  /** 'creator' or 'brand' (migration 0008); null on rows created before it. */
+  role?: "creator" | "brand" | null;
+  /** Brand display name for brand accounts (migration 0008). */
+  brand_name?: string | null;
   tiktok_url: string | null;
   instagram_url: string | null;
   youtube_url: string | null;

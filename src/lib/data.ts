@@ -31,6 +31,14 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     is_funded: Boolean(row.is_funded),
     status: String(row.status ?? "pending"),
     created_at: String(row.created_at ?? ""),
+    // Campaign assets + schedule (migration 0009) — all optional so
+    // rows created before the migration still map cleanly.
+    brief_url: (row.brief_url as string | null) ?? null,
+    thumbnail_url: (row.thumbnail_url as string | null) ?? null,
+    duration_days:
+      row.duration_days == null ? null : Number(row.duration_days),
+    started_at: (row.started_at as string | null) ?? null,
+    ends_at: (row.ends_at as string | null) ?? null,
   };
 }
 
@@ -59,6 +67,20 @@ function mapSubmission(row: Record<string, unknown>): Submission {
 }
 
 /**
+ * A campaign is live only while it is funded, status "live", has
+ * budget left, and its duration has not run out (ends_at null means
+ * it runs until the budget ends). Use for Discover lists and the
+ * detail-page guard — a campaign auto-ends on duration OR budget 0,
+ * whichever comes first.
+ */
+export function isCampaignLive(c: Campaign, now: number = Date.now()): boolean {
+  if (!c.is_funded || c.status !== "live") return false;
+  if (c.budget_left <= 0) return false;
+  if (c.ends_at && new Date(c.ends_at).getTime() <= now) return false;
+  return true;
+}
+
+/**
  * Live funded campaigns from Supabase only. There are no sample or
  * fallback campaigns: a campaign appears here only after a brand has
  * funded $500+ and it is live. When none exist, this returns [] and the
@@ -74,7 +96,10 @@ export async function getCampaigns(): Promise<Campaign[]> {
       .eq("status", "live")
       .order("created_at", { ascending: false });
     if (!error && data) {
-      return (data as Record<string, unknown>[]).map(mapCampaign);
+      const now = Date.now();
+      return (data as Record<string, unknown>[])
+        .map(mapCampaign)
+        .filter((c) => isCampaignLive(c, now));
     }
   }
   return [];
@@ -222,6 +247,9 @@ export async function getAllSubmissions(): Promise<Submission[]> {
 export async function getWallet(userId: string): Promise<Wallet | null> {
   const supabase = getServerClient();
   if (!supabase) return null;
+  // Release any matured 72-hour holds first, so the balances below
+  // are never stale (see releaseMaturedHolds).
+  await releaseMaturedHolds();
   const { data, error } = await supabase
     .from("wallets")
     .select("*")
@@ -235,6 +263,33 @@ export async function getWallet(userId: string): Promise<Wallet | null> {
     pending_balance: Number(row.pending_balance ?? 0),
     withdrawn_total: Number(row.withdrawn_total ?? 0),
   };
+}
+
+/**
+ * Release matured 72-hour holds into available balance.
+ *
+ * BUG FIX (found in audit): approved earnings were credited to
+ * pending_balance by Admin Review, but NOTHING ever moved them to
+ * available_balance — creators could never withdraw. The fix is a
+ * SECURITY DEFINER function (migration 0011) that moves each approved
+ * submission's earnings from pending to available once, the first
+ * time its hold_until has passed. It is called lazily on every wallet
+ * read, so no cron or service key is needed, and it can only move
+ * money that is already due to its rightful owner. Until migration
+ * 0011 runs, the RPC does not exist and this is a silent no-op.
+ */
+export async function releaseMaturedHolds(): Promise<void> {
+  const supabase = getServerClient();
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.rpc("release_matured_holds");
+    if (error) {
+      // Function missing (migration 0011 not run yet) — ignore.
+      return;
+    }
+  } catch {
+    return;
+  }
 }
 
 function mapWithdrawal(row: Record<string, unknown>): Withdrawal {

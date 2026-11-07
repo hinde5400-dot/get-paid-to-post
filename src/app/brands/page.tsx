@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import BrandForm from "@/components/BrandForm";
 import { BRAND_MIN_BUDGET } from "@/lib/constants";
 
@@ -15,6 +15,16 @@ const FUNDING_STEPS = [
 
 export default async function BrandsPage() {
   const user = await getCurrentUser();
+  const profile = user ? await getProfile(user.id) : null;
+  const owner = isOwner(profile);
+  // Brand entry is only from Signup (role=brand) and the Footer.
+  // A logged-in creator cannot launch campaigns from a creator
+  // account; the owner can always test the form.
+  const canLaunch = !user
+    ? false
+    : owner || (profile?.role ?? "creator") !== "creator";
+  const initialBrandName =
+    profile?.brand_name ?? profile?.full_name ?? null;
 
   return (
     <div className="space-y-12">
@@ -37,12 +47,21 @@ export default async function BrandsPage() {
               Upload your brand and campaign below. Fund from $
               {BRAND_MIN_BUDGET} upfront and pay only for verified views.
             </p>
-            <a
-              href="#brand-form"
-              className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
-            >
-              Create a campaign
-            </a>
+            {user ? (
+              <a
+                href="#brand-form"
+                className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
+              >
+                Create a campaign
+              </a>
+            ) : (
+              <Link
+                href="/signup?role=brand"
+                className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
+              >
+                Sign up as a brand
+              </Link>
+            )}
           </div>
           <div className="rounded-3xl border border-fg/10 bg-card p-6 text-left">
             <p className="text-3xl">🎬</p>
@@ -122,9 +141,78 @@ export default async function BrandsPage() {
         </div>
       </section>
 
+      {/* Trust section — above the form */}
+      <section className="rounded-3xl border border-lime/40 bg-card p-6 text-center md:p-8">
+        <p className="text-sm leading-relaxed text-fg/80">
+          We are a professional creator marketplace. All campaigns are
+          funded before going live. Creators are paid for real views only.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          {[
+            "🛡️ No Gambling, No Betting",
+            "✅ 100% Real Brands, Funded Campaigns Only",
+            "🔒 Secure Payments via USDT",
+          ].map((badge) => (
+            <span
+              key={badge}
+              className="rounded-full border border-lime/40 bg-lime/10 px-4 py-2 text-xs font-black text-lime"
+            >
+              {badge}
+            </span>
+          ))}
+        </div>
+      </section>
+
       {/* Brand form */}
       <section id="brand-form">
-        <BrandForm isLoggedIn={Boolean(user)} />
+        {!user ? (
+          <div className="rounded-3xl border border-fg/10 bg-card p-8 text-center">
+            <p className="text-4xl" aria-hidden>
+              🏢
+            </p>
+            <h2 className="mt-3 text-xl font-black text-fg">
+              Create a brand account to launch a campaign
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+              Brands sign up with a brand name, email and password — then
+              fill in the campaign form below.
+            </p>
+            <Link
+              href="/signup?role=brand"
+              className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+            >
+              Sign up as a brand
+            </Link>
+            <p className="mt-3 text-sm text-fg/60">
+              Already have an account?{" "}
+              <Link href="/login" className="font-bold text-lime hover:underline">
+                Log in
+              </Link>
+            </p>
+          </div>
+        ) : !canLaunch ? (
+          <div className="rounded-3xl border border-fg/10 bg-card p-8 text-center">
+            <p className="text-4xl" aria-hidden>
+              🎬
+            </p>
+            <h2 className="mt-3 text-xl font-black text-fg">
+              You are signed in as a creator
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+              Campaigns are launched from brand accounts. Browse funded
+              campaigns to earn, or sign up as a brand with a different
+              email to launch one.
+            </p>
+            <Link
+              href="/campaigns"
+              className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+            >
+              Browse campaigns
+            </Link>
+          </div>
+        ) : (
+          <BrandForm isLoggedIn initialBrandName={initialBrandName} />
+        )}
       </section>
     </div>
   );
