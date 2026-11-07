@@ -1,9 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getCampaign, getAdminUsdtWallet } from "@/lib/data";
+import { getCampaign, getAdminUsdtWallet, getCampaignMessages } from "@/lib/data";
 import { formatUSD } from "@/lib/money";
 import PaymentForm from "@/components/PaymentForm";
+import BrandMessageForm from "@/components/BrandMessageForm";
 import CopyButton from "@/components/CopyButton";
 import DiscordButton from "@/components/DiscordButton";
 
@@ -28,6 +29,7 @@ export default async function BrandPaymentPage({
   if (!ownsIt && !isOwner(profile)) notFound();
 
   const wallet = await getAdminUsdtWallet();
+  const messages = await getCampaignMessages(campaign.id);
 
   if (campaign.status === "live") {
     return (
@@ -133,6 +135,24 @@ export default async function BrandPaymentPage({
           After admin verifies payment, your campaign will go LIVE in 1-2
           hours.
         </p>
+      </div>
+
+      {/* Private messages to the admin — ask anything, send proof. */}
+      <div className="rounded-3xl border border-fg/10 bg-card p-6 md:p-8">
+        <h2 className="text-lg font-black text-fg">
+          Message the admin / Send proof
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-fg/60">
+          This conversation is private — only you and the admin can see
+          it. Tell the admin you sent the budget, or share your payment
+          screenshot link as proof.
+        </p>
+        <div className="mt-5">
+          <BrandMessageForm
+            campaignId={campaign.id}
+            initialMessages={messages}
+          />
+        </div>
       </div>
     </div>
   );

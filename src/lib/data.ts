@@ -1,5 +1,5 @@
 import { getServerClient } from "./supabase/server";
-import type { Campaign, Submission, Wallet, Withdrawal } from "./types";
+import type { BrandMessage, Campaign, Submission, Wallet, Withdrawal } from "./types";
 import { platformsFromRow } from "./types";
 
 function mapCampaign(row: Record<string, unknown>): Campaign {
@@ -364,5 +364,72 @@ export async function getAdminUsdtWallet(): Promise<string | null> {
     return value || null;
   } catch {
     return null;
+  }
+}
+
+function mapBrandMessage(row: Record<string, unknown>): BrandMessage {
+  const camp = row.campaigns as {
+    title?: string;
+    brand_name?: string;
+    payment_tx_id?: string | null;
+  } | null;
+  return {
+    id: String(row.id),
+    campaign_id: String(row.campaign_id),
+    user_id: String(row.user_id),
+    message: String(row.message ?? ""),
+    proof_url: (row.proof_url as string | null) ?? null,
+    created_at: String(row.created_at ?? ""),
+    is_read: Boolean(row.is_read),
+    campaign_title: camp?.title,
+    brand_name: camp?.brand_name,
+    payment_tx_id: camp?.payment_tx_id ?? null,
+  };
+}
+
+/**
+ * Messages on one campaign, oldest first — for the payment-page
+ * thread. RLS (migration 0014) lets a brand read only its own
+ * messages and the owner read all, so the caller must own the
+ * campaign or be the owner. Returns [] when the table does not
+ * exist yet (migration 0014 not run).
+ */
+export async function getCampaignMessages(
+  campaignId: string
+): Promise<BrandMessage[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("brand_messages")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: true });
+    if (error || !data) return [];
+    return (data as Record<string, unknown>[]).map(mapBrandMessage);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Every brand message, newest first — owner only (admin inbox).
+ * Joins the campaign so each message shows its campaign title,
+ * brand name and submitted Transaction ID. Returns [] when the
+ * table does not exist yet (migration 0014 not run).
+ */
+export async function getBrandMessages(): Promise<BrandMessage[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("brand_messages")
+      .select("*, campaigns(title, brand_name, payment_tx_id)")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error || !data) return [];
+    return (data as Record<string, unknown>[]).map(mapBrandMessage);
+  } catch {
+    return [];
   }
 }

@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet } from "@/lib/data";
+import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewList";
 import AdminCampaignList from "@/components/AdminCampaignList";
+import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
 import AdminSettingsForm from "@/components/AdminSettingsForm";
 
@@ -39,6 +40,7 @@ export default async function AdminPage() {
   const pendingCampaigns = await getPendingCampaigns();
   const withdrawals = await getAllWithdrawals();
   const adminWallet = await getAdminUsdtWallet();
+  const brandMessages = await getBrandMessages();
 
   // Creator emails for the review list (owner can read all users).
   const supabase = getServerClient();
@@ -59,6 +61,7 @@ export default async function AdminPage() {
   const pendingWithdrawals = withdrawals.filter(
     (w) => w.status === "pending"
   ).length;
+  const unreadMessages = brandMessages.filter((m) => !m.is_read).length;
   const withdrawalItems: WithdrawalWithCreator[] = withdrawals.map((w) => ({
     ...w,
     creator_email: emailById.get(w.user_id) ?? w.user_id.slice(0, 8),
@@ -121,6 +124,28 @@ export default async function AdminPage() {
           ) : (
             <AdminCampaignList campaigns={pendingCampaigns} />
           )}
+        </div>
+      </section>
+
+      {/* Brand messages — private inbox. Brands message the admin
+          from the payment page and send proof links there. */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Brand messages
+          </h2>
+          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+            {unreadMessages} unread · {brandMessages.length} total
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Private messages from brands — payment confirmations and proof
+          links, attached to their campaign. Viewing this inbox marks
+          messages as read. To reply to a brand, contact them on
+          Discord — the inbox here is one-way (brand → admin).
+        </p>
+        <div className="mt-4">
+          <AdminMessagesList messages={brandMessages} />
         </div>
       </section>
 

@@ -46,6 +46,21 @@ export default function WithdrawModal({
   const final = finalFor(amountNum);
   const address = details.trim();
 
+  /** Never let the typed amount exceed the withdrawable balance —
+   *  a creator with $20 can only ever request $20 (the server
+   *  blocks anything above it too). */
+  function clampAmount(raw: string) {
+    if (raw === "" || raw === ".") return raw;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return raw;
+    if (n > available) return String(available);
+    return raw;
+  }
+
+  function fillMax() {
+    if (available > 0) setAmount(String(available));
+  }
+
   async function submit() {
     if (amountNum < WITHDRAW_MIN) {
       showError(`Minimum withdrawal is $${WITHDRAW_MIN}`);
@@ -118,16 +133,31 @@ export default function WithdrawModal({
               <span className="font-bold text-lime">{formatUSD(available)}</span>
             </p>
             <label className="mt-4 block text-sm font-bold text-fg">
-              Amount (USD)
+              <span className="flex items-center justify-between gap-2">
+                <span>Amount (USD)</span>
+                <button
+                  type="button"
+                  onClick={fillMax}
+                  disabled={available <= 0}
+                  className="rounded-full bg-lime/15 px-2.5 py-0.5 text-xs font-black text-lime transition hover:bg-lime/25 disabled:opacity-40"
+                >
+                  Max {formatUSD(available)}
+                </button>
+              </span>
               <input
                 type="number"
                 min={WITHDRAW_MIN}
+                max={available}
                 step="0.01"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(clampAmount(e.target.value))}
                 placeholder={`Min ${formatUSD(WITHDRAW_MIN)}`}
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />
+              <span className="mt-1 block text-xs font-medium text-fg/50">
+                Max {formatUSD(available)} — you can only withdraw up to
+                your withdrawable balance.
+              </span>
             </label>
             <label className="mt-4 block text-sm font-bold text-fg">
               Payout method

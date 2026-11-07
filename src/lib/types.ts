@@ -145,6 +145,23 @@ export interface Withdrawal {
   created_at: string;
 }
 
+/** Private brand -> admin message (migration 0014). proof_url is an
+ *  optional link the brand pastes (e.g. a screenshot on Google Drive
+ *  or Imgur). campaign_title / brand_name / payment_tx_id are filled
+ *  in from the joined campaign row when the admin inbox loads. */
+export interface BrandMessage {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  message: string;
+  proof_url: string | null;
+  created_at: string;
+  is_read: boolean;
+  campaign_title?: string;
+  brand_name?: string;
+  payment_tx_id?: string | null;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
