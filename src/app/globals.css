@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Get Paid To Post — brand theme.
+   Dark purple #120826 background, full yellow #FFDE00 accent,
+   dark card #1E1233. System font stack on purpose: no external
+   font fetch, so first paint is never blocked. */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #120826;
+  color: #ffffff;
+  font-family:
+    "Plus Jakarta Sans",
+    Inter,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #ffde00;
+  color: #120826;
+}
+
+/* Submit success popup */
+@keyframes pop-in {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.animate-pop {
+  animation: pop-in 0.25s ease-out;
+}
+
+/* Confetti falling inside the success popup */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(320px) rotate(540deg);
+    opacity: 0;
+  }
+}
+.animate-confetti {
+  animation: confetti-fall 2.2s ease-in infinite;
+}
+
+/* Error shake for a rejected / invalid submit */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop,
+  .animate-confetti,
+  .animate-shake {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
