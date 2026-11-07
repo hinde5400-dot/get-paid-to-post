@@ -114,7 +114,7 @@ create policy "brand-proofs brand upload own campaign" on storage.objects
     bucket_id = 'brand-proofs'
     and exists (
       select 1 from public.campaigns c
-      where c.id::text = storage.foldername(name)[1]
+      where c.id::text = (storage.foldername(name))[1]
         and c.user_id = auth.uid()
     )
   );
@@ -126,7 +126,7 @@ create policy "brand-proofs brand select own campaign" on storage.objects
     bucket_id = 'brand-proofs'
     and exists (
       select 1 from public.campaigns c
-      where c.id::text = storage.foldername(name)[1]
+      where c.id::text = (storage.foldername(name))[1]
         and c.user_id = auth.uid()
     )
   );
