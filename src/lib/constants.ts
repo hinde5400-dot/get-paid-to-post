@@ -10,8 +10,8 @@ export const SITE_DOMAIN = "get-paid-to-post.vercel.app";
 export const SITE_URL = `https://${SITE_DOMAIN}`;
 
 // Community — support runs on Discord only (no live chat on site).
-export const DISCORD_URL = "https://discord.gg/getpaidtopost";
-export const DISCORD_BADGE = "Coming Soon - Discord Server Launching Soon";
+export const DISCORD_URL = "https://discord.gg/kyNcGQkE7y";
+export const DISCORD_BADGE = "Support Tickets, Announcements, and Community - All on Discord";
 
 // Withdrawals — USDT only (TRC20 / BEP20). Bank, Wise, PayPal,
 // JazzCash and Easypaisa are not offered for now.
