@@ -13,9 +13,9 @@ import CampaignDetailTabs from "@/components/CampaignDetailTabs";
 import { PlatformChips } from "@/components/PlatformIcons";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
 import { payoutForViews } from "@/lib/money";
-import { PLATFORM_LABELS } from "@/lib/constants";
 import { VIDEO_RULES } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
+import { campaignPlatforms, platformNamesText } from "@/lib/types";
 
 /**
  * Campaign detail, TryShoot brand-page style: brand profile
@@ -72,6 +72,13 @@ export default async function CampaignDetailPage({
   );
   const timeLeft = formatTimeLeft(campaign.ends_at);
   const example20k = 20 * campaign.view_bonus_per_1k;
+  // Platforms this campaign accepts (migration 0012), in prose form.
+  const campaignPlatformsList = campaignPlatforms(campaign);
+  const platformListText = platformNamesText(campaignPlatformsList);
+  const submitHint =
+    campaignPlatformsList.length === 1
+      ? `submit your ${platformListText} link.`
+      : `submit your ${platformListText} links together as one bundle.`;
 
   return (
     <div className="space-y-6 pb-20 md:pb-16">
@@ -99,10 +106,13 @@ export default async function CampaignDetailPage({
               <p className="mt-0.5 text-sm font-bold text-fg/60">
                 {stats
                   ? `${stats.members} Member${stats.members === 1 ? "" : "s"} · ${stats.active30d} Active`
-                  : `${campaign.category} · ${PLATFORM_LABELS[campaign.platform]}`}
+                  : `${campaign.category} · ${platformListText}`}
               </p>
             </div>
-            <PlatformChips platform={campaign.platform} />
+            <PlatformChips
+              platform={campaign.platform}
+              platforms={campaignPlatformsList}
+            />
           </div>
 
           <h2 className="mt-5 font-display text-xl font-black leading-snug tracking-tight text-fg md:text-2xl">
@@ -181,7 +191,7 @@ export default async function CampaignDetailPage({
               <div className="rounded-3xl border border-fg/10 bg-card p-6">
                 <h2 className="text-lg font-extrabold text-fg">About this campaign</h2>
                 <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
-                  <li>• Post a short vertical clip about {campaign.brand_name} on TikTok, Instagram or YouTube.</li>
+                  <li>• Post a short vertical clip about {campaign.brand_name} on {platformListText}.</li>
                   <li>• You are paid per real view — no follower minimum.</li>
                   <li>• Approved earnings move to your wallet after a 72-hour hold.</li>
                   <li>• Withdraw from $10 in USDT (TRC20 or BEP20) — 7% fee.</li>
@@ -193,7 +203,7 @@ export default async function CampaignDetailPage({
                 <h2 className="text-lg font-extrabold text-fg">Brief &amp; guidelines</h2>
                 <p className="mt-3 text-sm leading-relaxed text-fg/70">
                   {campaign.rules ??
-                    `Create an original clip for ${campaign.brand_name}. Keep it fun, honest and on-brand. Show the product clearly, follow the video rules below, and submit your TikTok and Instagram links together as one bundle.`}
+                    `Create an original clip for ${campaign.brand_name}. Keep it fun, honest and on-brand. Show the product clearly, follow the video rules below, and ${submitHint}`}
                 </p>
                 <ul className="mt-4 space-y-1.5 text-sm text-fg/70">
                   {VIDEO_RULES.map((r) => (
@@ -248,7 +258,7 @@ export default async function CampaignDetailPage({
               {[
                 ["Brand", campaign.brand_name],
                 ["Category", campaign.category],
-                ["Platforms", PLATFORM_LABELS[campaign.platform]],
+                ["Platforms", platformListText],
                 ["Budget", `${formatUSD(campaign.budget_total)} total · ${formatUSD(campaign.budget_left)} left`],
                 ["Rate", `${formatUSD(campaign.rate_per_1m)} per 1M views`],
                 ["Base pay", `${formatUSD(campaign.base_pay)} per approved post`],

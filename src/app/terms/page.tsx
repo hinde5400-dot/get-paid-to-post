@@ -52,8 +52,8 @@ export default function TermsPage() {
         <h2 className="text-lg font-extrabold text-fg">5. Brands and funding</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           A brand campaign only goes live after its budget is funded. The
-          minimum budget to launch is $500. Brands pay only for verified
-          views. Unspent budget stays the brand&apos;s.
+          brand sets its own budget — any amount above $0. Brands pay
+          only for verified views. Unspent budget stays the brand&apos;s.
         </p>
       </section>
 

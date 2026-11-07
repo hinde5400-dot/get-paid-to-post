@@ -2,22 +2,28 @@
 
 import { useState } from "react";
 import {
-  BRAND_MIN_BUDGET,
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
   MIN_RATE_PER_1K,
 } from "@/lib/constants";
+import type { Platform } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
+import {
+  TikTokIcon,
+  InstagramIcon,
+  YouTubeIcon,
+} from "@/components/PlatformIcons";
 
 /**
  * Brand campaign form — Brand Name, Brand Logo (optional), Campaign
- * Title, Platform (TikTok / Instagram / YouTube only), Rate per 1k
- * views (min $0.75), Total Budget (min $500), Max Payout Per Post
+ * Title, Platforms (pick any of TikTok / Instagram / YouTube, at
+ * least one), Rate per 1k views (min $0.75), Total Budget (any amount
+ * above $0 — there is no minimum budget), Max Payout Per Post
  * (default $75, $10–$200), Campaign Description, Video
  * Requirements. Saves with status "pending" — nothing goes live
- * until the admin approves it (after the $500+ budget is funded).
+ * until the admin approves it (after the budget is funded).
  *
  * Every validation failure shows the red error popup + shake + buzz
  * and blocks submit; a saved campaign shows the green "Success!"
@@ -34,7 +40,7 @@ export default function BrandForm({
   const [brandName, setBrandName] = useState(initialBrandName ?? "");
   const [logoUrl, setLogoUrl] = useState("");
   const [title, setTitle] = useState("");
-  const [platform, setPlatform] = useState("tiktok");
+  const [platforms, setPlatforms] = useState<Platform[]>(["tiktok"]);
   const [ratePer1k, setRatePer1k] = useState("");
   const [budget, setBudget] = useState("");
   const [maxPayout, setMaxPayout] = useState(String(MAX_PAYOUT_DEFAULT));
@@ -53,6 +59,12 @@ export default function BrandForm({
     return false;
   }
 
+  function togglePlatform(p: Platform) {
+    setPlatforms((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    );
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setFieldErrors({});
@@ -67,10 +79,14 @@ export default function BrandForm({
       return fail("description", "This field is required");
     if (!requirements.trim())
       return fail("requirements", "This field is required");
-    // Money rules.
+    // Platforms — at least one is required.
+    if (platforms.length === 0) {
+      return fail("platforms", "Select at least one platform");
+    }
+    // Money rules — any budget above $0; there is no minimum budget.
     const budgetNum = Number(budget);
-    if (!Number.isFinite(budgetNum) || budgetNum < BRAND_MIN_BUDGET) {
-      return fail("budget", `Error: Minimum budget is $${BRAND_MIN_BUDGET}`);
+    if (!Number.isFinite(budgetNum) || budgetNum <= 0) {
+      return fail("budget", "Error: Budget must be more than $0");
     }
     const rateNum = Number(ratePer1k);
     if (!Number.isFinite(rateNum) || rateNum < MIN_RATE_PER_1K) {
@@ -118,7 +134,10 @@ export default function BrandForm({
           brandName: brandName.trim(),
           logoUrl: logoUrl.trim() || null,
           title: title.trim(),
-          platform,
+          platforms,
+          // Legacy single-platform column: "all" when all three are
+          // chosen, otherwise the first chosen platform.
+          platform: platforms.length === 3 ? "all" : platforms[0],
           ratePer1k: rateNum,
           budgetTotal: budgetNum,
           maxPayoutPerPost: capNum,
@@ -160,8 +179,8 @@ export default function BrandForm({
           Your campaign is under review. Admin will approve it soon.
         </p>
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-fg/50">
-          Once approved and funded, your campaign goes live to creators on
-          TikTok, Instagram and YouTube.
+          Once approved and funded, your campaign goes live to creators
+          on the platforms you chose.
         </p>
       </div>
     );
@@ -176,8 +195,8 @@ export default function BrandForm({
         Create your campaign
       </h2>
       <p className="mt-1 text-sm text-fg/60">
-        Minimum budget ${BRAND_MIN_BUDGET}. Your campaign stays pending until
-        the admin approves it and the budget is funded.
+        Set any budget — your campaign stays pending until the admin
+        approves it and the budget is funded.
       </p>
       {!isLoggedIn && (
         <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
@@ -223,18 +242,45 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.title}</span>
           )}
         </label>
-        <label className="block text-sm font-bold text-fg">
-          Platform
-          <select
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value)}
-            className={inputCls}
-          >
-            <option value="tiktok">TikTok</option>
-            <option value="instagram">Instagram</option>
-            <option value="youtube">YouTube</option>
-          </select>
-        </label>
+        <div className="block text-sm font-bold text-fg md:col-span-2">
+          Platforms
+          <span className="mt-1 block text-xs font-medium text-fg/50">
+            Pick at least one — creators post on the platforms you choose.
+          </span>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {(
+              [
+                { key: "tiktok", label: "TikTok", Icon: TikTokIcon },
+                { key: "instagram", label: "Instagram", Icon: InstagramIcon },
+                { key: "youtube", label: "YouTube", Icon: YouTubeIcon },
+              ] as const
+            ).map(({ key, label, Icon }) => {
+              const checked = platforms.includes(key);
+              return (
+                <label
+                  key={key}
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                    checked
+                      ? "border-lime/60 bg-lime/10 text-fg"
+                      : "border-fg/15 bg-ink text-fg/70 hover:border-fg/30"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => togglePlatform(key)}
+                    className="h-5 w-5 shrink-0 accent-[#C6FF00]"
+                  />
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {label}
+                </label>
+              );
+            })}
+          </div>
+          {fieldErrors.platforms && (
+            <span className={errCls}>{fieldErrors.platforms}</span>
+          )}
+        </div>
         <label className="block text-sm font-bold text-fg">
           Rate per 1k views (USD)
           <input
@@ -254,10 +300,10 @@ export default function BrandForm({
           )}
         </label>
         <label className="block text-sm font-bold text-fg">
-          Total Budget (USD, min ${BRAND_MIN_BUDGET})
+          Total Budget (USD)
           <input
             type="number"
-            min={BRAND_MIN_BUDGET}
+            min={1}
             step="1"
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
@@ -265,7 +311,7 @@ export default function BrandForm({
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium text-fg/50">
-            Minimum ${BRAND_MIN_BUDGET} — funded upfront before launch.
+            Any amount above $0 — funded upfront before launch.
           </span>
           {fieldErrors.budget && (
             <span className={errCls}>{fieldErrors.budget}</span>
@@ -395,7 +441,7 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
       >
         {busy ? (
           <>
-            <Spinner /> Submitting…
+            <Spinner /> Loading...
           </>
         ) : (
           "Submit campaign for review"

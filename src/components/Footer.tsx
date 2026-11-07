@@ -35,7 +35,7 @@ export default async function Footer() {
           <p className="text-sm font-bold text-fg">Brands</p>
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             <li><Link href="/brands" className="hover:text-lime">For Brands</Link></li>
-            <li><Link href="/brands" className="hover:text-lime">Launch a campaign ($500 min)</Link></li>
+            <li><Link href="/brands" className="hover:text-lime">Launch a campaign</Link></li>
             <li><Link href="/support" className="hover:text-lime">Contact Support</Link></li>
           </ul>
         </div>

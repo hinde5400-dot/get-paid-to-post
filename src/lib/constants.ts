@@ -39,7 +39,7 @@ export const PLATFORM_LABELS: Record<string, string> = {
 };
 
 // Money rules — encode these everywhere, never hard-code different numbers.
-export const BRAND_MIN_BUDGET = 500; // USD, minimum to launch a campaign
+// There is NO minimum campaign budget: a brand sets any budget above $0.
 export const MIN_RATE_PER_1K = 0.75; // USD, minimum rate per 1,000 views
 export const MAX_PAYOUT_DEFAULT = 75; // USD, default max payout per post
 export const MAX_PAYOUT_MIN = 10; // USD, minimum max payout per post

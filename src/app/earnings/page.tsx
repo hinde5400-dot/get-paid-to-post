@@ -33,8 +33,7 @@ export default async function EarningsPage() {
           available to withdraw. Payouts are USDT only.
         </p>
         <p className="mt-2 max-w-2xl rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
-          You can withdraw anytime when your Withdrawable balance is above{" "}
-          {formatUSD(WITHDRAW_MIN)} — no need to wait for a campaign to end.
+          After campaign ends and views are verified, your earnings go to Pending for 72-hour hold, then become Withdrawable.
         </p>
       </div>
 
@@ -44,9 +43,7 @@ export default async function EarningsPage() {
           <p className="mt-1 text-3xl font-black text-fg">
             {formatUSD(total)}
           </p>
-          <p className="mt-4 text-xs text-fg/50">
-            Withdrawable + pending (in {HOLD_HOURS}-hour hold).
-          </p>
+          <p className="mt-4 text-xs text-fg/50">Withdrawable + Pending.</p>
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
           <p className="text-xs text-fg/50">Pending Balance</p>
@@ -54,7 +51,7 @@ export default async function EarningsPage() {
             {formatUSD(pending)}
           </p>
           <p className="mt-4 text-xs text-fg/50">
-            Approved earnings become available after the {HOLD_HOURS}-hour hold.
+            Approved earnings become available after 72-hour hold.
           </p>
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
@@ -65,11 +62,9 @@ export default async function EarningsPage() {
           <div className="mt-4">
             <WithdrawButton available={available} />
           </div>
-          {available < WITHDRAW_MIN && (
-            <p className="mt-2 text-xs text-fg/50">
-              Minimum withdrawal is {formatUSD(WITHDRAW_MIN)}.
-            </p>
-          )}
+          <p className="mt-2 text-xs text-fg/50">
+            Ready to withdraw. Minimum $10.00.
+          </p>
         </div>
       </div>
 

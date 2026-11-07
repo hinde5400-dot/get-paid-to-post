@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Dropdown, { type DropdownOption } from "./Dropdown";
+import Spinner from "./Spinner";
 import { TikTokIcon, InstagramIcon, YouTubeIcon } from "./PlatformIcons";
 
 /**
@@ -57,11 +59,21 @@ export default function CampaignFilters() {
   const searchParams = useSearchParams();
   const platform = searchParams.get("platform") ?? "all";
   const sort = searchParams.get("sort") ?? "best";
+  const [pending, setPending] = useState(false);
+  const paramsString = searchParams.toString();
+
+  // The list re-filters server-side after a selection, so show
+  // "Loading..." until the new params actually arrive.
+  useEffect(() => {
+    setPending(false);
+  }, [paramsString]);
 
   function update(patch: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [k, v] of Object.entries(patch)) params.set(k, v);
     const qs = params.toString();
+    if (qs === searchParams.toString()) return;
+    setPending(true);
     router.push(`/campaigns${qs ? `?${qs}` : ""}`);
   }
 
@@ -89,6 +101,11 @@ export default function CampaignFilters() {
           {SORT_EXPLAIN[sort] ?? SORT_EXPLAIN.best}
         </p>
       </div>
+      {pending && (
+        <p className="flex items-center gap-2 px-1 text-xs font-bold text-fg/60 sm:col-span-2">
+          <Spinner className="h-3.5 w-3.5" /> Loading...
+        </p>
+      )}
     </div>
   );
 }

@@ -245,7 +245,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
         >
           {busy ? (
             <>
-              <Spinner /> Creating account…
+              <Spinner /> Loading...
             </>
           ) : (
             "Sign up free"

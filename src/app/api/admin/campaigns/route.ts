@@ -10,7 +10,7 @@ interface CampaignReviewBody {
 /**
  * Owner-only campaign approval (mirrors api/admin/review).
  * Approve → status "live" AND is_funded = true: approval means the
- * owner confirmed the brand's $500+ budget actually reached him, and
+ * owner confirmed the brand's budget actually reached him, and
  * Discover only lists campaigns that are BOTH funded and live.
  * Reject → status "rejected": the campaign is never shown anywhere.
  */

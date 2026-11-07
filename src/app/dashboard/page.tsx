@@ -77,7 +77,9 @@ export default async function DashboardPage() {
           <p className="mt-1 text-2xl font-black text-fg">
             {formatUSD(wallet?.pending_balance ?? 0)}
           </p>
-          <p className="mt-1 text-xs text-fg/50">72-hour hold</p>
+          <p className="mt-1 text-xs text-fg/50">
+            Approved earnings become available after 72-hour hold.
+          </p>
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
           <p className="text-xs text-fg/50">Withdrawable Balance</p>

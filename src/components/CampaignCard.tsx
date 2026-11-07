@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Campaign } from "@/lib/types";
+import { campaignPlatforms } from "@/lib/types";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
 import CampaignBanner, { BrandLogoTile } from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
@@ -120,7 +121,10 @@ export default function CampaignCard({
 
         {/* Platform chips + spots + per-post cap */}
         <div className="mt-4 flex items-center justify-between gap-2">
-          <PlatformChips platform={campaign.platform} />
+          <PlatformChips
+            platform={campaign.platform}
+            platforms={campaignPlatforms(campaign)}
+          />
           <span className="shrink-0 rounded-full bg-lime/15 px-2.5 py-1 text-[11px] font-black text-lime">
             Up to {formatUSD(campaign.max_payout_per_post)} / post
           </span>

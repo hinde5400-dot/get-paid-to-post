@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { Campaign } from "@/lib/types";
+import { campaignPlatforms } from "@/lib/types";
 import type { CampaignStats } from "@/lib/data";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
 import CampaignBanner from "./CampaignBanner";
@@ -137,7 +138,10 @@ export default function CampaignModal({
           </div>
 
           <div className="mt-4 flex items-center justify-between">
-            <PlatformChips platform={campaign.platform} />
+            <PlatformChips
+              platform={campaign.platform}
+              platforms={campaignPlatforms(campaign)}
+            />
             {approvalPct !== null && (
               <span className="text-sm font-bold text-fg">
                 <span className="text-lime">{approvalPct}%</span> approved

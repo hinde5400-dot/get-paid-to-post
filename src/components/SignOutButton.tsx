@@ -28,7 +28,7 @@ export default function SignOutButton({
     >
       {busy ? (
         <>
-          <Spinner /> Logging out…
+          <Spinner /> Loading...
         </>
       ) : (
         "Log out"

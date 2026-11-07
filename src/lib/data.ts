@@ -1,7 +1,13 @@
 import { getServerClient } from "./supabase/server";
 import type { Campaign, Submission, Wallet, Withdrawal } from "./types";
+import { platformsFromRow } from "./types";
 
 function mapCampaign(row: Record<string, unknown>): Campaign {
+  // Platforms (migration 0012): the platforms array when present,
+  // otherwise the legacy single platform column. The legacy platform
+  // field keeps the old convention — 'all' when all three are chosen,
+  // otherwise the first chosen platform — so old code paths keep working.
+  const platforms = platformsFromRow(row);
   return {
     id: String(row.id),
     brand_name: String(row.brand_name ?? ""),
@@ -15,7 +21,8 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     spots_left: Number(row.spots_left ?? 0),
     spots_total: Number(row.spots_total ?? 0),
     category: String(row.category ?? "General"),
-    platform: (row.platform as Campaign["platform"]) ?? "all",
+    platform: platforms.length === 3 ? "all" : platforms[0],
+    platforms,
     description: String(row.description ?? ""),
     rules: (row.rules as string | null) ?? null,
     base_pay: Number(row.base_pay ?? 10),
@@ -83,8 +90,8 @@ export function isCampaignLive(c: Campaign, now: number = Date.now()): boolean {
 /**
  * Live funded campaigns from Supabase only. There are no sample or
  * fallback campaigns: a campaign appears here only after a brand has
- * funded $500+ and it is live. When none exist, this returns [] and the
- * site shows an honest "No funded campaigns yet" empty state.
+ * funded its budget and it is live. When none exist, this returns []
+ * and the site shows an honest "No funded campaigns yet" empty state.
  */
 export async function getCampaigns(): Promise<Campaign[]> {
   const supabase = getServerClient();

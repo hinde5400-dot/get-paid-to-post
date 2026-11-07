@@ -266,7 +266,7 @@ export default function OnboardingPage() {
             >
               {busyKey === key ? (
                 <>
-                  <Spinner /> Connecting…
+                  <Spinner /> Loading...
                 </>
               ) : connected[key] ? (
                 `Update ${name} link`

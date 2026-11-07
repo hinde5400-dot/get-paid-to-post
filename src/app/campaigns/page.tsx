@@ -9,7 +9,8 @@ import { getCurrentUser } from "@/lib/auth";
 import CampaignGrid from "@/components/CampaignGrid";
 import CampaignFilters from "@/components/CampaignFilters";
 import AdSlot from "@/components/AdSlot";
-import type { Campaign } from "@/lib/types";
+import type { Campaign, Platform } from "@/lib/types";
+import { campaignPlatforms } from "@/lib/types";
 
 function hrefWith(
   searchParams: Record<string, string | string[] | undefined>,
@@ -44,9 +45,10 @@ export default async function CampaignsPage({
     }
   }
   if (searchParams.platform && searchParams.platform !== "all") {
-    list = list.filter(
-      (c) => c.platform === searchParams.platform || c.platform === "all"
-    );
+    // A multi-platform campaign appears under every platform it
+    // accepts (migration 0012) — not just its first one.
+    const wanted = searchParams.platform as Platform;
+    list = list.filter((c) => campaignPlatforms(c).includes(wanted));
   }
   if (searchParams.sort === "highest") {
     list.sort((a, b) => b.rate_per_1m - a.rate_per_1m);

@@ -3,6 +3,7 @@ import { Archivo, Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BottomNav from "@/components/BottomNav";
+import NavigationLoader from "@/components/NavigationLoader";
 import ToastProvider from "@/components/Toast";
 import { BRAND_NAME, SITE_URL } from "@/lib/constants";
 import "./globals.css";
@@ -56,6 +57,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-ink font-sans text-fg antialiased">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <ToastProvider>
+          <NavigationLoader />
           <Navbar />
           <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-24 pt-6 md:pb-10">
             {children}

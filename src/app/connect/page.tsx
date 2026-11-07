@@ -167,7 +167,7 @@ export default function ConnectPage() {
         >
           {busy ? (
             <>
-              <Spinner /> Saving…
+              <Spinner /> Loading...
             </>
           ) : (
             "Save & go to dashboard"

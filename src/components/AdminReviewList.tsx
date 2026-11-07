@@ -195,7 +195,7 @@ export default function AdminReviewList({
             >
               {busy === s.id && busyAction === "approve" ? (
                 <>
-                  <Spinner /> Working…
+                  <Spinner /> Loading...
                 </>
               ) : (
                 "Approve"
@@ -208,7 +208,7 @@ export default function AdminReviewList({
             >
               {busy === s.id && busyAction === "reject" ? (
                 <>
-                  <Spinner /> Working…
+                  <Spinner /> Loading...
                 </>
               ) : (
                 "Reject"
@@ -221,7 +221,7 @@ export default function AdminReviewList({
             >
               {busy === s.id && busyAction === "revoke" ? (
                 <>
-                  <Spinner /> Working…
+                  <Spinner /> Loading...
                 </>
               ) : (
                 "Revoke"
@@ -234,7 +234,7 @@ export default function AdminReviewList({
             >
               {busy === `block-${s.user_id}` && busyAction === "block" ? (
                 <>
-                  <Spinner /> Working…
+                  <Spinner /> Loading...
                 </>
               ) : (
                 "Block creator"

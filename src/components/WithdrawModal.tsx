@@ -186,7 +186,7 @@ export default function WithdrawModal({
             >
               {busy ? (
                 <>
-                  <Spinner /> Processing…
+                  <Spinner /> Loading...
                 </>
               ) : (
                 "Confirm withdrawal"

@@ -89,7 +89,7 @@ export default async function AdminPage() {
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
           Approve a campaign <strong className="text-fg">only after the
-          brand&apos;s $500+ budget has actually reached you</strong> —
+          brand&apos;s budget has actually reached you</strong> —
           approving marks it funded and live on Discover. Rejecting hides it
           forever; it is never shown anywhere.
         </p>

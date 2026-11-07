@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { Campaign, Platform } from "@/lib/types";
+import { campaignPlatforms } from "@/lib/types";
 import type { CampaignStats } from "@/lib/data";
 import {
   TikTokIcon,
@@ -50,10 +51,9 @@ export default function CampaignDetailTabs({
   about: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("home");
-  const platforms: Platform[] =
-    campaign.platform === "all"
-      ? ["tiktok", "instagram", "youtube"]
-      : [campaign.platform];
+  // Platforms this campaign accepts (migration 0012): the chosen
+  // list, falling back to the legacy single platform column.
+  const platforms = campaignPlatforms(campaign);
 
   function joinShoot() {
     setTab("home");

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Campaign, Platform } from "@/lib/types";
+import { campaignPlatforms, platformNamesText } from "@/lib/types";
 import {
   COOLDOWN_MS,
   HOW_MADE_MIN_WORDS,
@@ -28,6 +29,12 @@ function formatRemaining(ms: number): string {
 }
 
 const CONFETTI_COLORS = ["#C6FF00", "#FFFFFF", "#7C5CFF", "#FF6B9D", "#3ED598"];
+
+const PLATFORM_INPUTS: { key: Platform; placeholder: string }[] = [
+  { key: "tiktok", placeholder: "https://www.tiktok.com/@you/video/..." },
+  { key: "instagram", placeholder: "https://www.instagram.com/reel/..." },
+  { key: "youtube", placeholder: "https://www.youtube.com/shorts/..." },
+];
 
 export default function SubmitBundleForm({
   campaign,
@@ -61,10 +68,17 @@ export default function SubmitBundleForm({
 
   const words = countWords(howMade);
   const proofFilled = proof.map((p) => p.trim()).filter(Boolean);
+  // Platforms this campaign accepts (migration 0012). Only these
+  // inputs are shown, and a link on any other platform is rejected.
+  // Bundle rule: at least 2 links when the campaign runs on 2+ platforms,
+  // 1 link when it runs on a single platform.
+  const allowedPlatforms = campaignPlatforms(campaign);
+  const minLinks = Math.min(2, allowedPlatforms.length);
+  const platformNames = platformNamesText(allowedPlatforms);
 
   const cooldowns = useMemo(() => {
     const map = new Map<Platform, number>();
-    for (const p of ["tiktok", "instagram", "youtube"] as Platform[]) {
+    for (const p of allowedPlatforms) {
       const last = lastByPlatform.find((l) => l.platform === p);
       if (!last) continue;
       const nextAllowed =
@@ -72,7 +86,7 @@ export default function SubmitBundleForm({
       if (nextAllowed > now) map.set(p, nextAllowed - now);
     }
     return map;
-  }, [lastByPlatform, now]);
+  }, [lastByPlatform, now, allowedPlatforms]);
 
   const maxReached = userPostCount >= campaign.max_posts;
 
@@ -89,18 +103,32 @@ export default function SubmitBundleForm({
       showError(`You have already submitted the maximum of ${campaign.max_posts} posts for this campaign.`);
       return;
     }
+    const linkValues: Record<Platform, string> = {
+      tiktok,
+      instagram,
+      youtube,
+    };
     const links: { platform: Platform; url: string }[] = [];
-    if (tiktok.trim()) links.push({ platform: "tiktok", url: tiktok.trim() });
-    if (instagram.trim())
-      links.push({ platform: "instagram", url: instagram.trim() });
-    if (youtube.trim())
-      links.push({ platform: "youtube", url: youtube.trim() });
+    for (const p of allowedPlatforms) {
+      const url = linkValues[p].trim();
+      if (url) links.push({ platform: p, url });
+    }
 
-    if (links.length < 2) {
-      showError("Submit at least your TikTok and Instagram links together — they are reviewed and paid as one bundle.");
+    if (links.length < minLinks) {
+      showError(
+        minLinks === 1
+          ? `Submit your ${platformNames} link.`
+          : `Submit at least ${minLinks} links on the campaign's platforms (${platformNames}) together — they are reviewed and paid as one bundle.`
+      );
       return;
     }
     for (const l of links) {
+      if (!allowedPlatforms.includes(l.platform)) {
+        showError(
+          `This campaign only accepts clips on ${platformNames}.`
+        );
+        return;
+      }
       const check = validatePostUrl(l.url, l.platform);
       if (!check.ok) {
         showError(check.error ?? "Invalid link.");
@@ -163,8 +191,12 @@ export default function SubmitBundleForm({
     <div className="rounded-3xl border border-fg/10 bg-card p-6">
       <h2 className="text-xl font-extrabold text-fg">Submit a post</h2>
       <p className="mt-1 text-sm text-fg/60">
-        TikTok + Instagram together, YouTube optional — one bundle, reviewed
-        and paid together. Max {campaign.max_posts} posts per campaign.
+        {allowedPlatforms.length === 1
+          ? `Post on ${platformNames} and submit your link below — one post, reviewed and paid.`
+          : allowedPlatforms.length === 2
+            ? `Post on ${platformNames} together — submit both links as one bundle, reviewed and paid together.`
+            : `Post on any 2 of ${platformNames} — submit the links as one bundle, reviewed and paid together.`}{" "}
+        Max {campaign.max_posts} posts per campaign.
       </p>
 
       {cooldowns.size > 0 && (
@@ -189,33 +221,34 @@ export default function SubmitBundleForm({
       )}
 
       <div className="mt-5 space-y-4">
-        <label className="block text-sm font-bold text-fg">
-          TikTok link *
-          <input
-            value={tiktok}
-            onChange={(e) => setTiktok(e.target.value)}
-            placeholder="https://www.tiktok.com/@you/video/..."
-            className={inputCls}
-          />
-        </label>
-        <label className="block text-sm font-bold text-fg">
-          Instagram link *
-          <input
-            value={instagram}
-            onChange={(e) => setInstagram(e.target.value)}
-            placeholder="https://www.instagram.com/reel/..."
-            className={inputCls}
-          />
-        </label>
-        <label className="block text-sm font-bold text-fg">
-          YouTube link <span className="font-medium text-fg/50">(optional)</span>
-          <input
-            value={youtube}
-            onChange={(e) => setYoutube(e.target.value)}
-            placeholder="https://www.youtube.com/shorts/..."
-            className={inputCls}
-          />
-        </label>
+        {allowedPlatforms.map((p) => {
+          const input = PLATFORM_INPUTS.find((i) => i.key === p)!;
+          const linkState: Record<
+            Platform,
+            [string, (v: string) => void]
+          > = {
+            tiktok: [tiktok, setTiktok],
+            instagram: [instagram, setInstagram],
+            youtube: [youtube, setYoutube],
+          };
+          const [value, setValue] = linkState[p];
+          return (
+            <label key={p} className="block text-sm font-bold text-fg">
+              {PLATFORM_LABELS[p]} link{" "}
+              {allowedPlatforms.length <= 2 ? (
+                "*"
+              ) : (
+                <span className="font-medium text-fg/50">(pick any 2)</span>
+              )}
+              <input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={input.placeholder}
+                className={inputCls}
+              />
+            </label>
+          );
+        })}
 
         <label className="block text-sm font-bold text-fg">
           How you made this post{" "}
@@ -289,7 +322,7 @@ export default function SubmitBundleForm({
           >
             {busy ? (
               <>
-                <Spinner /> Submitting…
+                <Spinner /> Loading...
               </>
             ) : (
               "Submit bundle"

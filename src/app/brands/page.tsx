@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import BrandForm from "@/components/BrandForm";
-import { BRAND_MIN_BUDGET } from "@/lib/constants";
 
 const FUNDING_STEPS = [
   { n: "1", t: "Create your campaign", d: "Fill in the form below: brand, logo, title, rate per 1K views, budget and brief." },
@@ -44,8 +43,8 @@ export default async function BrandsPage() {
               I am a Brand
             </h2>
             <p className="mt-1 text-sm leading-relaxed text-fg/60">
-              Upload your brand and campaign below. Fund from $
-              {BRAND_MIN_BUDGET} upfront and pay only for verified views.
+              Upload your brand and campaign below. Fund your chosen
+              budget upfront and pay only for verified views.
             </p>
             {user ? (
               <a
@@ -104,7 +103,7 @@ export default async function BrandsPage() {
           ))}
           <div className="flex flex-col justify-center rounded-2xl bg-lime p-5">
             <p className="text-lg font-black text-ink">
-              Minimum budget: ${BRAND_MIN_BUDGET}
+              Any budget — you decide
             </p>
             <p className="mt-1 text-sm font-medium text-ink/70">
               A campaign only goes live after its budget is funded. Unspent

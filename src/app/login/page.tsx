@@ -223,7 +223,7 @@ function LoginForm() {
             `Try again in ${lockLeft}s`
           ) : busy ? (
             <>
-              <Spinner /> Logging in…
+              <Spinner /> Loading...
             </>
           ) : (
             "Log in"

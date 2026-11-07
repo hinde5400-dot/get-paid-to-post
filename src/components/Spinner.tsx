@@ -1,6 +1,6 @@
 /** Small loading spinner for async buttons — a spinning ring that
- * inherits the button's text colour. Used with a "Saving…" /
- * "Processing…" label while the button is disabled. */
+ * inherits the button's text colour. Used with a "Loading..." label
+ * while the button is disabled. */
 export default function Spinner({
   className = "h-4 w-4",
 }: {

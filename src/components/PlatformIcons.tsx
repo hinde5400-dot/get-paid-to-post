@@ -43,16 +43,23 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 /** Small round platform chips, e.g. TikTok + Instagram + YouTube. */
 export function PlatformChips({
   platform,
+  platforms,
   size = "md",
 }: {
   platform: Platform | "all";
+  /** Chosen platforms (migration 0012) — when given, these are shown. */
+  platforms?: Platform[];
   size?: "sm" | "md";
 }) {
-  const platforms: Platform[] =
-    platform === "all" ? ["tiktok", "instagram", "youtube"] : [platform];
+  const list: Platform[] =
+    platforms && platforms.length > 0
+      ? platforms
+      : platform === "all"
+        ? ["tiktok", "instagram", "youtube"]
+        : [platform];
   return (
     <span className="flex items-center gap-1.5">
-      {platforms.map((p) => {
+      {list.map((p) => {
         const Icon = PLATFORM_ICONS[p];
         return (
           <span

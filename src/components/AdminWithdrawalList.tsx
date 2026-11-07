@@ -100,7 +100,7 @@ export default function AdminWithdrawalList({
               >
                 {busy === w.id && busyAction === "approve" ? (
                   <>
-                    <Spinner /> Working…
+                    <Spinner /> Loading...
                   </>
                 ) : (
                   "Approve"
@@ -114,7 +114,7 @@ export default function AdminWithdrawalList({
               >
                 {busy === w.id && busyAction === "reject" ? (
                   <>
-                    <Spinner /> Working…
+                    <Spinner /> Loading...
                   </>
                 ) : (
                   "Reject + refund"
@@ -132,7 +132,7 @@ export default function AdminWithdrawalList({
               >
                 {busy === w.id && busyAction === "paid" ? (
                   <>
-                    <Spinner /> Working…
+                    <Spinner /> Loading...
                   </>
                 ) : (
                   "Mark paid"
@@ -146,7 +146,7 @@ export default function AdminWithdrawalList({
               >
                 {busy === w.id && busyAction === "reject" ? (
                   <>
-                    <Spinner /> Working…
+                    <Spinner /> Loading...
                   </>
                 ) : (
                   "Reject + refund"

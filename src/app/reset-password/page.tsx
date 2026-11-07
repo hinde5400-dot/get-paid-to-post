@@ -171,7 +171,7 @@ export default function ResetPasswordPage() {
           >
             {busy ? (
               <>
-                <Spinner /> Saving…
+                <Spinner /> Loading...
               </>
             ) : (
               "Reset password"

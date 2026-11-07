@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Campaign } from "@/lib/types";
+import { campaignPlatforms } from "@/lib/types";
 import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { BrandLogoTile } from "./CampaignBanner";
@@ -12,7 +13,7 @@ import Spinner from "@/components/Spinner";
 /**
  * Owner-only pending-campaign review list (Admin Review page).
  * Each row shows Brand Name, Budget, Rate, Platform and funded status,
- * with Approve / Reject buttons. Approve only after the brand's $500+
+ * with Approve / Reject buttons. Approve only after the brand's
  * budget has actually reached the owner.
  */
 export default function AdminCampaignList({
@@ -95,7 +96,9 @@ export default function AdminCampaignList({
                 Platform
               </p>
               <p className="mt-1 font-display text-base font-black text-fg">
-                {PLATFORM_LABELS[c.platform] ?? c.platform}
+                {campaignPlatforms(c)
+                  .map((p) => PLATFORM_LABELS[p])
+                  .join(" · ")}
               </p>
             </div>
           </div>
@@ -115,7 +118,7 @@ export default function AdminCampaignList({
             >
               {busyId === c.id ? (
                 <>
-                  <Spinner /> Working…
+                  <Spinner /> Loading...
                 </>
               ) : (
                 "Approve — go live"

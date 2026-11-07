@@ -7,7 +7,7 @@ const STEPS = [
   { n: "2", t: "Connect your profiles", d: "Add your TikTok, Instagram and YouTube profile links so your clips can be matched to you." },
   { n: "3", t: "Pick a funded campaign", d: "Browse live campaigns, read the brief and the rate, and choose one that fits your style." },
   { n: "4", t: "Make your clip", d: "Film vertical 9:16, add captions, and hook viewers in the first 3 seconds. Keep it original and on-brief." },
-  { n: "5", t: "Post and submit", d: "Post on TikTok and Instagram together (YouTube optional) and submit the links as one bundle, with proof and a short note on how you made it." },
+  { n: "5", t: "Post and submit", d: "Post on the campaign's platforms and submit the links as one bundle, with proof and a short note on how you made it." },
   { n: "6", t: "Wait for approval", d: "Submissions stay Pending at $0 until approved. Approved earnings move into a 72-hour hold, then to your available balance." },
   { n: "7", t: "Withdraw your earnings", d: "Withdraw from $10 in USDT (TRC20 or BEP20). A 7% fee applies at withdrawal." },
 ];
@@ -47,7 +47,7 @@ export default async function HowItWorksPage() {
           <li>• Approved earnings sit in a 72-hour hold, then become available.</li>
           <li>• Minimum withdrawal: $10. Withdrawal fee: 7%.</li>
           <li>• Payouts: USDT (TRC20 or BEP20) only.</li>
-          <li>• Brands fund every campaign upfront — minimum $500 to launch.</li>
+          <li>• Brands fund every campaign upfront — any budget, set by the brand.</li>
           <li>• One clip per platform every 2 hours, max 7 posts per campaign.</li>
         </ul>
       </div>

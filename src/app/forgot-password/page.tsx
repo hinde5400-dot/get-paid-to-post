@@ -101,7 +101,7 @@ export default function ForgotPasswordPage() {
           >
             {busy ? (
               <>
-                <Spinner /> Sending…
+                <Spinner /> Loading...
               </>
             ) : (
               "Send reset link"

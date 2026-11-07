@@ -1,5 +1,59 @@
 export type Platform = "tiktok" | "instagram" | "youtube";
 
+export const ALL_PLATFORMS: Platform[] = ["tiktok", "instagram", "youtube"];
+
+/**
+ * Platforms a campaign accepts clips on (migration 0012).
+ * New rows store the chosen platforms in campaigns.platforms
+ * (text[]); rows written before that migration have platforms null
+ * and fall back to the legacy single platform column — "all" means
+ * all three, anything else means that one platform.
+ */
+export function campaignPlatforms(campaign: {
+  platforms?: Platform[] | null;
+  platform: Platform | "all";
+}): Platform[] {
+  if (Array.isArray(campaign.platforms) && campaign.platforms.length > 0) {
+    const valid = campaign.platforms.filter(
+      (p): p is Platform =>
+        p === "tiktok" || p === "instagram" || p === "youtube"
+    );
+    if (valid.length > 0) return [...new Set(valid)];
+  }
+  return campaign.platform === "all"
+    ? [...ALL_PLATFORMS]
+    : [campaign.platform];
+}
+
+/** Same fallback, for raw Supabase rows (API routes, data.ts). */
+export function platformsFromRow(
+  row: Record<string, unknown>
+): Platform[] {
+  const raw = row.platforms;
+  if (Array.isArray(raw) && raw.length > 0) {
+    const valid = (raw as unknown[]).filter(
+      (p): p is Platform =>
+        p === "tiktok" || p === "instagram" || p === "youtube"
+    );
+    if (valid.length > 0) return [...new Set(valid)];
+  }
+  const legacy = String(row.platform ?? "all");
+  return legacy === "all"
+    ? [...ALL_PLATFORMS]
+    : legacy === "tiktok" || legacy === "instagram" || legacy === "youtube"
+      ? [legacy]
+      : [...ALL_PLATFORMS];
+}
+
+/** "TikTok", "TikTok and Instagram", "TikTok, Instagram and YouTube". */
+export function platformNamesText(platforms: Platform[]): string {
+  const names = platforms.map(
+    (p) => (p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube")
+  );
+  if (names.length <= 1) return names[0] ?? "TikTok";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 export type SubmissionStatus =
   | "pending"
   | "approved"
@@ -18,6 +72,8 @@ export interface Campaign {
   spots_total: number;
   category: string;
   platform: Platform | "all";
+  /** Chosen platforms (migration 0012); null on rows written before it. */
+  platforms?: Platform[] | null;
   description: string;
   rules?: string | null;
   base_pay: number;

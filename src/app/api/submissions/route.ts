@@ -10,6 +10,7 @@ import {
 } from "@/lib/constants";
 import { countWords, validatePostUrl } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
+import { platformsFromRow, platformNamesText } from "@/lib/types";
 
 interface BundleBody {
   campaignId?: string;
@@ -60,7 +61,16 @@ export async function POST(request: Request) {
     );
   }
 
-  // TikTok + Instagram together, YouTube optional — one bundle.
+  // Platforms this campaign accepts (migration 0012): the platforms
+  // array when present, otherwise the legacy single platform column.
+  // Bundle rule: at least 2 links when the campaign runs on 2+
+  // platforms, 1 link when it runs on a single platform.
+  const allowedPlatforms = platformsFromRow(
+    campaign as Record<string, unknown>
+  );
+  const minLinks = Math.min(2, allowedPlatforms.length);
+  const platformNames = platformNamesText(allowedPlatforms);
+
   const links: { platform: Platform; url: string }[] = [];
   if (body.tiktok?.trim())
     links.push({ platform: "tiktok", url: body.tiktok.trim() });
@@ -69,16 +79,26 @@ export async function POST(request: Request) {
   if (body.youtube?.trim())
     links.push({ platform: "youtube", url: body.youtube.trim() });
 
-  if (links.length < 2) {
+  if (links.length < minLinks) {
     return NextResponse.json(
       {
         error:
-          "Submit at least your TikTok and Instagram links together — they are reviewed and paid as one bundle.",
+          minLinks === 1
+            ? `Submit your ${platformNames} link.`
+            : `Submit at least ${minLinks} links on the campaign's platforms (${platformNames}) together — they are reviewed and paid as one bundle.`,
       },
       { status: 400 }
     );
   }
   for (const l of links) {
+    if (!allowedPlatforms.includes(l.platform)) {
+      return NextResponse.json(
+        {
+          error: `This campaign only accepts clips on ${platformNames}.`,
+        },
+        { status: 400 }
+      );
+    }
     const check = validatePostUrl(l.url, l.platform);
     if (!check.ok) {
       return NextResponse.json({ error: check.error }, { status: 400 });
