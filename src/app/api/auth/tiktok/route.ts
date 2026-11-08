@@ -6,6 +6,10 @@ import { SITE_URL, TIKTOK_REDIRECT_URI, TIKTOK_SCOPES } from "@/lib/constants";
 /**
  * GET /api/auth/tiktok — start TikTok Login Kit (OAuth 2.0).
  *
+ * NOTE 2026-11-08: redeploy-with-cache kept sending the OLD client key,
+ * so this file was touched to force a fresh build that picks up the
+ * updated TIKTOK_CLIENT_KEY from Vercel.
+ *
  * The creator must be logged in. We generate a random `state`, keep it
  * in a short-lived httpOnly cookie (CSRF defence), and send the creator
  * to TikTok's consent page. TikTok redirects back to
