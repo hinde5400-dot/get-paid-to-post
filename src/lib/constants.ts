@@ -8,6 +8,12 @@ export const BRAND_TAGLINE = "Post Clips. Get Paid Per View.";
 export const REPO_NAME = "get-paid-to-post";
 export const SITE_DOMAIN = "get-paid-to-post.vercel.app";
 export const SITE_URL = `https://${SITE_DOMAIN}`;
+// TikTok Login Kit — this exact URI must be registered in the TikTok
+// Developer app (Login Kit → Redirect URI). One wrong slash and the
+// login fails. The callback route lives at this path.
+export const TIKTOK_REDIRECT_URI = `${SITE_URL}/api/auth/tiktok/callback`;
+// Minimal scopes — only what reading a creator's own video views needs.
+export const TIKTOK_SCOPES = "user.info.basic,video.list";
 
 // Community — support runs on Discord only (no live chat on site).
 export const DISCORD_URL = "https://discord.gg/kyNcGQkE7y";

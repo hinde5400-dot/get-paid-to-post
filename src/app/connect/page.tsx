@@ -18,6 +18,16 @@ export default function ConnectPage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [tiktokStatus, setTiktokStatus] = useState<string | null>(null);
+  const [tiktokConnected, setTiktokConnected] = useState<string | null>(null);
+
+  // TikTok Login Kit returns here with ?tiktok=<status> (see
+  // /api/auth/tiktok/callback). Read it from the URL so the page can
+  // show what happened without a Suspense boundary.
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get("tiktok");
+    if (status) setTiktokStatus(status);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -46,6 +56,21 @@ export default function ConnectPage() {
         setTiktok(p.tiktok_url ?? "");
         setInstagram(p.instagram_url ?? "");
         setYoutube(p.youtube_url ?? "");
+      }
+      // Show the linked TikTok account, if one was saved through Login
+      // Kit. The table only exists after migration 0016 is run, so a
+      // missing table is ignored here instead of breaking the page.
+      try {
+        const { data: conn } = await supabase
+          .from("tiktok_connections")
+          .select("username, display_name")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const c = conn as { username?: string | null; display_name?: string | null } | null;
+        if (c) setTiktokConnected(c.username ?? c.display_name ?? "your TikTok account");
+      } catch {
+        // Table not set up yet — the profile-link form still works.
       }
       setLoading(false);
     }
@@ -124,6 +149,39 @@ export default function ConnectPage() {
         Step 2 — paste your TikTok, Instagram and YouTube profile links so
         your submitted clips can be matched to you.
       </p>
+      {tiktokStatus && (
+        <p
+          className={`mt-4 rounded-xl px-4 py-2.5 text-sm font-semibold ${
+            tiktokStatus === "connected"
+              ? "bg-lime/15 text-lime"
+              : "bg-red-500/15 text-red-300"
+          }`}
+        >
+          {tiktokStatus === "connected"
+            ? "TikTok connected — your account is linked."
+            : tiktokStatus === "not_configured"
+              ? "TikTok login is not set up yet — the site owner still needs to add the TikTok keys."
+              : tiktokStatus === "save_failed"
+                ? "TikTok login worked, but saving the connection failed — please try again. If it keeps failing, the database setup may not be done yet."
+                : tiktokStatus === "denied"
+                  ? "You declined the TikTok login — nothing was connected."
+                  : "TikTok login did not complete — please try again."}
+        </p>
+      )}
+      <div className="mt-4 rounded-3xl border border-fg/10 bg-card p-6">
+        <h2 className="text-sm font-bold text-fg">Connect TikTok</h2>
+        <p className="mt-1 text-sm text-fg/60">
+          {tiktokConnected
+            ? `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
+            : "Log in with TikTok so we can verify your identity and read your own videos' view counts. We never post, edit or delete your videos."}
+        </p>
+        <a
+          href="/api/auth/tiktok"
+          className="mt-4 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark"
+        >
+          {tiktokConnected ? "Reconnect TikTok" : "Connect TikTok"}
+        </a>
+      </div>
       <form
         onSubmit={save}
         className="mt-6 rounded-3xl border border-fg/10 bg-card p-6"
