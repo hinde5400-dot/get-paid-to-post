@@ -4,22 +4,23 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/client";
-import Spinner from "@/components/Spinner";
 import { useToast } from "@/components/Toast";
 
-/** Step 2 after signup: connect TikTok / Instagram / YouTube profile links. */
+/**
+ * Step 2 after signup: connect TikTok / Instagram / YouTube accounts
+ * through OAuth — no manual profile links. TikTok works today via
+ * Login Kit; Instagram and YouTube cards are shown the same way and
+ * switch on when their logins are ready.
+ */
 export default function ConnectPage() {
   const router = useRouter();
   const { showError, showSuccess } = useToast();
-  const [tiktok, setTiktok] = useState("");
-  const [instagram, setInstagram] = useState("");
-  const [youtube, setYoutube] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
   const [tiktokStatus, setTiktokStatus] = useState<string | null>(null);
   const [tiktokConnected, setTiktokConnected] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   // TikTok Login Kit returns here with ?tiktok=<status> (see
   // /api/auth/tiktok/callback). Read it from the URL so the page can
@@ -42,21 +43,6 @@ export default function ConnectPage() {
         return;
       }
       setLoggedIn(true);
-      const { data: profile } = await supabase
-        .from("users")
-        .select("tiktok_url, instagram_url, youtube_url")
-        .eq("id", data.user.id)
-        .single();
-      const p = profile as {
-        tiktok_url?: string | null;
-        instagram_url?: string | null;
-        youtube_url?: string | null;
-      } | null;
-      if (p) {
-        setTiktok(p.tiktok_url ?? "");
-        setInstagram(p.instagram_url ?? "");
-        setYoutube(p.youtube_url ?? "");
-      }
       // Show the linked TikTok account, if one was saved through Login
       // Kit. The table only exists after migration 0016 is run, so a
       // missing table is ignored here instead of breaking the page.
@@ -68,58 +54,70 @@ export default function ConnectPage() {
           .limit(1)
           .maybeSingle();
         const c = conn as { username?: string | null; display_name?: string | null } | null;
-        if (c) setTiktokConnected(c.username ?? c.display_name ?? "your TikTok account");
+        if (c) {
+          const name = c.username ?? c.display_name;
+          if (name) {
+            setTiktokConnected(name);
+          } else {
+            // Row exists but TikTok never returned a name (the
+            // profile call failed during the callback) — re-read it
+            // from TikTok now so the card shows the real account.
+            try {
+              const res = await fetch("/api/auth/tiktok/profile");
+              if (res.ok) {
+                const p = (await res.json()) as {
+                  username?: string | null;
+                  display_name?: string | null;
+                };
+                const refreshed = p.username ?? p.display_name;
+                if (refreshed) setTiktokConnected(refreshed);
+                else setTiktokConnected("your TikTok account");
+              } else {
+                setTiktokConnected("your TikTok account");
+              }
+            } catch {
+              setTiktokConnected("your TikTok account");
+            }
+          }
+        }
       } catch {
-        // Table not set up yet — the profile-link form still works.
+        // Table not set up yet — the TikTok card still works.
       }
       setLoading(false);
     }
     void load();
   }, []);
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    const supabase = getBrowserClient();
-    if (!supabase) {
-      setError("Supabase is not configured yet.");
+  async function disconnectTikTok() {
+    if (
+      !window.confirm(
+        "Disconnect your TikTok account? You can reconnect anytime."
+      )
+    ) {
       return;
     }
-    setBusy(true);
-    // Keep the "Saving..." state visible for at least ~1.5 seconds so
-    // the button never looks frozen — then go to the dashboard.
-    const started = Date.now();
+    setDisconnecting(true);
+    setError("");
     try {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) throw new Error("Please log in first.");
-      const { error: upError } = await supabase
-        .from("users")
-        .update({
-          tiktok_url: tiktok.trim() || null,
-          instagram_url: instagram.trim() || null,
-          youtube_url: youtube.trim() || null,
-        })
-        .eq("id", data.user.id);
-      if (upError) throw upError;
-      const elapsed = Date.now() - started;
-      if (elapsed < 1500) {
-        await new Promise((resolve) => setTimeout(resolve, 1500 - elapsed));
+      const res = await fetch("/api/auth/tiktok", { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error ?? "Could not disconnect TikTok.");
       }
-      showSuccess("Profiles saved!");
-      router.push("/dashboard");
-      router.refresh();
+      setTiktokConnected(null);
+      setTiktokStatus("disconnected");
+      showSuccess("TikTok disconnected.");
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Could not save links.";
+        err instanceof Error ? err.message : "Could not disconnect TikTok.";
       setError(message);
       showError(message);
     } finally {
-      setBusy(false);
+      setDisconnecting(false);
     }
   }
-
-  const inputCls =
-    "mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none placeholder:text-fg/30 focus:border-lime";
 
   if (loading) {
     return <p className="text-fg/60">Loading…</p>;
@@ -142,11 +140,13 @@ export default function ConnectPage() {
     );
   }
 
+  const cardCls = "rounded-3xl border border-fg/10 bg-card p-6";
+
   return (
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
       <p className="mt-2 text-sm text-fg/60">
-        Step 2 — paste your TikTok, Instagram and YouTube profile links so
+        Step 2 — connect your TikTok, Instagram and YouTube accounts so
         your submitted clips can be matched to you.
       </p>
       {tiktokStatus && (
@@ -159,86 +159,85 @@ export default function ConnectPage() {
         >
           {tiktokStatus === "connected"
             ? "TikTok connected — your account is linked."
-            : tiktokStatus === "not_configured"
-              ? "TikTok login is not set up yet — the site owner still needs to add the TikTok keys."
-              : tiktokStatus === "save_failed"
-                ? "TikTok login worked, but saving the connection failed — please try again. If it keeps failing, the database setup may not be done yet."
-                : tiktokStatus === "denied"
-                  ? "You declined the TikTok login — nothing was connected."
-                  : "TikTok login did not complete — please try again."}
+            : tiktokStatus === "disconnected"
+              ? "TikTok disconnected — your account is unlinked."
+              : tiktokStatus === "not_configured"
+                ? "TikTok login is not set up yet — the site owner still needs to add the TikTok keys."
+                : tiktokStatus === "save_failed"
+                  ? "TikTok login worked, but saving the connection failed — please try again. If it keeps failing, the database setup may not be done yet."
+                  : tiktokStatus === "denied"
+                    ? "You declined the TikTok login — nothing was connected."
+                    : "TikTok login did not complete — please try again."}
         </p>
       )}
-      <div className="mt-4 rounded-3xl border border-fg/10 bg-card p-6">
+
+      {/* TikTok — live via Login Kit */}
+      <div className={`mt-4 ${cardCls}`}>
         <h2 className="text-sm font-bold text-fg">Connect TikTok</h2>
         <p className="mt-1 text-sm text-fg/60">
           {tiktokConnected
-            ? `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
+            ? tiktokConnected === "your TikTok account"
+              ? "Connected as your TikTok account. We use this only to verify your identity and read your own videos' view counts."
+              : `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with TikTok so we can verify your identity and read your own videos' view counts. We never post, edit or delete your videos."}
         </p>
-        <a
-          href="/api/auth/tiktok"
-          className="mt-4 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark"
-        >
-          {tiktokConnected ? "Reconnect TikTok" : "Connect TikTok"}
-        </a>
-      </div>
-      <form
-        onSubmit={save}
-        className="mt-6 rounded-3xl border border-fg/10 bg-card p-6"
-      >
-        <label className="block text-sm font-bold text-fg">
-          TikTok profile link
-          <input
-            value={tiktok}
-            onChange={(e) => setTiktok(e.target.value)}
-            placeholder="https://www.tiktok.com/@you"
-            className={inputCls}
-          />
-        </label>
-        <label className="mt-4 block text-sm font-bold text-fg">
-          Instagram profile link
-          <input
-            value={instagram}
-            onChange={(e) => setInstagram(e.target.value)}
-            placeholder="https://www.instagram.com/you"
-            className={inputCls}
-          />
-        </label>
-        <label className="mt-4 block text-sm font-bold text-fg">
-          YouTube channel link
-          <input
-            value={youtube}
-            onChange={(e) => setYoutube(e.target.value)}
-            placeholder="https://www.youtube.com/@you"
-            className={inputCls}
-          />
-        </label>
-        {error && (
-          <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-            {error}
-          </p>
+        {tiktokConnected ? (
+          <button
+            type="button"
+            onClick={disconnectTikTok}
+            disabled={disconnecting}
+            className="mt-4 inline-block rounded-full border border-red-500/50 px-6 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+          >
+            {disconnecting ? "Disconnecting..." : "Disconnect TikTok"}
+          </button>
+        ) : (
+          <a
+            href="/api/auth/tiktok"
+            className="mt-4 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark"
+          >
+            Connect TikTok
+          </a>
         )}
-        <button
-          type="submit"
-          disabled={busy}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
-        >
-          {busy ? (
-            <>
-              <Spinner /> Loading...
-            </>
-          ) : (
-            "Save & go to dashboard"
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard")}
-          className="mt-3 w-full text-sm font-bold text-fg/60 hover:text-lime"
-        >
-          Skip for now
-        </button>
-      </form>
+      </div>
+
+      {/* Instagram — coming soon */}
+      <div className={`mt-4 ${cardCls}`}>
+        <h2 className="text-sm font-bold text-fg">Connect Instagram</h2>
+        <p className="mt-1 text-sm text-fg/60">
+          Log in with Instagram so we can verify your identity and read
+          your own Reels&apos; view counts. We never post, edit or delete
+          your videos.
+        </p>
+        <span className="mt-4 inline-block cursor-not-allowed rounded-full bg-fg/10 px-6 py-3 text-sm font-bold text-fg/40">
+          Coming soon
+        </span>
+      </div>
+
+      {/* YouTube — coming soon */}
+      <div className={`mt-4 ${cardCls}`}>
+        <h2 className="text-sm font-bold text-fg">Connect YouTube</h2>
+        <p className="mt-1 text-sm text-fg/60">
+          Log in with YouTube so we can verify your identity and read your
+          own Shorts&apos; view counts. We never post, edit or delete your
+          videos.
+        </p>
+        <span className="mt-4 inline-block cursor-not-allowed rounded-full bg-fg/10 px-6 py-3 text-sm font-bold text-fg/40">
+          Coming soon
+        </span>
+      </div>
+
+      {error && (
+        <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => router.push("/dashboard")}
+        className="mt-6 flex w-full items-center justify-center rounded-full bg-lime py-3 text-sm font-bold text-ink transition hover:bg-limedark"
+      >
+        Go to dashboard
+      </button>
     </div>
   );
 }

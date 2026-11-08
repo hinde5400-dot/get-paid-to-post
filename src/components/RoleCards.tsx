@@ -30,13 +30,15 @@ export default function RoleCards() {
         <p className="text-3xl" aria-hidden>
           🏢
         </p>
-        <h2 className="mt-2 text-xl font-extrabold text-fg">I am a Brand</h2>
+        <h2 className="mt-2 text-xl font-extrabold text-fg">
+          Launch Campaigns
+        </h2>
         <p className="mt-1 text-sm leading-relaxed text-fg/60">
           Launch a campaign, get viral clips.
         </p>
         <Link
           href="/signup?role=brand"
-          className="mt-4 inline-block rounded-full border border-fg/25 px-5 py-2.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+          className="mt-4 inline-block rounded-full bg-red-500 px-5 py-2.5 text-sm font-black text-white transition hover:bg-red-600"
         >
           Launch Campaign
         </Link>

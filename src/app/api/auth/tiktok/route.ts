@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getCurrentUser } from "@/lib/auth";
+import { getServerClient } from "@/lib/supabase/server";
 import { SITE_URL, TIKTOK_REDIRECT_URI, TIKTOK_SCOPES } from "@/lib/constants";
 
 /**
@@ -57,4 +58,34 @@ export async function GET() {
     maxAge: 10 * 60, // 10 minutes — long enough to approve on TikTok.
   });
   return response;
+}
+
+/**
+ * DELETE /api/auth/tiktok — disconnect TikTok: delete the creator's
+ * saved TikTok connection(s) so the account is unlinked. The creator
+ * can reconnect anytime. Needs migration 0017 (DELETE policy for
+ * your own rows); without it this returns a 500 instead of
+ * pretending the disconnect worked.
+ */
+export async function DELETE() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not logged in." }, { status: 401 });
+  }
+  const supabase = getServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Not configured." }, { status: 500 });
+  }
+  const { error } = await supabase
+    .from("tiktok_connections")
+    .delete()
+    .eq("user_id", user.id);
+  if (error) {
+    console.error("Disconnecting TikTok failed:", error.message);
+    return NextResponse.json(
+      { error: "Could not disconnect TikTok. Please try again." },
+      { status: 500 }
+    );
+  }
+  return NextResponse.json({ ok: true });
 }
