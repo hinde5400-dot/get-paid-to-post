@@ -14,6 +14,17 @@ export const SITE_URL = `https://${SITE_DOMAIN}`;
 export const TIKTOK_REDIRECT_URI = `${SITE_URL}/api/auth/tiktok/callback`;
 // Minimal scopes — only what reading a creator's own video views needs.
 export const TIKTOK_SCOPES = "user.info.basic,video.list";
+// YouTube OAuth — Google login for a creator's own channel.
+// The redirect URI must be registered in the Google Cloud OAuth
+// client (APIs & Services → Credentials → OAuth client ID, Web
+// application) character for character, or Google refuses the login.
+// Scope is deliberately read-only: youtube.readonly only lets the
+// site read the connected channel's id/title and list its own
+// videos — it can never upload, edit or delete anything. Needs
+// Vercel env vars GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET.
+export const YOUTUBE_OAUTH_REDIRECT_URI = `${SITE_URL}/api/auth/youtube/callback`;
+export const YOUTUBE_OAUTH_SCOPES =
+  "https://www.googleapis.com/auth/youtube.readonly";
 
 // Community — support runs on Discord only (no live chat on site).
 export const DISCORD_URL = "https://discord.gg/kyNcGQkE7y";

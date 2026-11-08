@@ -8,7 +8,11 @@
 // - A submission is skipped when it was refreshed < 3 hours ago —
 //   that is the cadence Turn asked for ("har 3 hours bad views
 //   refresh hon").
-// - YouTube: public view count via the API key (no login needed).
+// - YouTube: public view count via the API key — but ONLY when
+//   the video's channel matches the creator's CONNECTED YouTube
+//   channel (Google OAuth, migration 0019). A link to someone
+//   else's video is never counted: the refresh fails it with a
+//   clear reason and the stored views stay untouched.
 // - TikTok: the creator's own video via their saved (encrypted)
 //   Login Kit tokens, refreshed when expired. A legacy plaintext
 //   token is re-saved encrypted the first time it is used.
@@ -21,7 +25,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { VIEW_REFRESH_MS } from "@/lib/constants";
-import { fetchYouTubeViews } from "./youtube";
+import { fetchYouTubeVideoDetails } from "./youtube";
 import { fetchTikTokViews, type TikTokTokens } from "./tiktok";
 import { decryptToken, encryptToken, isEncryptedToken } from "./crypto";
 
@@ -53,6 +57,11 @@ interface TokenRow {
   refresh_token: string;
   token_expires_at: string | null;
   refresh_expires_at: string | null;
+}
+
+interface YouTubeChannelRow {
+  user_id: string;
+  channel_id: string;
 }
 
 function fresh(summary: RefreshSummary): RefreshSummary {
@@ -112,6 +121,16 @@ export async function refreshPendingViews(
     }
   }
 
+  // Connected YouTube channels, once per run, keyed by creator —
+  // the refresh only counts a video from the creator's own channel.
+  const { data: channelRows } = await supabase.rpc(
+    "list_youtube_channels_for_refresh"
+  );
+  const youtubeChannelByUser = new Map<string, string>();
+  for (const row of (channelRows ?? []) as YouTubeChannelRow[]) {
+    youtubeChannelByUser.set(row.user_id, row.channel_id);
+  }
+
   for (const row of pending) {
     summary.checked += 1;
     const platform = row.platform;
@@ -134,11 +153,31 @@ export async function refreshPendingViews(
     }
 
     if (platform === "youtube") {
-      const result = await fetchYouTubeViews(row.post_url);
+      // Anti-fraud gate: only the creator's own connected channel
+      // counts. No connection, or a video from another channel, is
+      // never counted — the stored views stay as they are.
+      const connectedChannel = youtubeChannelByUser.get(row.user_id);
+      if (!connectedChannel) {
+        summary.failed += 1;
+        tally(platform, "failed");
+        summary.errors.push(
+          `YouTube ${row.id.slice(0, 8)}: creator has not connected YouTube.`
+        );
+        continue;
+      }
+      const result = await fetchYouTubeVideoDetails(row.post_url);
       if ("error" in result) {
         summary.failed += 1;
         tally(platform, "failed");
         summary.errors.push(`YouTube ${row.id.slice(0, 8)}: ${result.error}`);
+        continue;
+      }
+      if (result.channelId !== connectedChannel) {
+        summary.failed += 1;
+        tally(platform, "failed");
+        summary.errors.push(
+          `YouTube ${row.id.slice(0, 8)}: video is not from the creator's connected YouTube channel — not counted.`
+        );
         continue;
       }
       const { error: applyError } = await supabase.rpc("apply_view_refresh", {

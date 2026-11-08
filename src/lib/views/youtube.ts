@@ -1,10 +1,15 @@
 // YouTube view counts — YouTube Data API v3 (API key only).
 //
-// No OAuth is needed: a creator's public video view count is public
-// data, so a pasted link is enough. One videos.list call costs 1
-// quota unit (10,000 free units/day). The API key lives in the
-// Vercel env var YOUTUBE_API_KEY (Production) and never leaves the
-// server — it is never logged, and never put in a URL the browser sees.
+// A pasted link alone is NOT enough to count views: anyone could
+// paste any viral video's link. Since 2026-11-09 a YouTube
+// submission only counts when the video's channelId matches the
+// creator's CONNECTED channel (Google OAuth, youtube.readonly —
+// see /api/auth/youtube). The API key still fetches the public
+// view count; the OAuth connection proves who owns the video.
+// One videos.list call costs 1 quota unit (10,000 free units/day).
+// The API key lives in the Vercel env var YOUTUBE_API_KEY
+// (Production) and never leaves the server — it is never logged,
+// and never put in a URL the browser sees.
 
 export function extractYouTubeVideoId(rawUrl: string): string | null {
   try {
@@ -36,9 +41,20 @@ export function extractYouTubeVideoId(rawUrl: string): string | null {
 
 type YouTubeResult = { views: number } | { error: string };
 
-export async function fetchYouTubeViews(
+type YouTubeVideoResult =
+  | { views: number; channelId: string; channelTitle: string }
+  | { error: string };
+
+/**
+ * Fetch a video's public view count AND the channel that owns it.
+ * The channelId is what stops the viral-link scam: a submission is
+ * only accepted when this channel matches the creator's CONNECTED
+ * YouTube channel (see /api/submissions and the refresh job). One
+ * videos.list call costs 1 quota unit (10,000 free units/day).
+ */
+export async function fetchYouTubeVideoDetails(
   postUrl: string
-): Promise<YouTubeResult> {
+): Promise<YouTubeVideoResult> {
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) {
     return { error: "YouTube API key is not set up yet." };
@@ -50,7 +66,7 @@ export async function fetchYouTubeViews(
   let res: Response;
   try {
     res = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${encodeURIComponent(
+      `https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${encodeURIComponent(
         videoId
       )}&key=${apiKey}`,
       { cache: "no-store" }
@@ -64,12 +80,24 @@ export async function fetchYouTubeViews(
     return { error: `YouTube API error (${res.status}).` };
   }
   const data = (await res.json()) as {
-    items?: { statistics?: { viewCount?: string } }[];
+    items?: {
+      statistics?: { viewCount?: string };
+      snippet?: { channelId?: string; channelTitle?: string };
+    }[];
   };
   const item = data?.items?.[0];
   const views = Number(item?.statistics?.viewCount ?? NaN);
-  if (!item || Number.isNaN(views)) {
+  const channelId = item?.snippet?.channelId;
+  if (!item || Number.isNaN(views) || !channelId) {
     return { error: "Video not found or not public." };
   }
-  return { views };
+  return { views, channelId, channelTitle: item.snippet?.channelTitle ?? "" };
+}
+
+export async function fetchYouTubeViews(
+  postUrl: string
+): Promise<YouTubeResult> {
+  const result = await fetchYouTubeVideoDetails(postUrl);
+  if ("error" in result) return { error: result.error };
+  return { views: result.views };
 }

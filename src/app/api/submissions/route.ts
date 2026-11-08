@@ -11,6 +11,7 @@ import {
 import { countWords, validatePostUrl } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
 import { platformsFromRow, platformNamesText } from "@/lib/types";
+import { fetchYouTubeVideoDetails } from "@/lib/views/youtube";
 
 interface BundleBody {
   campaignId?: string;
@@ -102,6 +103,51 @@ export async function POST(request: Request) {
     const check = validatePostUrl(l.url, l.platform);
     if (!check.ok) {
       return NextResponse.json({ error: check.error }, { status: 400 });
+    }
+  }
+
+  // YouTube ownership gate (2026-11-09): a YouTube link only
+  // counts when the video belongs to the creator's CONNECTED
+  // channel. Without this, anyone could paste any viral video's
+  // link and claim its views. TikTok does not need this check —
+  // Login Kit only ever returns the connected creator's own videos.
+  const youtubeLink = links.find((l) => l.platform === "youtube");
+  if (youtubeLink) {
+    const { data: ytConn } = await supabase
+      .from("youtube_connections")
+      .select("channel_id")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const channelId = (ytConn as { channel_id?: string } | null)
+      ?.channel_id;
+    if (!channelId) {
+      return NextResponse.json(
+        {
+          error:
+            "Connect your YouTube channel first on the Connect page — only videos from your own connected channel can be submitted.",
+        },
+        { status: 400 }
+      );
+    }
+    const details = await fetchYouTubeVideoDetails(youtubeLink.url);
+    if ("error" in details) {
+      return NextResponse.json(
+        {
+          error: `Could not verify this YouTube video (${details.error}) — please check the link and try again.`,
+        },
+        { status: 400 }
+      );
+    }
+    if (details.channelId !== channelId) {
+      return NextResponse.json(
+        {
+          error:
+            "This YouTube video is not from your connected YouTube channel. Submit only videos from the channel you connected.",
+        },
+        { status: 400 }
+      );
     }
   }
 

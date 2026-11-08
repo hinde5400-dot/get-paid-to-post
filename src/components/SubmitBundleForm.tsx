@@ -246,6 +246,15 @@ export default function SubmitBundleForm({
                 placeholder={input.placeholder}
                 className={inputCls}
               />
+              {p === "youtube" && (
+                <span className="mt-1 block font-medium text-fg/50">
+                  Only videos from your connected YouTube channel count —{" "}
+                  <Link href="/connect" className="font-bold text-lime hover:underline">
+                    connect your channel
+                  </Link>{" "}
+                  first.
+                </span>
+              )}
             </label>
           );
         })}

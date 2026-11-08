@@ -9,8 +9,8 @@ import { useToast } from "@/components/Toast";
 /**
  * Step 2 after signup: connect TikTok / Instagram / YouTube accounts
  * through OAuth — no manual profile links. TikTok works today via
- * Login Kit; Instagram and YouTube cards are shown the same way and
- * switch on when their logins are ready.
+ * Login Kit, YouTube via Google OAuth; the Instagram card is shown
+ * the same way and switches on when its login is ready.
  */
 export default function ConnectPage() {
   const router = useRouter();
@@ -21,13 +21,21 @@ export default function ConnectPage() {
   const [tiktokStatus, setTiktokStatus] = useState<string | null>(null);
   const [tiktokConnected, setTiktokConnected] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [youtubeStatus, setYoutubeStatus] = useState<string | null>(null);
+  const [youtubeConnected, setYoutubeConnected] = useState<string | null>(
+    null
+  );
+  const [disconnectingYoutube, setDisconnectingYoutube] = useState(false);
 
   // TikTok Login Kit returns here with ?tiktok=<status> (see
   // /api/auth/tiktok/callback). Read it from the URL so the page can
   // show what happened without a Suspense boundary.
   useEffect(() => {
-    const status = new URLSearchParams(window.location.search).get("tiktok");
-    if (status) setTiktokStatus(status);
+    const params = new URLSearchParams(window.location.search);
+    const tiktok = params.get("tiktok");
+    if (tiktok) setTiktokStatus(tiktok);
+    const youtube = params.get("youtube");
+    if (youtube) setYoutubeStatus(youtube);
   }, []);
 
   useEffect(() => {
@@ -83,6 +91,51 @@ export default function ConnectPage() {
       } catch {
         // Table not set up yet — the TikTok card still works.
       }
+      // Show the linked YouTube channel, if one was saved through
+      // Google OAuth. The table only exists after migration 0019 is
+      // run, so a missing table is ignored here instead of breaking
+      // the page.
+      try {
+        const { data: ytConn } = await supabase
+          .from("youtube_connections")
+          .select("channel_title, channel_handle")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const y = ytConn as {
+          channel_title?: string | null;
+          channel_handle?: string | null;
+        } | null;
+        if (y) {
+          const name = y.channel_title ?? y.channel_handle;
+          if (name) {
+            setYoutubeConnected(name);
+          } else {
+            // Row exists but Google never returned a channel title
+            // (the channels call failed during the callback) —
+            // re-read it from Google now so the card shows the real
+            // channel.
+            try {
+              const res = await fetch("/api/auth/youtube/profile");
+              if (res.ok) {
+                const p = (await res.json()) as {
+                  channel_title?: string | null;
+                  channel_handle?: string | null;
+                };
+                const refreshed = p.channel_title ?? p.channel_handle;
+                if (refreshed) setYoutubeConnected(refreshed);
+                else setYoutubeConnected("your YouTube channel");
+              } else {
+                setYoutubeConnected("your YouTube channel");
+              }
+            } catch {
+              setYoutubeConnected("your YouTube channel");
+            }
+          }
+        }
+      } catch {
+        // Table not set up yet — the YouTube card still works.
+      }
       setLoading(false);
     }
     void load();
@@ -119,6 +172,37 @@ export default function ConnectPage() {
     }
   }
 
+  async function disconnectYouTube() {
+    if (
+      !window.confirm(
+        "Disconnect your YouTube channel? You can reconnect anytime."
+      )
+    ) {
+      return;
+    }
+    setDisconnectingYoutube(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/youtube", { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error ?? "Could not disconnect YouTube.");
+      }
+      setYoutubeConnected(null);
+      setYoutubeStatus("disconnected");
+      showSuccess("YouTube disconnected.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not disconnect YouTube.";
+      setError(message);
+      showError(message);
+    } finally {
+      setDisconnectingYoutube(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-fg/60">Loading…</p>;
   }
@@ -146,10 +230,10 @@ export default function ConnectPage() {
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
       <p className="mt-2 text-sm text-fg/60">
-        Step 2 — connect your TikTok and Instagram accounts so your
-        submitted clips can be matched to you. YouTube needs no login:
-        just paste your YouTube link when you submit a clip and we
-        check its public view count automatically.
+        Step 2 — connect your TikTok, Instagram and YouTube accounts so
+        your submitted clips can be matched to you. Only videos from
+        your own connected accounts count — a link to someone
+        else&apos;s video will not earn.
       </p>
       {tiktokStatus && (
         <p
@@ -215,18 +299,58 @@ export default function ConnectPage() {
         </span>
       </div>
 
-      {/* YouTube — no login needed, views checked from the pasted link */}
+      {/* YouTube — live via Google OAuth */}
       <div className={`mt-4 ${cardCls}`}>
-        <h2 className="text-sm font-bold text-fg">YouTube</h2>
+        <h2 className="text-sm font-bold text-fg">Connect YouTube</h2>
         <p className="mt-1 text-sm text-fg/60">
-          No login needed — just paste your YouTube link when you submit
-          a clip. We check its public view count automatically, every 3
-          hours.
+          {youtubeConnected
+            ? youtubeConnected === "your YouTube channel"
+              ? "Connected as your YouTube channel. We use this only to verify your identity and read your own videos' view counts."
+              : `Connected as ${youtubeConnected}. We use this only to verify your identity and read your own videos' view counts.`
+            : "Log in with Google so we can verify your YouTube channel and read your own videos' view counts. Only videos from your connected channel count — we never post, edit or delete your videos."}
         </p>
-        <span className="mt-4 inline-block rounded-full bg-lime/15 px-6 py-3 text-sm font-bold text-lime">
-          Ready — no login needed
-        </span>
+        {youtubeConnected ? (
+          <button
+            type="button"
+            onClick={disconnectYouTube}
+            disabled={disconnectingYoutube}
+            className="mt-4 inline-block rounded-full border border-red-500/50 px-6 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+          >
+            {disconnectingYoutube ? "Disconnecting..." : "Disconnect YouTube"}
+          </button>
+        ) : (
+          <a
+            href="/api/auth/youtube"
+            className="mt-4 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark"
+          >
+            Connect YouTube
+          </a>
+        )}
       </div>
+
+      {youtubeStatus && (
+        <p
+          className={`mt-4 rounded-xl px-4 py-2.5 text-sm font-semibold ${
+            youtubeStatus === "connected"
+              ? "bg-lime/15 text-lime"
+              : "bg-red-500/15 text-red-300"
+          }`}
+        >
+          {youtubeStatus === "connected"
+            ? "YouTube connected — your channel is linked."
+            : youtubeStatus === "disconnected"
+              ? "YouTube disconnected — your channel is unlinked."
+              : youtubeStatus === "not_configured"
+                ? "YouTube login is not set up yet — the site owner still needs to add the Google keys."
+                : youtubeStatus === "save_failed"
+                  ? "YouTube login worked, but saving the connection failed — please try again. If it keeps failing, the database setup may not be done yet."
+                  : youtubeStatus === "no_channel"
+                    ? "No YouTube channel was found on this Google account — connect with the Google account that owns your channel."
+                    : youtubeStatus === "denied"
+                      ? "You declined the Google login — nothing was connected."
+                      : "YouTube login did not complete — please try again."}
+        </p>
+      )}
 
       {error && (
         <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
