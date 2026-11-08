@@ -120,6 +120,8 @@ export interface Submission {
   status: SubmissionStatus;
   earnings: number;
   hold_until: string | null;
+  /** Last time the 3-hour auto-refresh checked this clip's views. */
+  views_refreshed_at?: string | null;
   how_made: string;
   proof_screenshots: string[];
   is_duplicate: boolean;

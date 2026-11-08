@@ -146,8 +146,10 @@ export default function ConnectPage() {
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
       <p className="mt-2 text-sm text-fg/60">
-        Step 2 — connect your TikTok, Instagram and YouTube accounts so
-        your submitted clips can be matched to you.
+        Step 2 — connect your TikTok and Instagram accounts so your
+        submitted clips can be matched to you. YouTube needs no login:
+        just paste your YouTube link when you submit a clip and we
+        check its public view count automatically.
       </p>
       {tiktokStatus && (
         <p
@@ -213,16 +215,16 @@ export default function ConnectPage() {
         </span>
       </div>
 
-      {/* YouTube — coming soon */}
+      {/* YouTube — no login needed, views checked from the pasted link */}
       <div className={`mt-4 ${cardCls}`}>
-        <h2 className="text-sm font-bold text-fg">Connect YouTube</h2>
+        <h2 className="text-sm font-bold text-fg">YouTube</h2>
         <p className="mt-1 text-sm text-fg/60">
-          Log in with YouTube so we can verify your identity and read your
-          own Shorts&apos; view counts. We never post, edit or delete your
-          videos.
+          No login needed — just paste your YouTube link when you submit
+          a clip. We check its public view count automatically, every 3
+          hours.
         </p>
-        <span className="mt-4 inline-block cursor-not-allowed rounded-full bg-fg/10 px-6 py-3 text-sm font-bold text-fg/40">
-          Coming soon
+        <span className="mt-4 inline-block rounded-full bg-lime/15 px-6 py-3 text-sm font-bold text-lime">
+          Ready — no login needed
         </span>
       </div>
 

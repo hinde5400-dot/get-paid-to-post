@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerClient } from "@/lib/supabase/server";
 import { SITE_URL, TIKTOK_REDIRECT_URI, TIKTOK_SCOPES } from "@/lib/constants";
+import { encryptToken } from "@/lib/views/crypto";
 
 /**
  * GET /api/auth/tiktok/callback — TikTok Login Kit redirect target.
@@ -135,8 +136,11 @@ export async function GET(request: Request) {
     console.error("TikTok user/info error:", err);
   }
 
-  // 3) Save the connection. Migration 0016 must be applied first;
-  // if the table is missing the upsert fails and we report it
+  // 3) Save the connection. Tokens are stored ENCRYPTED (AES-256-GCM,
+  // ENCRYPTION_KEY) — the 3-hour view-refresh job reads them through a
+  // SECURITY DEFINER function without a user session, so the database
+  // must only ever hold ciphertext. Migration 0016 must be applied
+  // first; if the table is missing the upsert fails and we report it
   // instead of pretending the connect worked.
   const supabase = getServerClient();
   if (!supabase) {
@@ -152,8 +156,10 @@ export async function GET(request: Request) {
         username: profile?.username ?? null,
         display_name: profile?.display_name ?? null,
         avatar_url: profile?.avatar_url ?? null,
-        access_token: token.access_token,
-        refresh_token: token.refresh_token ?? "",
+        access_token: encryptToken(token.access_token),
+        refresh_token: token.refresh_token
+          ? encryptToken(token.refresh_token)
+          : "",
         scope: token.scope ?? TIKTOK_SCOPES,
         token_expires_at: token.expires_in
           ? new Date(now + token.expires_in * 1000).toISOString()

@@ -67,6 +67,7 @@ function mapSubmission(row: Record<string, unknown>): Submission {
     status: (row.status as Submission["status"]) ?? "pending",
     earnings: Number(row.earnings ?? 0),
     hold_until: (row.hold_until as string | null) ?? null,
+    views_refreshed_at: (row.views_refreshed_at as string | null) ?? null,
     how_made: String(row.how_made ?? ""),
     proof_screenshots: Array.isArray(row.proof_screenshots)
       ? (row.proof_screenshots as string[])

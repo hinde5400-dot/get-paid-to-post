@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerClient } from "@/lib/supabase/server";
+import { decryptToken } from "@/lib/views/crypto";
 
 /**
  * GET /api/auth/tiktok/profile — re-read the linked TikTok account's
@@ -60,10 +61,20 @@ export async function GET() {
       avatar_url: row.avatar_url ?? null,
     });
   }
-  // No name stored — ask TikTok again with the saved access token.
+  // No name stored — ask TikTok again with the saved access token
+  // (decrypted; tokens are stored encrypted since migration 0018).
+  const accessToken = decryptToken(row.access_token);
+  if (!accessToken) {
+    return NextResponse.json({
+      connected: true,
+      username: null,
+      display_name: null,
+      avatar_url: row.avatar_url ?? null,
+    });
+  }
   try {
     const res = await fetch(USER_INFO_URL, {
-      headers: { Authorization: `Bearer ${row.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
       return NextResponse.json({

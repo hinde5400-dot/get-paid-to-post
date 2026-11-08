@@ -13,6 +13,14 @@ export interface AdminSubmission extends Submission {
   creator_email: string;
 }
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
 export default function AdminReviewList({
   submissions,
 }: {
@@ -23,7 +31,32 @@ export default function AdminReviewList({
   const [likes, setLikes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { showError, showSuccess } = useToast();
+
+  async function refreshViewsNow() {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/admin/refresh-views", { method: "POST" });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        checked?: number;
+        updated?: number;
+        skipped?: number;
+        failed?: number;
+      };
+      if (!res.ok) throw new Error(data.error || "Refresh failed.");
+      showSuccess(
+        `Views refreshed — ${data.updated ?? 0} updated, ${data.skipped ?? 0} skipped, ${data.failed ?? 0} failed (checked ${data.checked ?? 0}).`
+      );
+      router.refresh();
+    } catch (e) {
+      showError(e instanceof Error ? e.message : "Refresh failed.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function call(
     url: string,
@@ -99,6 +132,26 @@ export default function AdminReviewList({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-fg/60">
+          Views auto-refresh every 3 hours for pending clips (YouTube +
+          TikTok). Instagram is not connected yet.
+        </p>
+        <button
+          type="button"
+          onClick={refreshViewsNow}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 rounded-full border border-lime/50 px-4 py-2 text-sm font-bold text-lime transition hover:bg-lime/10 disabled:opacity-40"
+        >
+          {refreshing ? (
+            <>
+              <Spinner /> Refreshing...
+            </>
+          ) : (
+            "Refresh views now"
+          )}
+        </button>
+      </div>
       {submissions.map((s) => (
         <article
           key={s.id}
@@ -185,6 +238,10 @@ export default function AdminReviewList({
           <p className="mt-2 text-xs text-fg/50">
             Current earnings: {formatUSD(s.earnings)} · Views:{" "}
             {s.views.toLocaleString()} · Likes: {s.likes.toLocaleString()}
+            {" · "}
+            {s.views_refreshed_at
+              ? `Auto-checked ${timeAgo(s.views_refreshed_at)}`
+              : "Not auto-checked yet"}
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
