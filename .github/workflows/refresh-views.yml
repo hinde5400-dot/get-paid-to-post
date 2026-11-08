@@ -1,0 +1,34 @@
+# Refresh clip view counts every 3 hours.
+#
+# Why GitHub Actions: the free Vercel Hobby plan only allows cron jobs
+# once a day, and the site needs a refresh every 3 hours. Scheduled
+# runs on a public repo are free.
+#
+# Setup (one time, by the owner):
+#   1. GitHub repo → Settings → Secrets and variables → Actions →
+#      New repository secret: CRON_SECRET (same value as the
+#      CRON_SECRET environment variable in Vercel, Production).
+#   2. Vercel → get-paid-to-post → Settings → Environment Variables:
+#      CRON_SECRET (Production).
+# The endpoint only refreshes still-pending submissions inside the
+# 14-day tracking window; approving and paying still need the owner
+# on /admin.
+
+name: Refresh clip views
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh views (every 3 hours)
+        run: |
+          code=$(curl -s -o /tmp/refresh.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://get-paid-to-post.vercel.app/api/cron/refresh-views)
+          cat /tmp/refresh.json
+          test "$code" = "200"
