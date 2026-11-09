@@ -244,6 +244,13 @@ export default async function CampaignDetailPage({
                   even if the views would pay more. Approved earnings sit
                   in a 72-hour hold, then become withdrawable.
                 </p>
+                <p className="mt-2 text-sm leading-relaxed text-fg/70">
+                  When this campaign ends, a 3-day re-check window follows
+                  — an approved video can still be rejected if fake or bot
+                  views show up — then the 72-hour payment hold finishes
+                  and payouts are made, about 1 week after the campaign
+                  ends in total.
+                </p>
               </div>
             </div>
 

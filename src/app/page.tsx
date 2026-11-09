@@ -15,6 +15,10 @@ const FAQS = [
     a: "Pick a funded campaign, post your clip, and submit the link. Approved earnings go into a 72-hour hold, then move to your available balance. Withdraw from $15 in USDT (TRC20 or BEP20). A 5% fee applies at withdrawal.",
   },
   {
+    q: "When do I get paid after a campaign ends?",
+    a: "About 1 week after the campaign ends. First there is a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then the 72-hour payment hold finishes and payouts are made. Approved earnings go into the 72-hour hold as soon as they are approved during the campaign — the week after a campaign ends is the final re-check and payout window.",
+  },
+  {
     q: "Do I need followers to join?",
     a: "No. There is no follower minimum. You are paid per view, so a small account with a great clip can earn just like a big one.",
   },

@@ -53,6 +53,20 @@ export default async function HowItWorksPage() {
       </div>
 
       <div className="rounded-3xl border border-fg/10 bg-card p-6">
+        <h2 className="text-lg font-extrabold text-fg">When do I get paid?</h2>
+        <p className="mt-3 text-sm leading-relaxed text-fg/70">
+          Approved earnings go into a 72-hour hold as soon as they are
+          approved, during the campaign. After a campaign ends, the
+          settlement timeline is:
+        </p>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
+          <li>• <strong className="text-fg">Campaign ends → 3-day re-check window.</strong> We review suspicious videos, and an already-approved video can still be rejected if fake or bot views show up.</li>
+          <li>• <strong className="text-fg">Then the 72-hour payment hold.</strong> The hold on your earnings finishes and they become available to withdraw.</li>
+          <li>• <strong className="text-fg">Then payout.</strong> Withdraw in USDT (TRC20 or BEP20) from $15. From campaign end to payout: about 1 week in total.</li>
+        </ul>
+      </div>
+
+      <div className="rounded-3xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">Video rules</h2>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Vertical video only — 9:16 format.</li>

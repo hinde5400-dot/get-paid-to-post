@@ -82,7 +82,7 @@ export default function TermsPage() {
         <h2 className="text-lg font-extrabold text-fg">5. Withdrawals</h2>
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Minimum withdrawal is $15.</li>
-          <li>• A 7% fee applies at withdrawal — you receive amount × 0.93.</li>
+          <li>• A 5% fee applies at withdrawal — you receive amount × 0.95.</li>
           <li>• Payout methods: USDT (TRC20) and USDT (BEP20) only.</li>
           <li>• Payouts are processed by the platform owner from the funded campaign budget.</li>
         </ul>
