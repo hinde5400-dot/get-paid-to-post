@@ -514,6 +514,13 @@ export async function getBrandMessages(): Promise<BrandMessage[]> {
  * newest bot rejection first, with the latest rejection's
  * campaign, link and date. The caller joins emails / blocked
  * state from the users table.
+ *
+ * Ladder reset (migration 0027): only bot rejections AFTER a
+ * creator's creator_flags.unblocked_at count toward
+ * bot_rejections, so an unblocked creator restarts at 0. The
+ * `latest` rejection is still the newest one overall — rejections
+ * from before the unblock stay visible as history, they just no
+ * longer count toward a re-ban.
  */
 export interface CreatorBotRejections {
   user_id: string;
@@ -532,6 +539,25 @@ export async function getCreatorBotRejections(): Promise<
   const supabase = getServerClient();
   if (!supabase) return [];
   try {
+    // Unblock timestamps (migration 0027), best-effort and in its
+    // own query so the counts below still work if 0027 has not
+    // been applied yet (no unblocked_at column) — then every
+    // rejection counts, as before.
+    const unblockedAtById = new Map<string, string>();
+    try {
+      const { data: unblocked } = await supabase
+        .from("creator_flags")
+        .select("user_id, unblocked_at");
+      for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
+        const userId = String(row.user_id ?? "");
+        if (userId && row.unblocked_at) {
+          unblockedAtById.set(userId, String(row.unblocked_at));
+        }
+      }
+    } catch {
+      // Migration 0027 not run yet — no ladder reset to apply.
+    }
+
     const { data, error } = await supabase
       .from("submissions")
       .select("user_id, campaign_id, post_url, created_at, campaigns(title)")
@@ -544,19 +570,26 @@ export async function getCreatorBotRejections(): Promise<
     for (const row of data as Record<string, unknown>[]) {
       const userId = String(row.user_id ?? "");
       if (!userId) continue;
+      const createdAt = String(row.created_at ?? "");
+      // Counts toward the ladder only when it happened after the
+      // creator's last unblock (no unblock → everything counts).
+      const unblockedAt = unblockedAtById.get(userId);
+      const countsTowardLadder =
+        !unblockedAt ||
+        new Date(createdAt).getTime() > new Date(unblockedAt).getTime();
       const camp = row.campaigns as { title?: string } | null;
       const entry = byUser.get(userId);
       if (entry) {
-        entry.bot_rejections += 1;
+        if (countsTowardLadder) entry.bot_rejections += 1;
       } else {
         byUser.set(userId, {
           user_id: userId,
-          bot_rejections: 1,
+          bot_rejections: countsTowardLadder ? 1 : 0,
           latest: {
             campaign_id: String(row.campaign_id ?? ""),
             campaign_title: camp?.title ?? null,
             post_url: String(row.post_url ?? ""),
-            created_at: String(row.created_at ?? ""),
+            created_at: createdAt,
           },
         });
       }
@@ -571,16 +604,21 @@ export async function getCreatorBotRejections(): Promise<
 
 /**
  * Flag state from creator_flags (migration 0026): when a creator
- * was flagged / auto-banned. The review route keeps this updated;
+ * was flagged / auto-banned, and when they were last unblocked
+ * (migration 0027 — unblocked_at drives the "Previously banned"
+ * note in the fraud view). The review route keeps this updated;
  * the COUNT itself is read live from submissions (above). Returns
  * {} when the migration has not run yet — the fraud view still
  * works from the live counts, it just has no flagged/banned dates.
+ * unblocked_at is read in its own best-effort query so the flag
+ * dates still load if migration 0027 has not been applied yet.
  */
 export interface CreatorFlag {
   user_id: string;
   bot_rejections: number;
   flagged_at: string | null;
   banned_at: string | null;
+  unblocked_at: string | null;
 }
 
 export async function getCreatorFlags(): Promise<
@@ -602,7 +640,22 @@ export async function getCreatorFlags(): Promise<
         bot_rejections: Number(row.bot_rejections ?? 0),
         flagged_at: (row.flagged_at as string | null) ?? null,
         banned_at: (row.banned_at as string | null) ?? null,
+        unblocked_at: null,
       };
+    }
+    try {
+      const { data: unblocked } = await supabase
+        .from("creator_flags")
+        .select("user_id, unblocked_at");
+      for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
+        const userId = String(row.user_id ?? "");
+        if (userId && out[userId]) {
+          out[userId].unblocked_at =
+            (row.unblocked_at as string | null) ?? null;
+        }
+      }
+    } catch {
+      // Migration 0027 not run yet — no unblocked_at to carry.
     }
     return out;
   } catch {

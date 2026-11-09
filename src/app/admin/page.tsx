@@ -95,9 +95,32 @@ export default async function AdminPage() {
       is_blocked: isBlocked,
       flagged_at: flag?.flagged_at ?? null,
       banned_at: flag?.banned_at ?? null,
+      unblocked_at: flag?.unblocked_at ?? null,
       latest: row.latest,
     };
   });
+
+  // Banned creators with no bot-view rejections (blocked manually
+  // from the submission review list) never appear in botRows, but
+  // they are banned — they belong in the fraud view's Banned
+  // section too, with an Unblock path. fraudStatus(0, true) is
+  // "banned".
+  const fraudUserIds = new Set(botRows.map((row) => row.user_id));
+  for (const [userId, isBlocked] of blockedById) {
+    if (!isBlocked || fraudUserIds.has(userId)) continue;
+    const flag = creatorFlags[userId];
+    fraudCreators.push({
+      user_id: userId,
+      email: emailById.get(userId) ?? userId.slice(0, 8),
+      bot_rejections: 0,
+      status: fraudStatus(0, true),
+      is_blocked: true,
+      flagged_at: flag?.flagged_at ?? null,
+      banned_at: flag?.banned_at ?? null,
+      unblocked_at: flag?.unblocked_at ?? null,
+      latest: null,
+    });
+  }
 
   // P1-c post-end re-check queue: APPROVED submissions on campaigns
   // in their settlement window (ended, not yet auto-deleted).
@@ -226,7 +249,7 @@ export default async function AdminPage() {
           </h2>
           <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
             {fraudCreators.length} creator
-            {fraudCreators.length === 1 ? "" : "s"} with bot-view rejections
+            {fraudCreators.length === 1 ? "" : "s"} in fraud watch
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">

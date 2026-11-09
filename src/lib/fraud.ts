@@ -18,6 +18,15 @@
 // submissions table (getCreatorBotRejections). The creator_flags
 // table (migration 0026) stores only the flag STATE (flagged_at /
 // banned_at) plus the count as of the last processed rejection.
+//
+// Ladder reset (migration 0027): POST /api/admin/unblock clears
+// flagged_at / banned_at and stamps creator_flags.unblocked_at.
+// Both the live count here and getCreatorBotRejections count only
+// bot rejections AFTER unblocked_at, so an unblocked creator gets
+// a fresh climb (6 / 10 / 11 again, alerts included). Rejections
+// from before the unblock stay in the submissions table as history
+// but no longer count toward a re-ban. unblocked_at is never
+// cleared by this function — the upsert below preserves it.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { adminMention, notifyDiscord } from "./notify";
@@ -81,13 +90,54 @@ export async function handleBotRejection(
 ): Promise<BotRejectionOutcome> {
   const none: BotRejectionOutcome = { count: 0, outcome: "none" };
   try {
+    // Flag state first: unblocked_at resets the ladder (migration
+    // 0027), and flagged_at / banned_at make alerts fire once per
+    // crossing. The unblock route clears flagged_at + banned_at and
+    // stamps unblocked_at, so a later re-ban re-alerts.
+    let flaggedAt: string | null = null;
+    let bannedAt: string | null = null;
+    try {
+      const { data: flagRow } = await supabase
+        .from("creator_flags")
+        .select("flagged_at, banned_at")
+        .eq("user_id", userId)
+        .single();
+      flaggedAt = (flagRow?.flagged_at as string | null) ?? null;
+      bannedAt = (flagRow?.banned_at as string | null) ?? null;
+    } catch {
+      // Migration 0026 not run yet — thresholds still alert below,
+      // the flag row just cannot be stored.
+    }
+
+    // unblocked_at is read in its own best-effort query so the
+    // flag dates above still load if migration 0027 has not been
+    // applied yet (no unblocked_at column). When it is missing,
+    // unblockedAt stays null and every rejection counts, as before.
+    let unblockedAt: string | null = null;
+    try {
+      const { data: unblockRow } = await supabase
+        .from("creator_flags")
+        .select("unblocked_at")
+        .eq("user_id", userId)
+        .single();
+      unblockedAt = (unblockRow?.unblocked_at as string | null) ?? null;
+    } catch {
+      // Migration 0027 not run yet — no ladder reset to apply.
+    }
+
     // Live count — the submissions table is the source of truth.
-    const { count, error: countError } = await supabase
+    // Only bot rejections AFTER unblocked_at count (ladder reset);
+    // earlier ones stay in the table as history.
+    let countQuery = supabase
       .from("submissions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("status", "rejected")
       .eq("rejection_reason", BOT_REJECTION_REASON);
+    if (unblockedAt) {
+      countQuery = countQuery.gt("created_at", unblockedAt);
+    }
+    const { count, error: countError } = await countQuery;
     if (countError || count == null) {
       console.error(
         "[fraud] could not count bot rejections for user",
@@ -112,23 +162,6 @@ export async function handleBotRejection(
 
     const prefix = alertPrefix();
     let outcome: BotRejectionOutcome["outcome"] = "none";
-
-    // Read the existing flag state so alerts fire once per crossing
-    // (and a manually-unblocked creator re-bans on the next one).
-    let flaggedAt: string | null = null;
-    let bannedAt: string | null = null;
-    try {
-      const { data: flagRow } = await supabase
-        .from("creator_flags")
-        .select("flagged_at, banned_at")
-        .eq("user_id", userId)
-        .single();
-      flaggedAt = (flagRow?.flagged_at as string | null) ?? null;
-      bannedAt = (flagRow?.banned_at as string | null) ?? null;
-    } catch {
-      // Migration 0026 not run yet — thresholds still alert below,
-      // the flag row just cannot be stored.
-    }
 
     if (count >= BOT_AUTO_BAN_COUNT && !bannedAt) {
       // AUTO-BAN: reuse the existing block mechanism exactly —
@@ -164,6 +197,10 @@ export async function handleBotRejection(
 
     // Persist the flag state (best-effort — migration 0026 may
     // not be run yet; the live count in the admin view still works).
+    // unblocked_at is preserved, never cleared: it marks the start
+    // of the current ladder cycle. It is only written when set, so
+    // the upsert stays identical to before when migration 0027 has
+    // not been applied yet (no unblocked_at column).
     try {
       await supabase.from("creator_flags").upsert(
         {
@@ -177,6 +214,7 @@ export async function handleBotRejection(
           banned_at:
             bannedAt ??
             (outcome === "auto-banned" ? new Date().toISOString() : null),
+          ...(unblockedAt ? { unblocked_at: unblockedAt } : {}),
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id" }
