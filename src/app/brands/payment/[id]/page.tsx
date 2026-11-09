@@ -94,6 +94,31 @@ export default async function BrandPaymentPage({
               {formatUSD(campaign.budget_total)} USDT
             </span>
           </div>
+          {/* Fee split (P0 batch 2): 15% flat platform fee, taken
+              INSIDE the budget you send. Creators are paid from the
+              remaining pool — this is the one place $ amounts are
+              shown for the budget. */}
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
+            <span className="text-sm font-bold text-fg/60">
+              Platform fee (15%)
+            </span>
+            <span className="text-sm font-black text-fg">
+              {formatUSD(campaign.platform_fee)} USDT
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
+            <span className="text-sm font-bold text-fg/60">
+              Creators pool
+            </span>
+            <span className="text-sm font-black text-fg">
+              {formatUSD(campaign.budget_left)} USDT
+            </span>
+          </div>
+          <p className="text-xs leading-relaxed text-fg/50">
+            You send the full budget above. The 15% platform fee comes
+            out of it, and creators are paid only from the remaining
+            pool, per verified view.
+          </p>
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
             <span className="text-sm font-bold text-fg/60">Network</span>
             <span className="text-sm font-black text-fg">USDT TRC20</span>

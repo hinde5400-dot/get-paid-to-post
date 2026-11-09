@@ -21,6 +21,9 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     rate_per_1m: Number(row.rate_per_1m ?? 0),
     budget_total: Number(row.budget_total ?? 0),
     budget_left: Number(row.budget_left ?? 0),
+    // 15% flat platform fee (migration 0021); rows written before
+    // it have no fee column and fall back to 0.
+    platform_fee: Number(row.platform_fee ?? 0),
     spots_left: Number(row.spots_left ?? 0),
     spots_total: Number(row.spots_total ?? 0),
     category: String(row.category ?? "General"),
@@ -28,7 +31,6 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     platforms,
     description: String(row.description ?? ""),
     rules: (row.rules as string | null) ?? null,
-    base_pay: Number(row.base_pay ?? 10),
     view_bonus_per_1k: Number(row.view_bonus_per_1k ?? 0),
     // Per-post cap (migration 0007); older rows fall back to the old
     // per-video / earn-up-to value, then the $75 default.

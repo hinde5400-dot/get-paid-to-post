@@ -65,11 +65,10 @@ export default function TermsPage() {
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Clips must be vertical 9:16, with captions and a hook in the first 3 seconds.</li>
           <li>• Only TikTok, Instagram and YouTube links are accepted.</li>
-          <li>• Base pay is $10 per approved post, plus the campaign&apos;s rate per 1,000 views, tracked for 14 days.</li>
+          <li>• You are paid per verified view only — there is no base pay per post. Earnings are the smaller of (views / 1,000 × the campaign&apos;s rate per 1,000 views), the campaign maximum per post, and the remaining campaign budget. Views are tracked for 14 days.</li>
           <li>• Submissions stay Pending at $0 until approved.</li>
           <li>• Approved earnings move to your wallet after a 72-hour hold.</li>
-          <li>• Up to 7 posts per campaign, and one clip per platform every 2 hours.</li>
-          <li>• Earnings are calculated as views / 1,000,000 × the campaign rate per 1M views, capped at the campaign maximum per video and the remaining budget.</li>
+          <li>• Up to 15 approved clips per platform per campaign (TikTok 15, Instagram 15, YouTube 15), and one clip per platform every 2 hours. Rejected clips do not count toward the limit.</li>
         </ul>
       </section>
 

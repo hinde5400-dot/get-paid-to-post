@@ -18,14 +18,12 @@ const SORT_OPTIONS: DropdownOption[] = [
   { value: "best", label: "Best Match", icon: <span aria-hidden>✦</span> },
   { value: "highest", label: "Highest Pay", icon: <span aria-hidden>$</span> },
   { value: "budget", label: "Biggest Budget", icon: <span aria-hidden>▦</span> },
-  { value: "spots", label: "Most Spots", icon: <span aria-hidden>●</span> },
 ];
 
 const SORT_EXPLAIN: Record<string, string> = {
-  best: "Best Match — our pick: a mix of rate, budget and spots left.",
+  best: "Best Match — our pick: a mix of rate and budget.",
   highest: "Highest Pay shows the best rate per 1,000 views first.",
   budget: "Biggest Budget shows the largest funded budgets first.",
-  spots: "Most Spots shows campaigns with the most creator spots left first.",
 };
 
 const PLATFORM_OPTIONS: DropdownOption[] = [

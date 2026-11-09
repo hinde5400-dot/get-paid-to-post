@@ -7,6 +7,7 @@ import type { Campaign } from "@/lib/types";
 import { campaignPlatforms } from "@/lib/types";
 import type { CampaignStats } from "@/lib/data";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
+import { budgetBarClass, budgetRemainingPct, payoutForViews } from "@/lib/money";
 import CampaignBanner from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -27,17 +28,23 @@ export default function CampaignModal({
   stats: CampaignStats | null;
   onClose: () => void;
 }) {
-  const spent = campaign.budget_total - campaign.budget_left;
-  const fundedPct = Math.min(
-    100,
-    Math.round((spent / campaign.budget_total) * 100)
+  // Budget is shown as % remaining ONLY — never a $ amount
+  // (Turn's decision, P0 batch 2).
+  const remainingPct = budgetRemainingPct(
+    campaign.budget_total,
+    campaign.budget_left
   );
   const approvalPct =
     stats && stats.total > 0
       ? Math.round((stats.approved / stats.total) * 100)
       : null;
   const timeLeft = formatTimeLeft(campaign.ends_at);
-  const example20k = 20 * campaign.view_bonus_per_1k;
+  // 20k example with the per-post cap applied, like the 50k example.
+  const example20k = payoutForViews(
+    20000,
+    campaign.view_bonus_per_1k,
+    campaign.max_payout_per_post
+  );
 
   // Close on Escape, and lock body scroll while the modal is open.
   useEffect(() => {
@@ -88,37 +95,28 @@ export default function CampaignModal({
             {campaign.description}
           </p>
 
-          {/* Budget bar */}
+          {/* Budget bar — % remaining only, never $ amounts */}
           <div className="mt-5">
             <div className="flex items-baseline justify-between text-sm">
               <span className="font-bold text-fg">
-                {formatUSD(spent)} of {formatUSD(campaign.budget_total)}
-                <span className="ml-1 text-xs font-medium text-fg/50">
-                  funded
-                </span>
+                {remainingPct === 0
+                  ? "Campaign ended"
+                  : `${remainingPct}% budget remaining`}
               </span>
               <span className="text-xs font-bold text-fg/60">
-                {fundedPct}%
+                {remainingPct}%
               </span>
             </div>
             <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-fg/10">
               <div
-                className="h-full rounded-full bg-lime"
-                style={{ width: `${fundedPct}%` }}
+                className={`h-full rounded-full ${budgetBarClass(remainingPct)}`}
+                style={{ width: `${remainingPct}%` }}
               />
             </div>
           </div>
 
           {/* Facts row */}
-          <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-            <div className="rounded-2xl bg-fg/5 p-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
-                Base pay
-              </p>
-              <p className="mt-1 font-display text-lg font-black text-fg">
-                {formatUSD(campaign.base_pay)}
-              </p>
-            </div>
+          <div className="mt-5 grid grid-cols-2 gap-3 text-center">
             <div className="rounded-2xl bg-fg/5 p-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
                 Per 1K views
@@ -152,8 +150,8 @@ export default function CampaignModal({
             )}
           </div>
           <p className="mt-3 text-xs text-fg/50">
-            Views tracked {campaign.views_tracked_days} days · Max{" "}
-            {campaign.max_posts} posts · {campaign.spots_left} spots left
+            Views tracked {campaign.views_tracked_days} days · Up to 15
+            approved clips per platform
           </p>
           <p className="mt-2 text-xs font-semibold text-fg/70">
             {timeLeft ? (
@@ -164,7 +162,7 @@ export default function CampaignModal({
             {" · "}Example: 20k views ×{" "}
             {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
             <span className="font-bold text-fg">
-              {formatUSD(example20k)} earned
+              {formatUSD(example20k.earnings)} earned
             </span>
           </p>
 

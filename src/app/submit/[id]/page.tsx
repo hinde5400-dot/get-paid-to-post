@@ -55,10 +55,18 @@ export default async function SubmitPage({
 
   const user = await getCurrentUser();
   let lastByPlatform: LastSubmission[] = [];
-  let userPostCount = 0;
+  // Approved clips per platform for this creator on this campaign
+  // (P0 batch 2): only status='approved' counts — rejected clips do
+  // NOT count toward the 15-per-platform limit.
+  let approvedByPlatform: Partial<Record<Platform, number>> = {};
   if (user) {
     const subs = await getUserSubmissions(user.id);
-    userPostCount = subs.filter((s) => s.campaign_id === campaign.id).length;
+    for (const s of subs) {
+      if (s.campaign_id === campaign.id && s.status === "approved") {
+        approvedByPlatform[s.platform] =
+          (approvedByPlatform[s.platform] ?? 0) + 1;
+      }
+    }
     const latest = new Map<Platform, string>();
     for (const s of subs) {
       const prev = latest.get(s.platform);
@@ -82,7 +90,7 @@ export default async function SubmitPage({
         campaign={campaign}
         lastByPlatform={lastByPlatform}
         isLoggedIn={Boolean(user)}
-        userPostCount={userPostCount}
+        approvedByPlatform={approvedByPlatform}
       />
     </div>
   );

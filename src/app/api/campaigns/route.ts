@@ -4,6 +4,7 @@ import {
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
+  PLATFORM_FEE_RATE,
 } from "@/lib/constants";
 import type { Platform } from "@/lib/types";
 
@@ -163,6 +164,11 @@ export async function POST(request: Request) {
     );
   }
 
+  // Platform fee (P0 batch 2): 15% FLAT, taken INSIDE the budget.
+  // The brand still SENDS the full budget_total (the payment page
+  // "Amount to Send" stays budget_total); budget_left is the
+  // creators pool the payouts draw from.
+  const platformFee = Math.round(budgetTotal * PLATFORM_FEE_RATE * 100) / 100;
   const insertRow: Record<string, unknown> = {
     brand_name: brandName,
     title,
@@ -173,7 +179,8 @@ export async function POST(request: Request) {
     // the same rate scaled up, so the two fields stay coherent.
     rate_per_1m: Math.round(ratePer1k * 1000 * 100) / 100,
     budget_total: budgetTotal,
-    budget_left: budgetTotal,
+    budget_left: Math.round((budgetTotal - platformFee) * 100) / 100,
+    platform_fee: platformFee,
     spots_left: 0,
     spots_total: 0,
     category: "General",
@@ -184,7 +191,6 @@ export async function POST(request: Request) {
     platforms,
     description,
     rules: requirements || null,
-    base_pay: 10,
     view_bonus_per_1k: ratePer1k,
     // The per-post cap IS the "earn up to" figure shown on cards.
     max_payout_per_post: cap,
@@ -208,9 +214,9 @@ export async function POST(request: Request) {
   if (insertResult.error) {
     // New columns come from migrations (0004 logo_url, 0007
     // max_payout_per_post, 0009 brief/thumbnail/duration, 0012
-    // platforms, 0013 user_id) which may not have been run yet. Drop
-    // the column the database complains about and retry once,
-    // instead of failing the submission.
+    // platforms, 0013 user_id, 0021 platform_fee) which may not have
+    // been run yet. Drop the column the database complains about
+    // and retry once, instead of failing the submission.
     const msg = insertResult.error.message;
     const retryRow: Record<string, unknown> = { ...insertRow };
     let stripped = false;
@@ -221,6 +227,7 @@ export async function POST(request: Request) {
       "thumbnail_url",
       "duration_days",
       "platforms",
+      "platform_fee",
       "user_id",
     ] as const) {
       if (new RegExp(col, "i").test(msg)) {

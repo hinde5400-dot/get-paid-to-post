@@ -20,7 +20,7 @@ const FAQS = [
   },
   {
     q: "How much can I earn per post?",
-    a: "Every approved post earns a $10 base pay, plus the campaign's rate per 1,000 views. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
+    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
   },
   {
     q: "What are the video rules?",
@@ -28,7 +28,7 @@ const FAQS = [
   },
   {
     q: "How many posts can I submit?",
-    a: "Up to 7 posts per campaign, and one clip per platform every 2 hours. Submit TikTok and Instagram together as one bundle; YouTube is optional.",
+    a: "Up to 15 approved clips per platform per campaign, and one clip per platform every 2 hours. Submit any 2 of TikTok, Instagram and YouTube together as one bundle. Rejected clips don't count toward the 15-clip limit.",
   },
   {
     q: "What happens with fake engagement?",
@@ -149,12 +149,6 @@ export default async function HomePage() {
                   <p className="font-display text-3xl font-black text-lime">
                     {formatUSD(featured.max_payout_per_post)}
                     <span className="text-base font-semibold text-fg/60"> / post</span>
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-fg/50">Base pay</p>
-                  <p className="text-lg font-bold text-fg">
-                    {formatUSD(featured.base_pay)} per approved post
                   </p>
                 </div>
                 <div>

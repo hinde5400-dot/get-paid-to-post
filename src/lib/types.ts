@@ -68,6 +68,9 @@ export interface Campaign {
   rate_per_1m: number;
   budget_total: number;
   budget_left: number;
+  /** 15% flat platform fee, taken inside budget_total (migration
+   *  0021). budget_left is the creators pool: budget - fee. */
+  platform_fee: number;
   spots_left: number;
   spots_total: number;
   category: string;
@@ -76,7 +79,6 @@ export interface Campaign {
   platforms?: Platform[] | null;
   description: string;
   rules?: string | null;
-  base_pay: number;
   view_bonus_per_1k: number;
   /** Most a creator can earn on ONE post, even if views would pay more. */
   max_payout_per_post: number;

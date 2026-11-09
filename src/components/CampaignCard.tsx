@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Campaign } from "@/lib/types";
 import { campaignPlatforms } from "@/lib/types";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
+import { budgetBarClass, budgetRemainingPct, payoutForViews } from "@/lib/money";
 import CampaignBanner, { BrandLogoTile } from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -22,10 +23,12 @@ export default function CampaignCard({
   campaign: Campaign;
   onOpen: () => void;
 }) {
-  const spent = campaign.budget_total - campaign.budget_left;
-  const fundedPct = Math.min(
-    100,
-    Math.round((spent / campaign.budget_total) * 100)
+  // Budget is shown as % remaining ONLY — never a $ amount
+  // (Turn's decision, P0 batch 2). The bar colour follows the %
+  // remaining: >50% green, 25–50% yellow, 10–25% red, <10% dark red.
+  const remainingPct = budgetRemainingPct(
+    campaign.budget_total,
+    campaign.budget_left
   );
   // Ticking clock for the countdown (re-renders every minute).
   const [now, setNow] = useState(() => Date.now());
@@ -34,8 +37,14 @@ export default function CampaignCard({
     return () => clearInterval(t);
   }, []);
   const timeLeft = formatTimeLeft(campaign.ends_at, now);
-  // Example payout from the campaign's real rate: 20,000 views.
-  const example20k = 20 * campaign.view_bonus_per_1k;
+  // Example payout from the campaign's real rate, with the per-post
+  // cap applied — same math as the 50k example, so it never
+  // overstates earnings above the cap.
+  const example20k = payoutForViews(
+    20000,
+    campaign.view_bonus_per_1k,
+    campaign.max_payout_per_post
+  );
 
   function onKey(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
@@ -82,26 +91,25 @@ export default function CampaignCard({
           {campaign.description}
         </p>
 
-        {/* Budget progress */}
+        {/* Budget progress — % remaining only, never $ amounts */}
         <div className="mt-4">
           <div className="flex items-baseline justify-between text-sm">
             <span className="font-bold text-fg">
-              {formatUSD(spent)} of {formatUSD(campaign.budget_total)}
-              <span className="ml-1 text-xs font-medium text-fg/50">
-                funded
-              </span>
+              {remainingPct === 0
+                ? "Campaign ended"
+                : `${remainingPct}% budget remaining`}
             </span>
             <span className="text-xs font-bold text-fg/60">
-              {fundedPct}%
+              {remainingPct}%
             </span>
           </div>
           <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-fg/10">
             <div
-              className="h-full rounded-full bg-lime"
-              style={{ width: `${fundedPct}%` }}
+              className={`h-full rounded-full ${budgetBarClass(remainingPct)}`}
+              style={{ width: `${remainingPct}%` }}
             />
           </div>
-          {/* Countdown + example payout (real rate, real cap) */}
+          {/* Countdown + example payout (real rate, cap applied) */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
             {timeLeft ? (
               <span className="font-bold text-lime">⏳ {timeLeft}</span>
@@ -113,13 +121,13 @@ export default function CampaignCard({
             <span className="font-semibold text-fg/60">
               20k views × {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
               <span className="font-bold text-fg">
-                {formatUSD(example20k)} earned
+                {formatUSD(example20k.earnings)} earned
               </span>
             </span>
           </div>
         </div>
 
-        {/* Platform chips + spots + per-post cap */}
+        {/* Platform chips + per-post cap */}
         <div className="mt-4 flex items-center justify-between gap-2">
           <PlatformChips
             platform={campaign.platform}
@@ -127,11 +135,6 @@ export default function CampaignCard({
           />
           <span className="shrink-0 rounded-full bg-lime/15 px-2.5 py-1 text-[11px] font-black text-lime">
             Up to {formatUSD(campaign.max_payout_per_post)} / post
-          </span>
-        </div>
-        <div className="mt-2 text-right">
-          <span className="text-xs font-bold text-fg/60">
-            {campaign.spots_left} spots left
           </span>
         </div>
 

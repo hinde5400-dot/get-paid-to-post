@@ -5,8 +5,9 @@ import { getProfile } from "@/lib/auth";
 import {
   COOLDOWN_MS,
   HOW_MADE_MIN_WORDS,
-  MAX_POSTS_PER_CAMPAIGN,
+  MAX_APPROVED_CLIPS_PER_PLATFORM,
   MAX_PROOF_SCREENSHOTS,
+  PLATFORM_LABELS,
 } from "@/lib/constants";
 import { countWords, validatePostUrl } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
@@ -189,20 +190,27 @@ export async function POST(request: Request) {
     );
   }
 
-  // Max 7 posts per campaign per creator. (Clip-limit rework is
-  // batch 2 — this count is unchanged here.)
-  const { count: myCount } = await supabase
-    .from("submissions")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("campaign_id", campaign.id);
-  if ((myCount ?? 0) >= MAX_POSTS_PER_CAMPAIGN) {
-    return NextResponse.json(
-      {
-        error: `You have already submitted the maximum of ${MAX_POSTS_PER_CAMPAIGN} posts for this campaign.`,
-      },
-      { status: 400 }
-    );
+  // Clip limit (P0 batch 2): 15 APPROVED clips per platform per
+  // creator, per campaign. Only status='approved' rows count —
+  // rejected submissions do NOT count (rejected = done, no
+  // resubmit), and each platform in this bundle is checked on its
+  // own, naming the platform that is already at the limit.
+  for (const l of links) {
+    const { count: approvedCount } = await supabase
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("campaign_id", campaign.id)
+      .eq("platform", l.platform)
+      .eq("status", "approved");
+    if ((approvedCount ?? 0) >= MAX_APPROVED_CLIPS_PER_PLATFORM) {
+      return NextResponse.json(
+        {
+          error: `You already have ${MAX_APPROVED_CLIPS_PER_PLATFORM} approved ${PLATFORM_LABELS[l.platform]} clips for this campaign — the limit is 15 approved clips per platform.`,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   // 2-hour cooldown, per platform.

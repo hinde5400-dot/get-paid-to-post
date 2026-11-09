@@ -54,8 +54,6 @@ export default async function CampaignsPage({
     list.sort((a, b) => b.rate_per_1m - a.rate_per_1m);
   } else if (searchParams.sort === "budget") {
     list.sort((a, b) => b.budget_total - a.budget_total);
-  } else if (searchParams.sort === "spots") {
-    list.sort((a, b) => b.spots_left - a.spots_left);
   }
 
   const hasAny = all.length > 0;
@@ -75,8 +73,8 @@ export default async function CampaignsPage({
           Campaigns
         </h1>
         <p className="mt-2 text-sm text-fg/60">
-          Funded campaigns only. Pick one, post your clip, get paid per view.
-          Base pay $10 per approved post, plus the campaign&apos;s rate per 1,000 views.
+          Funded campaigns only. Pick one, post your clip, get paid per
+          view at the campaign&apos;s rate per 1,000 views.
         </p>
       </div>
 

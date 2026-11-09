@@ -63,12 +63,15 @@ export const MAX_PAYOUT_MIN = 10; // USD, minimum max payout per post
 export const MAX_PAYOUT_MAX = 200; // USD, maximum max payout per post
 export const WITHDRAW_MIN = 15; // USD, minimum withdrawal
 export const WITHDRAW_FEE_RATE = 0.07; // 7% at withdrawal
+export const PLATFORM_FEE_RATE = 0.15; // 15% flat platform fee, taken inside the brand's budget (first campaign = repeat campaign)
 export const HOLD_HOURS = 72; // approved earnings sit in a 72-hour hold
 export const VIEW_REFRESH_HOURS = 3; // pending clips re-check views every 3 hours
 export const VIEW_REFRESH_MS = VIEW_REFRESH_HOURS * 60 * 60 * 1000;
-export const BASE_PAY = 10; // USD per approved post
 export const VIEWS_TRACKED_DAYS = 14; // views tracked for 14 days
-export const MAX_POSTS_PER_CAMPAIGN = 7;
+// Clip limit (Turn's decision, P0 batch 2): 15 APPROVED clips per
+// platform per campaign per creator (TikTok 15, Instagram 15,
+// YouTube 15). Rejected clips do NOT count toward the 15.
+export const MAX_APPROVED_CLIPS_PER_PLATFORM = 15;
 export const COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours, per platform
 export const HOW_MADE_MIN_WORDS = 10;
 export const MAX_PROOF_SCREENSHOTS = 3;

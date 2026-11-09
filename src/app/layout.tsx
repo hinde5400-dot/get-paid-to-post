@@ -27,7 +27,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: `${BRAND_NAME} — Get Paid to Post on TikTok, Instagram & YouTube`,
   description:
-    "Post short clips on TikTok, Instagram and YouTube and get paid per view. No follower minimum. Base pay $10 per approved post, plus view bonuses.",
+    "Post short clips on TikTok, Instagram and YouTube and get paid per verified view. No follower minimum — earnings are per view only, up to the campaign's per-post cap.",
   metadataBase: new URL(SITE_URL),
   icons: { icon: "/favicon.svg" },
   openGraph: {

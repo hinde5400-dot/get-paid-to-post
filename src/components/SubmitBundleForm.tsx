@@ -7,6 +7,7 @@ import { campaignPlatforms, platformNamesText } from "@/lib/types";
 import {
   COOLDOWN_MS,
   HOW_MADE_MIN_WORDS,
+  MAX_APPROVED_CLIPS_PER_PLATFORM,
   MAX_PROOF_SCREENSHOTS,
   PLATFORM_LABELS,
 } from "@/lib/constants";
@@ -40,12 +41,14 @@ export default function SubmitBundleForm({
   campaign,
   lastByPlatform,
   isLoggedIn,
-  userPostCount,
+  approvedByPlatform,
 }: {
   campaign: Campaign;
   lastByPlatform: LastSubmission[];
   isLoggedIn: boolean;
-  userPostCount: number;
+  /** Approved clips per platform for this creator on this campaign
+   *  (P0 batch 2) — only approved counts, rejected clips don't. */
+  approvedByPlatform: Partial<Record<Platform, number>>;
 }) {
   const [tiktok, setTiktok] = useState("");
   const [instagram, setInstagram] = useState("");
@@ -88,7 +91,14 @@ export default function SubmitBundleForm({
     return map;
   }, [lastByPlatform, now, allowedPlatforms]);
 
-  const maxReached = userPostCount >= campaign.max_posts;
+  // Clip limit (P0 batch 2): 15 APPROVED clips per platform.
+  // The form is only fully blocked when EVERY platform this
+  // campaign accepts is already at 15 approved; a single platform
+  // at the limit is checked per link at submit time below.
+  const approvedFor = (p: Platform) => approvedByPlatform[p] ?? 0;
+  const maxReached = allowedPlatforms.every(
+    (p) => approvedFor(p) >= MAX_APPROVED_CLIPS_PER_PLATFORM
+  );
 
   function setProofAt(i: number, value: string) {
     setProof((prev) => prev.map((p, idx) => (idx === i ? value : p)));
@@ -100,7 +110,9 @@ export default function SubmitBundleForm({
       return;
     }
     if (maxReached) {
-      showError(`You have already submitted the maximum of ${campaign.max_posts} posts for this campaign.`);
+      showError(
+        `You already have ${MAX_APPROVED_CLIPS_PER_PLATFORM} approved clips on every platform for this campaign — the limit is 15 approved clips per platform.`
+      );
       return;
     }
     const linkValues: Record<Platform, string> = {
@@ -126,6 +138,12 @@ export default function SubmitBundleForm({
       if (!allowedPlatforms.includes(l.platform)) {
         showError(
           `This campaign only accepts clips on ${platformNames}.`
+        );
+        return;
+      }
+      if (approvedFor(l.platform) >= MAX_APPROVED_CLIPS_PER_PLATFORM) {
+        showError(
+          `You already have ${MAX_APPROVED_CLIPS_PER_PLATFORM} approved ${PLATFORM_LABELS[l.platform]} clips for this campaign — the limit is 15 approved clips per platform.`
         );
         return;
       }
@@ -196,8 +214,21 @@ export default function SubmitBundleForm({
           : allowedPlatforms.length === 2
             ? `Post on ${platformNames} together — submit both links as one bundle, reviewed and paid together.`
             : `Post on any 2 of ${platformNames} — submit the links as one bundle, reviewed and paid together.`}{" "}
-        Max {campaign.max_posts} posts per campaign.
+        Up to 15 approved clips per platform — rejected clips
+        don&apos;t count toward the limit.
       </p>
+      {isLoggedIn && (
+        <p className="mt-1 text-sm text-fg/60">
+          Your approved clips:{" "}
+          {allowedPlatforms
+            .map(
+              (p) =>
+                `${PLATFORM_LABELS[p]} ${approvedFor(p)}/${MAX_APPROVED_CLIPS_PER_PLATFORM}`
+            )
+            .join(" · ")}
+          {" — "}rejected clips don&apos;t count toward the limit.
+        </p>
+      )}
 
       {cooldowns.size > 0 && (
         <div className="mt-4 space-y-2">
@@ -215,8 +246,8 @@ export default function SubmitBundleForm({
 
       {maxReached && (
         <p className="mt-4 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-          You have reached the maximum of {campaign.max_posts} posts for this
-          campaign.
+          You have reached the limit of {MAX_APPROVED_CLIPS_PER_PLATFORM}{" "}
+          approved clips on every platform for this campaign.
         </p>
       )}
 

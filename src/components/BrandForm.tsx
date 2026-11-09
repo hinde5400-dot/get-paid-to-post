@@ -6,6 +6,7 @@ import {
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
+  PLATFORM_FEE_RATE,
 } from "@/lib/constants";
 import type { Platform } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -205,6 +206,23 @@ export default function BrandForm({
       ? Number(budget)
       : 200;
   const exampleViews = Math.round((exampleBudget / exampleRate) * 1000);
+  // Platform fee (P0 batch 2): 15% flat, taken INSIDE the budget.
+  // You still send the full budget; creators are paid from the pool.
+  const exampleFee =
+    Math.round(exampleBudget * PLATFORM_FEE_RATE * 100) / 100;
+  const examplePool =
+    Math.round((exampleBudget - exampleFee) * 100) / 100;
+  const budgetNum = Number(budget);
+  const liveFeeSplit =
+    Number.isFinite(budgetNum) && budgetNum > 0
+      ? {
+          fee: Math.round(budgetNum * PLATFORM_FEE_RATE * 100) / 100,
+          pool:
+            Math.round(
+              (budgetNum - budgetNum * PLATFORM_FEE_RATE) * 100
+            ) / 100,
+        }
+      : null;
   const fmtChoice = (n: number) =>
     `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
@@ -336,6 +354,13 @@ export default function BrandForm({
           <span className="mt-1 block text-xs font-medium text-fg/50">
             Any amount above $0 — funded upfront before launch.
           </span>
+          {liveFeeSplit && (
+            <span className="mt-1 block text-xs font-semibold text-lime">
+              Platform fee (15%): {fmtChoice(liveFeeSplit.fee)} · Creators
+              pool: {fmtChoice(liveFeeSplit.pool)} — creators are paid from
+              the pool.
+            </span>
+          )}
           {fieldErrors.budget && (
             <span className={errCls}>{fieldErrors.budget}</span>
           )}
@@ -419,7 +444,8 @@ export default function BrandForm({
       <div className="mt-4 rounded-2xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
         Example: If you set {fmtChoice(exampleRate)} per 1k and budget{" "}
         {fmtChoice(exampleBudget)}, you will get approx{" "}
-        {exampleViews.toLocaleString("en-US")} views.
+        {exampleViews.toLocaleString("en-US")} views. Platform fee (15%):{" "}
+        {fmtChoice(exampleFee)} · Creators pool: {fmtChoice(examplePool)}.
       </div>
       <label className="mt-4 block text-sm font-bold text-fg">
         Campaign Description

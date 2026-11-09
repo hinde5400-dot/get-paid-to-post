@@ -25,6 +25,34 @@ export function feeFor(amount: number): number {
   return Math.round(amount * WITHDRAW_FEE_RATE * 100) / 100;
 }
 
+/**
+ * Budget shown as % remaining only — never a $ amount on public
+ * cards, modals or the detail page (Turn's decision, P0 batch 2).
+ * The payment page is the one place that still shows $ amounts
+ * (the fee split). 0 when there is no budget to divide by.
+ */
+export function budgetRemainingPct(
+  budgetTotal: number,
+  budgetLeft: number
+): number {
+  if (!budgetTotal || budgetTotal <= 0) return 0;
+  return Math.min(
+    100,
+    Math.max(0, Math.round((budgetLeft / budgetTotal) * 100))
+  );
+}
+
+/**
+ * Budget-bar colour by % remaining: >50% green (lime), 25–50%
+ * yellow, 10–25% red, <10% dark red. 0% remaining = campaign ended.
+ */
+export function budgetBarClass(remainingPct: number): string {
+  if (remainingPct > 50) return "bg-lime";
+  if (remainingPct >= 25) return "bg-yellow-400";
+  if (remainingPct >= 10) return "bg-red-500";
+  return "bg-red-800";
+}
+
 /** Final payout after the 7% fee: amount × 0.93 */
 export function finalFor(amount: number): number {
   return Math.round((amount - feeFor(amount)) * 100) / 100;
