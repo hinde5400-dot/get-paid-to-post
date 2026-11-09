@@ -27,7 +27,8 @@ import {
  * views PER selected platform (any rate above $0 — your choice),
  * Total Budget (any amount above $0 — your choice, no minimum),
  * Max Payout Per Post (default $75, $10–$200), Minimum views per
- * clip (optional, 0 = no threshold) and Maximum payout per creator
+ * clip (floor 1,000 — pre-filled with 1,000, blank = 1,000, values
+ * below 1,000 are rejected) and Maximum payout per creator
  * (optional, blank = no cap), Campaign Description, Video
  * Requirements. Saves with status "pending" — nothing goes live
  * until the brand pays the budget in USDT on the payment page and
@@ -59,7 +60,7 @@ export default function BrandForm({
   const [rates, setRates] = useState<Partial<Record<Platform, string>>>({
     tiktok: "",
   });
-  const [minViews, setMinViews] = useState("");
+  const [minViews, setMinViews] = useState("1000");
   const [maxPayoutPerCreator, setMaxPayoutPerCreator] = useState("");
   const [budget, setBudget] = useState("");
   const [maxPayout, setMaxPayout] = useState(String(MAX_PAYOUT_DEFAULT));
@@ -71,6 +72,11 @@ export default function BrandForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Pre-submit review step: when validation passes, the form shows
+  // a "Review your campaign" panel instead of submitting at once.
+  // The form state underneath stays intact for editing.
+  const [reviewing, setReviewing] = useState(false);
+  const [ackUnset, setAckUnset] = useState(false);
 
   function fail(field: string, message: string) {
     setFieldErrors((prev) => ({ ...prev, [field]: message }));
@@ -129,13 +135,14 @@ export default function BrandForm({
       }
       ratesNum[p] = v;
     }
-    // Minimum views per clip (P1-b, optional): 0 / blank = no threshold.
+    // Minimum views per clip: floor 1,000. Blank = 1,000 (the
+    // floor default); anything below 1,000 is rejected.
     const minViewsNum =
-      minViews.trim() === "" ? 0 : Math.floor(Number(minViews));
-    if (!Number.isFinite(minViewsNum) || minViewsNum < 0) {
+      minViews.trim() === "" ? 1000 : Math.floor(Number(minViews));
+    if (!Number.isFinite(minViewsNum) || minViewsNum < 1000) {
       return fail(
         "minViews",
-        "Error: Minimum views per clip must be 0 or more"
+        "Minimum views per clip must be at least 1,000"
       );
     }
     // Max payout per creator (P1-b, optional): blank = no cap.
@@ -181,6 +188,30 @@ export default function BrandForm({
         "thumbnailUrl",
         "Thumbnail Image Link must be a full URL starting with http:// or https://."
       );
+    }
+    // Pre-submit review step: all required validation passed, so
+    // show the review panel first. The second submit (from the
+    // review panel, with reviewing already true) runs the POST
+    // below unchanged.
+    if (!reviewing) {
+      setAckUnset(false);
+      setReviewing(true);
+      return;
+    }
+    // Confirmed submit from the review panel: if any optional
+    // setting is unset, the brand must tick "I understand — submit
+    // anyway" first (the button is disabled until then; this is a
+    // backstop in case submit is triggered another way).
+    const hasUnsetOptional =
+      !logoUrl.trim() ||
+      !maxPayoutPerCreator.trim() ||
+      durationDays === "" ||
+      !briefUrl.trim() ||
+      !thumbnailUrl.trim() ||
+      minViews.trim() === "";
+    if (hasUnsetOptional && !ackUnset) {
+      showError("Please tick “I understand — submit anyway” to continue.");
+      return;
     }
     setBusy(true);
     try {
@@ -288,6 +319,30 @@ export default function BrandForm({
   const fmtChoice = (n: number) =>
     `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
+  // Values shown on the pre-submit review panel (only reached
+  // after validation passes, so budget / rates / min views are
+  // all valid numbers here).
+  const reviewBudget = Number(budget);
+  const reviewFee = platformFeeFor(reviewBudget);
+  const reviewTotal = totalToSend(reviewBudget);
+  const reviewMinViewsBlank = minViews.trim() === "";
+  const reviewMinViews = reviewMinViewsBlank
+    ? 1000
+    : Math.floor(Number(minViews));
+  const reviewUnset = {
+    logo: !logoUrl.trim(),
+    maxPerCreator: !maxPayoutPerCreator.trim(),
+    duration: durationDays === "",
+    brief: !briefUrl.trim(),
+    thumbnail: !thumbnailUrl.trim(),
+    minViews: reviewMinViewsBlank,
+  };
+  const reviewHasUnset = Object.values(reviewUnset).some(Boolean);
+  const reviewPlatformName = (p: Platform) =>
+    p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube";
+  const reviewTrunc = (s: string) =>
+    s.length > 200 ? `${s.slice(0, 200)}…` : s;
+
   return (
     <form
       onSubmit={submit}
@@ -307,6 +362,202 @@ export default function BrandForm({
           your account.
         </p>
       )}
+      {reviewing ? (
+        <div className="mt-5">
+          <h3 className="text-lg font-extrabold text-fg">
+            Review your campaign
+          </h3>
+          <p className="mt-1 text-sm text-fg/60">
+            Check every setting below before you submit. Amber rows are
+            optional settings you left unset — the default shown will
+            apply.
+          </p>
+          <div className="mt-4 grid gap-2">
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Brand Name</p>
+              <p className="mt-0.5 text-sm font-semibold text-fg">{brandName.trim()}</p>
+            </div>
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                reviewUnset.logo
+                  ? "border-amber-400/50 bg-amber-500/10"
+                  : "border-fg/10 bg-ink"
+              }`}
+            >
+              <p className="text-xs font-bold text-fg/50">Brand Logo</p>
+              {reviewUnset.logo ? (
+                <p className="mt-0.5 text-sm font-semibold text-amber-200">
+                  Not set — no logo will be shown
+                </p>
+              ) : (
+                <p className="mt-0.5 break-all text-sm font-semibold text-fg">
+                  Set — {logoUrl.trim()}
+                </p>
+              )}
+            </div>
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Campaign Title</p>
+              <p className="mt-0.5 text-sm font-semibold text-fg">{title.trim()}</p>
+            </div>
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Category</p>
+              <p className="mt-0.5 text-sm font-semibold text-fg">{category}</p>
+            </div>
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Platforms</p>
+              <p className="mt-0.5 text-sm font-semibold text-fg">
+                {platforms.map(reviewPlatformName).join(", ")}
+              </p>
+              <p className="mt-1 text-sm text-fg/70">
+                {platforms
+                  .map(
+                    (p) =>
+                      `${reviewPlatformName(p)}: $${Number(rates[p] ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} per 1k views`
+                  )
+                  .join(" · ")}
+              </p>
+            </div>
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Total Budget</p>
+              <p className="mt-0.5 text-sm font-semibold text-fg">
+                Budget {fmtChoice(reviewBudget)} + 15% platform fee{" "}
+                {fmtChoice(reviewFee)} = Total to send{" "}
+                {fmtChoice(reviewTotal)}
+              </p>
+              <p className="mt-1 text-sm text-fg/70">
+                Creators pool (full budget): {fmtChoice(reviewBudget)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">
+                Max Payout Per Post
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-fg">
+                {fmtChoice(Number(maxPayout))}
+              </p>
+            </div>
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                reviewUnset.minViews
+                  ? "border-amber-400/50 bg-amber-500/10"
+                  : "border-fg/10 bg-ink"
+              }`}
+            >
+              <p className="text-xs font-bold text-fg/50">
+                Minimum views per clip
+              </p>
+              {reviewUnset.minViews ? (
+                <p className="mt-0.5 text-sm font-semibold text-amber-200">
+                  Not set — 1,000 minimum applies (
+                  {reviewMinViews.toLocaleString("en-US")} views)
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm font-semibold text-fg">
+                  {reviewMinViews.toLocaleString("en-US")} views
+                </p>
+              )}
+            </div>
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                reviewUnset.maxPerCreator
+                  ? "border-amber-400/50 bg-amber-500/10"
+                  : "border-fg/10 bg-ink"
+              }`}
+            >
+              <p className="text-xs font-bold text-fg/50">
+                Maximum payout per creator
+              </p>
+              {reviewUnset.maxPerCreator ? (
+                <p className="mt-0.5 text-sm font-semibold text-amber-200">
+                  Not set — no cap
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm font-semibold text-fg">
+                  {fmtChoice(Number(maxPayoutPerCreator))}
+                </p>
+              )}
+            </div>
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                reviewUnset.duration
+                  ? "border-amber-400/50 bg-amber-500/10"
+                  : "border-fg/10 bg-ink"
+              }`}
+            >
+              <p className="text-xs font-bold text-fg/50">Duration</p>
+              {reviewUnset.duration ? (
+                <p className="mt-0.5 text-sm font-semibold text-amber-200">
+                  Not set — runs until the budget ends
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm font-semibold text-fg">
+                  {durationDays} days
+                </p>
+              )}
+            </div>
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                reviewUnset.brief
+                  ? "border-amber-400/50 bg-amber-500/10"
+                  : "border-fg/10 bg-ink"
+              }`}
+            >
+              <p className="text-xs font-bold text-fg/50">Brief link</p>
+              {reviewUnset.brief ? (
+                <p className="mt-0.5 text-sm font-semibold text-amber-200">
+                  Not set — optional
+                </p>
+              ) : (
+                <p className="mt-0.5 break-all text-sm font-semibold text-fg">
+                  {briefUrl.trim()}
+                </p>
+              )}
+            </div>
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                reviewUnset.thumbnail
+                  ? "border-amber-400/50 bg-amber-500/10"
+                  : "border-fg/10 bg-ink"
+              }`}
+            >
+              <p className="text-xs font-bold text-fg/50">Thumbnail link</p>
+              {reviewUnset.thumbnail ? (
+                <p className="mt-0.5 text-sm font-semibold text-amber-200">
+                  Not set — default banner will be used
+                </p>
+              ) : (
+                <p className="mt-0.5 break-all text-sm font-semibold text-fg">
+                  {thumbnailUrl.trim()}
+                </p>
+              )}
+            </div>
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Description</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-sm text-fg/80">
+                {reviewTrunc(description.trim())}
+              </p>
+            </div>
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Requirements</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-sm text-fg/80">
+                {reviewTrunc(requirements.trim())}
+              </p>
+            </div>
+          </div>
+          {reviewHasUnset && (
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-amber-400/50 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-200">
+              <input
+                type="checkbox"
+                checked={ackUnset}
+                onChange={(e) => setAckUnset(e.target.checked)}
+                className="mt-0.5 h-5 w-5 shrink-0 accent-[#C6FF00]"
+              />
+              I understand — submit anyway
+            </label>
+          )}
+        </div>
+      ) : (
+        <>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <label className="block text-sm font-bold text-fg">
           Brand Name
@@ -498,21 +749,20 @@ export default function BrandForm({
           )}
         </label>
         <label className="block text-sm font-bold text-fg">
-          Minimum views per clip{" "}
-          <span className="font-medium text-fg/50">(optional)</span>
+          Minimum views per clip
           <input
             type="number"
-            min={0}
+            min={1000}
             step="1"
             value={minViews}
             onChange={(e) => setMinViews(e.target.value)}
-            placeholder="e.g. 1000"
+            placeholder="1000"
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
-            A clip needs at least this many views before it can be
-            approved. Leave blank for no minimum (0) — every clip with
-            real views can earn.
+            Every clip needs at least 1,000 views to earn. Creators earn
+            only from clips that reach 1,000 views. You can set a higher
+            minimum if you want.
           </span>
           {fieldErrors.minViews && (
             <span className={errCls}>{fieldErrors.minViews}</span>
@@ -649,6 +899,33 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
           <span className={errCls}>{fieldErrors.requirements}</span>
         )}
       </label>
+        </>
+      )}
+      {reviewing ? (
+        <div className="mt-6 flex flex-col gap-2">
+          <button
+            type="submit"
+            disabled={busy || (reviewHasUnset && !ackUnset)}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy ? (
+              <>
+                <Spinner /> Loading...
+              </>
+            ) : (
+              "Submit campaign for review"
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setReviewing(false)}
+            className="flex w-full items-center justify-center rounded-full border border-fg/15 bg-ink py-3.5 text-sm font-bold text-fg transition hover:border-fg/30 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Back to edit
+          </button>
+        </div>
+      ) : (
       <button
         type="submit"
         disabled={busy}
@@ -662,6 +939,7 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
           "Submit campaign for review"
         )}
       </button>
+      )}
       <p className="mt-3 text-center text-xs text-fg/40">
         No payment is taken here. After you submit, send your budget
         plus the 15% platform fee in USDT (TRC20) to the admin wallet
