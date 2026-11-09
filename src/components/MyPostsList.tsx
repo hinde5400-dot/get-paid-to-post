@@ -2,10 +2,40 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { Submission, SubmissionStatus } from "@/lib/types";
+import type { Platform, Submission, SubmissionStatus } from "@/lib/types";
 import { formatUSD, payoutForViews } from "@/lib/money";
 import { DISCORD_URL, PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
+import { PlatformChips } from "./PlatformIcons";
+
+/**
+ * Participant history (migration 0027): one row per campaign this
+ * creator joined, saved when the ended campaign is auto-deleted.
+ * Only the creator who joined ever sees their own rows (RLS:
+ * auth.uid() = user_id) — never shown on Discover, never to
+ * non-joiners.
+ */
+export interface CampaignHistoryRow {
+  id: string;
+  campaign_id: string | null;
+  campaign_title: string | null;
+  brand_name: string | null;
+  platforms: string[] | null;
+  joined_at: string | null;
+  clips_submitted: number;
+  clips_approved: number;
+  total_views: number;
+  total_earned: number;
+  status: string;
+}
+
+function validPlatforms(raw: string[] | null): Platform[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (p): p is Platform =>
+      p === "tiktok" || p === "instagram" || p === "youtube"
+  );
+}
 
 const FILTERS: { key: "all" | SubmissionStatus; label: string }[] = [
   { key: "all", label: "All" },
@@ -16,8 +46,11 @@ const FILTERS: { key: "all" | SubmissionStatus; label: string }[] = [
 
 export default function MyPostsList({
   submissions,
+  pastCampaigns = [],
 }: {
   submissions: Submission[];
+  /** Participant history (migration 0027) — this creator's own rows only. */
+  pastCampaigns?: CampaignHistoryRow[];
 }) {
   const [filter, setFilter] = useState<"all" | SubmissionStatus>("all");
   const [copied, setCopied] = useState<string | null>(null);
@@ -200,6 +233,91 @@ export default function MyPostsList({
           ))}
         </div>
       )}
+
+      {/* Past campaigns — participant history (migration 0027).
+          Below the submissions list, and only ever this creator's
+          own rows. A deleted campaign lives on here, nowhere else. */}
+      <section className="mt-10">
+        <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+          Past campaigns
+        </h2>
+        <p className="mt-1 text-sm text-fg/60">
+          Campaigns you joined that have ended and settled. Only you can
+          see this history.
+        </p>
+        {pastCampaigns.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-fg/10 bg-card p-8 text-center">
+            <p className="text-lg font-bold text-fg">No past campaigns yet</p>
+            <p className="mt-2 text-sm text-fg/60">
+              Campaigns you join will show up here once they end — even
+              after they are removed from Discover.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {pastCampaigns.map((h) => {
+              const platforms = validPlatforms(h.platforms);
+              return (
+                <article
+                  key={h.id}
+                  className="rounded-2xl border border-fg/10 bg-card p-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-fg">
+                        {h.campaign_title ?? "Campaign"}
+                      </h3>
+                      {h.brand_name && (
+                        <p className="mt-1 text-sm text-fg/60">
+                          {h.brand_name}
+                        </p>
+                      )}
+                      {platforms.length > 0 && (
+                        <div className="mt-2">
+                          <PlatformChips
+                            platform="all"
+                            platforms={platforms}
+                            size="sm"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+                      Completed
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-xl bg-fg/5 py-2">
+                      <p className="text-lg font-black text-fg">
+                        {h.clips_approved} / {h.clips_submitted}
+                      </p>
+                      <p className="text-xs text-fg/50">Clips approved</p>
+                    </div>
+                    <div className="rounded-xl bg-fg/5 py-2">
+                      <p className="text-lg font-black text-fg">
+                        {h.total_views.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-fg/50">Views</p>
+                    </div>
+                    <div className="rounded-xl bg-fg/5 py-2">
+                      <p className="text-lg font-black text-lime">
+                        {formatUSD(h.total_earned)}
+                      </p>
+                      <p className="text-xs text-fg/50">Earned</p>
+                    </div>
+                  </div>
+                  {h.joined_at && (
+                    <p className="mt-4 text-xs text-fg/60">
+                      Joined{" "}
+                      {new Date(h.joined_at).toLocaleDateString("en-US")}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
