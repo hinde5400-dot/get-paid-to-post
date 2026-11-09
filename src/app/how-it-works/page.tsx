@@ -78,6 +78,13 @@ export default async function HowItWorksPage() {
       </div>
 
       <div className="text-center">
+        <Link
+          href="/rules"
+          className="text-sm font-bold text-lime hover:underline"
+        >
+          Read the full rules →
+        </Link>
+        <div className="mt-4">
         {user ? (
           <Link
             href="/campaigns"
@@ -93,6 +100,7 @@ export default async function HowItWorksPage() {
             Start earning — sign up free
           </Link>
         )}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   MAX_PAYOUT_DEFAULT,
@@ -666,6 +667,11 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
         plus the 15% platform fee in USDT (TRC20) to the admin wallet
         on the payment page — your campaign goes live once the admin
         verifies your payment.
+      </p>
+      <p className="mt-2 text-center text-xs text-fg/40">
+        <Link href="/rules" className="font-bold text-lime hover:underline">
+          Read the full platform rules →
+        </Link>
       </p>
     </form>
   );

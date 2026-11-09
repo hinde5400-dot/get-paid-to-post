@@ -124,6 +124,8 @@ export default async function MorePage() {
       <div className="text-center text-xs leading-relaxed text-fg/40">
         <Link href="/terms" className="hover:text-lime">Terms</Link>
         {" · "}
+        <Link href="/rules" className="hover:text-lime">Rules</Link>
+        {" · "}
         <Link href="/privacy" className="hover:text-lime">Privacy</Link>
         {" · "}
         <Link href="/how-it-works" className="hover:text-lime">How It Works</Link>

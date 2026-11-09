@@ -43,6 +43,7 @@ export default async function Footer() {
           <p className="text-sm font-bold text-fg">Legal</p>
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             <li><Link href="/terms" className="hover:text-lime">Terms of Service</Link></li>
+            <li><Link href="/rules" className="hover:text-lime">Rules</Link></li>
             <li><Link href="/privacy" className="hover:text-lime">Privacy Policy</Link></li>
             <li><Link href="/refund" className="hover:text-lime">Refund Policy</Link></li>
             <li><Link href="/contact" className="hover:text-lime">Contact</Link></li>

@@ -166,6 +166,15 @@ export default function SideMenu({
             </div>
 
             <div className="border-t border-fg/10 p-4">
+              <p className="mb-3 text-center text-xs text-fg/40">
+                <Link href="/rules" onClick={() => setOpen(false)} className="hover:text-lime">Rules</Link>
+                {" · "}
+                <Link href="/terms" onClick={() => setOpen(false)} className="hover:text-lime">Terms</Link>
+                {" · "}
+                <Link href="/privacy" onClick={() => setOpen(false)} className="hover:text-lime">Privacy</Link>
+                {" · "}
+                <Link href="/how-it-works" onClick={() => setOpen(false)} className="hover:text-lime">How It Works</Link>
+              </p>
               <ThemeToggle className="mb-2" />
               {userEmail ? (
                 <div className="flex gap-2">
