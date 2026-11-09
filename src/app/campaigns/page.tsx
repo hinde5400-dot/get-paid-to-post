@@ -111,7 +111,8 @@ export default async function CampaignsPage({
         </h1>
         <p className="mt-2 text-sm text-fg/60">
           Funded campaigns only. Pick one, post your clip, get paid per
-          view at the campaign&apos;s rate per 1,000 views.
+          view at the campaign&apos;s rate per 1,000 views. Every clip
+          needs at least 1,000 views to earn.
         </p>
       </div>
 

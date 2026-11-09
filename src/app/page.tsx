@@ -24,7 +24,7 @@ const FAQS = [
   },
   {
     q: "How much can I earn per post?",
-    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
+    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. A clip needs at least 1,000 views to earn — clips below 1,000 views cannot be approved. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
   },
   {
     q: "What are the video rules?",

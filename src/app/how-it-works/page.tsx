@@ -44,6 +44,7 @@ export default async function HowItWorksPage() {
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Earnings are views only — you are paid the campaign&apos;s rate per 1,000 verified views, up to the per-post cap. There is no base pay per post.</li>
           <li>• View bonus: the campaign&apos;s rate per 1,000 views, tracked for 14 days.</li>
+          <li>• Every clip needs at least 1,000 views to earn — a clip below 1,000 views cannot be approved. A brand may set a higher minimum for its campaign.</li>
           <li>• Approved earnings sit in a 72-hour hold, then become available.</li>
           <li>• Minimum withdrawal: $15. Withdrawal fee: 5%.</li>
           <li>• Payouts: USDT (TRC20 or BEP20) only.</li>

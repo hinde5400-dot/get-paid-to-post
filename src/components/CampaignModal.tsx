@@ -211,7 +211,9 @@ export default function CampaignModal({
           </div>
           <p className="mt-3 text-xs text-fg/50">
             Views tracked {campaign.views_tracked_days} days · Up to 15
-            approved clips per platform
+            approved clips per platform · Min{" "}
+            {Math.max(campaign.min_views, 1000).toLocaleString()} views per
+            clip to earn
           </p>
           <p className="mt-2 text-xs font-semibold text-fg/70">
             {!live ? (

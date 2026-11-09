@@ -325,9 +325,7 @@ export default function AdminReviewList({
             s.campaign_max_payout_per_creator > 0) ? (
             <p className="mt-2 text-xs font-bold text-fg/70">
               Campaign limits:{" "}
-              {s.campaign_min_views != null && s.campaign_min_views > 0
-                ? `min ${s.campaign_min_views.toLocaleString()} views per clip — below this, approve is blocked`
-                : "no min views"}
+              {`min ${Math.max(s.campaign_min_views ?? 0, 1000).toLocaleString()} views per clip — below this, approve is blocked`}
               {" · "}
               {s.campaign_max_payout_per_creator != null &&
               s.campaign_max_payout_per_creator > 0
@@ -345,7 +343,7 @@ export default function AdminReviewList({
               {s.rate_per_1k !== undefined
                 ? `${formatUSD(s.rate_per_1k)}/1k`
                 : "—"}
-              {" · "}No min views · No per-creator cap
+              {" · "}Min 1,000 views per clip · No per-creator cap
             </p>
           )}
 

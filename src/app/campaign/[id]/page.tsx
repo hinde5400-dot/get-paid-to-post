@@ -274,11 +274,11 @@ export default async function CampaignDetailPage({
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-fg/70">
               <span>👀 Views tracked {campaign.views_tracked_days} days</span>
               <span>📹 Up to 15 approved clips per platform</span>
-              {campaign.min_views > 0 && (
-                <span>
-                  🎯 Min {campaign.min_views.toLocaleString()} views per clip
-                </span>
-              )}
+              <span>
+                🎯 Min{" "}
+                {Math.max(campaign.min_views, 1000).toLocaleString()} views
+                per clip to earn
+              </span>
               {campaign.max_payout_per_creator !== null && (
                 <span>
                   💰 Max {formatUSD(campaign.max_payout_per_creator)} per
@@ -400,13 +400,10 @@ export default async function CampaignDetailPage({
                       from this campaign.
                     </>
                   )}
-                  {campaign.min_views > 0 && (
-                    <>
-                      {" "}A clip needs at least{" "}
-                      {campaign.min_views.toLocaleString()} views before it
-                      can be approved.
-                    </>
-                  )}{" "}
+                  {" "}Your clip needs at least{" "}
+                  {Math.max(campaign.min_views, 1000).toLocaleString()}{" "}
+                  views before it can earn — a clip below the
+                  campaign&apos;s minimum cannot be approved.{" "}
                   Approved earnings sit in a 72-hour hold, then become
                   withdrawable.
                 </p>
@@ -466,9 +463,7 @@ export default async function CampaignDetailPage({
                 ],
                 [
                   "Minimum views per clip",
-                  campaign.min_views > 0
-                    ? `${campaign.min_views.toLocaleString()} views`
-                    : "None — every clip with real views can earn",
+                  `${Math.max(campaign.min_views, 1000).toLocaleString()} views`,
                 ],
                 [
                   "Max payout per creator",
