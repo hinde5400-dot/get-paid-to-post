@@ -1,8 +1,11 @@
 import type { Platform } from "./types";
 
 const PLATFORM_HOSTS: Record<Platform, string[]> = {
-  tiktok: ["tiktok.com", "www.tiktok.com", "vm.tiktok.com"],
-  instagram: ["instagram.com", "www.instagram.com"],
+  // vm/vt.tiktok.com are TikTok's short-link hosts — accepted so
+  // the submit route can resolve them to the real video URL.
+  tiktok: ["tiktok.com", "www.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"],
+  // ig.me is Instagram's short-link host — same treatment.
+  instagram: ["instagram.com", "www.instagram.com", "ig.me"],
   youtube: ["youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com"],
 };
 
@@ -17,7 +20,8 @@ function hostnameOf(raw: string): string | null {
   }
 }
 
-/** Accept only tiktok.com / instagram.com / youtube.com (and youtu.be) links. */
+/** Accept only tiktok.com / instagram.com / youtube.com links (plus
+ *  their short-link hosts: vm/vt.tiktok.com, ig.me, youtu.be). */
 export function validatePostUrl(
   raw: string,
   platform: Platform
