@@ -129,7 +129,7 @@ function LoginForm() {
         // Blocked accounts cannot log in.
         const { data: profile } = await supabase
           .from("users")
-          .select("is_blocked")
+          .select("is_blocked, role")
           .eq("id", data.user.id)
           .single();
         if ((profile as { is_blocked?: boolean } | null)?.is_blocked) {
@@ -137,6 +137,24 @@ function LoginForm() {
           throw new Error(
             "This account is blocked. Please contact support."
           );
+        }
+        // Brands land on the campaign form, not the creator
+        // dashboard. The profile row (migration 0008) is the source
+        // of truth; the signup metadata is the fallback for rows
+        // written before it.
+        const role =
+          (profile as { role?: string | null } | null)?.role ??
+          data.user.user_metadata?.role;
+        if (role === "brand") {
+          showSuccess("Welcome back!");
+          try {
+            localStorage.removeItem(FAILS_KEY);
+          } catch {
+            // Ignore storage errors.
+          }
+          router.push("/brands");
+          router.refresh();
+          return;
         }
       }
       showSuccess("Welcome back!");

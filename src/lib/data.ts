@@ -182,6 +182,77 @@ export async function getPendingCampaigns(): Promise<Campaign[]> {
 }
 
 /**
+ * Campaigns owned by one brand (campaigns.user_id, migration 0013),
+ * newest first — the brand dashboard list. RLS ("campaigns read
+ * own", migration 0013) lets a brand read its own campaigns,
+ * including pending ones that are not public yet.
+ */
+export async function getBrandCampaigns(userId: string): Promise<Campaign[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map(mapCampaign);
+}
+
+/**
+ * Per-campaign stats for a brand's own dashboard: submission counts
+ * from the SECURITY DEFINER campaign_stats function (migration
+ * 0003, same as getCampaignStats) plus total views across all
+ * submissions on the campaign.
+ *
+ * Views are NOT in campaign_stats, and submissions are RLS-locked
+ * to their creator (plus the owner), so a brand cannot read them
+ * directly — a direct views read returns no rows for a brand. The
+ * count from campaign_stats tells the two cases apart: when the
+ * campaign genuinely has no submissions, views are 0; when it has
+ * submissions but the views read came back empty, the views are
+ * RLS-blocked and total_views is null (shown as "—", never a fake
+ * 0). A one-line migration adding sum(views) to campaign_stats
+ * would light the column up for brands; until then it stays honest.
+ */
+export interface BrandCampaignStats extends CampaignStats {
+  total_views: number | null;
+}
+
+export async function getBrandCampaignStats(
+  campaignId: string
+): Promise<BrandCampaignStats | null> {
+  const stats = await getCampaignStats(campaignId);
+  if (!stats) return null;
+  const supabase = getServerClient();
+  if (!supabase) return { ...stats, total_views: null };
+  let total_views: number | null = null;
+  try {
+    const { data, error } = await supabase
+      .from("submissions")
+      .select("views")
+      .eq("campaign_id", campaignId);
+    if (!error && data) {
+      const rows = data as Record<string, unknown>[];
+      if (rows.length > 0) {
+        total_views = rows.reduce(
+          (s, r) => s + Number(r.views ?? 0),
+          0
+        );
+      } else {
+        // No readable rows: genuinely zero views only when the
+        // campaign has no submissions at all (stats.total === 0);
+        // otherwise the views are RLS-blocked, not zero.
+        total_views = stats.total === 0 ? 0 : null;
+      }
+    }
+  } catch {
+    total_views = null;
+  }
+  return { ...stats, total_views };
+}
+
+/**
  * Real per-campaign stats, or null when they cannot be computed.
  * Uses the SECURITY DEFINER function public.campaign_stats (see
  * supabase/migrations/0003_campaign_stats.sql) so the numbers are real
