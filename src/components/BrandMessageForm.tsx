@@ -110,12 +110,26 @@ export default function BrandMessageForm({
 
   return (
     <div>
-      {messages.length > 0 && (
-        <div
-          ref={threadRef}
-          className="mb-5 max-h-96 space-y-3 overflow-y-auto rounded-2xl bg-ink/60 p-4"
-        >
-          {messages.map((m) => {
+      {/* WhatsApp-style thread: always visible (even before the
+          first message, so the chat never looks closed), tall and
+          scrollable, with breathing room around the bubbles. */}
+      <div
+        ref={threadRef}
+        className="h-[26rem] space-y-4 overflow-y-auto rounded-2xl bg-ink/60 p-4 sm:h-[30rem] sm:p-5 md:h-[34rem]"
+      >
+        {messages.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+            <p className="text-4xl">💬</p>
+            <p className="mt-3 text-sm font-bold text-fg">
+              No messages yet
+            </p>
+            <p className="mt-1 max-w-xs text-sm leading-relaxed text-fg/50">
+              Say hello below and attach your payment proof screenshot
+              when you send the budget.
+            </p>
+          </div>
+        ) : (
+          messages.map((m) => {
             const own = isOwn(m);
             return (
               <div
@@ -123,17 +137,21 @@ export default function BrandMessageForm({
                 className={`flex ${own ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm sm:max-w-[75%] ${
                     own
-                      ? "rounded-br-md bg-lime/15"
-                      : "rounded-bl-md bg-fg/5"
+                      ? "rounded-br-md bg-lime text-black"
+                      : "rounded-bl-md bg-fg/10 text-fg"
                   }`}
                 >
-                  <p className="text-[11px] font-black uppercase tracking-wider text-fg/50">
+                  <p
+                    className={`text-[11px] font-black uppercase tracking-wider ${
+                      own ? "text-black/60" : "text-fg/50"
+                    }`}
+                  >
                     {senderLabel(m)}
                   </p>
                   {m.message && (
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-fg">
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">
                       {m.message}
                     </p>
                   )}
@@ -150,22 +168,30 @@ export default function BrandMessageForm({
                         alt="Payment proof"
                         className="max-h-64 w-auto rounded-xl border border-fg/10"
                       />
-                      <span className="mt-1 block text-xs font-bold text-lime underline">
+                      <span
+                        className={`mt-1 block text-xs font-bold underline ${
+                          own ? "text-black/70" : "text-lime"
+                        }`}
+                      >
                         Open proof ↗
                       </span>
                     </a>
                   )}
-                  <p className="mt-2 text-[11px] text-fg/40">
+                  <p
+                    className={`mt-1.5 text-right text-[11px] ${
+                      own ? "text-black/50" : "text-fg/40"
+                    }`}
+                  >
                     {new Date(m.created_at).toLocaleString("en-US")}
                   </p>
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
-      <label className="block text-sm font-bold text-fg">
+      <label className="mt-5 block text-sm font-bold text-fg">
         Your message
         <textarea
           value={text}

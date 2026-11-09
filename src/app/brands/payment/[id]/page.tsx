@@ -75,8 +75,8 @@ export default async function BrandPaymentPage({
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <div className="rounded-3xl border border-lime/40 bg-card p-6 md:p-8">
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-lg rounded-3xl border border-lime/40 bg-card p-6 md:p-8">
         <h1 className="text-xl font-black leading-snug text-fg">
           Thanks! To make your campaign LIVE, send your Budget in USDT to
           admin wallet and paste Transaction ID here.
@@ -175,21 +175,34 @@ export default async function BrandPaymentPage({
       </div>
 
       {/* Private chat with the admin — text messages and direct
-          proof screenshot uploads, locked to this campaign. */}
+          proof screenshot uploads, locked to this campaign. Wide,
+          WhatsApp-style thread: tall scrollable message area with
+          the brand's messages on the right and admin replies on
+          the left. */}
       <div
         id="brand-chat"
-        className="scroll-mt-6 rounded-3xl border border-fg/10 bg-card p-6 md:p-8"
+        className="scroll-mt-6 overflow-hidden rounded-3xl border border-fg/10 bg-card"
       >
-        <h2 className="text-lg font-black text-fg">
-          Chat with the admin / Send proof
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-fg/60">
-          This conversation is private — only you and the admin can see
-          it. Tell the admin you sent the budget and upload your payment
+        <div className="flex items-center gap-3 border-b border-fg/10 px-5 py-4 md:px-6">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-lime text-lg font-black text-black">
+            A
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-black leading-tight text-fg">
+              Chat with the admin / Send proof
+            </h2>
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-fg/50">
+              <span className="h-2 w-2 rounded-full bg-lime" />
+              Private — only you and the admin can see this chat
+            </p>
+          </div>
+        </div>
+        <p className="px-5 pt-4 text-sm leading-relaxed text-fg/60 md:px-6">
+          Tell the admin you sent the budget and upload your payment
           screenshot here as proof. The admin can reply to you in this
           chat.
         </p>
-        <div className="mt-5">
+        <div className="px-5 pb-5 pt-4 md:px-6 md:pb-6">
           <BrandMessageForm
             campaignId={campaign.id}
             initialMessages={messages}
