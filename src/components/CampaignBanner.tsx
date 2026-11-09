@@ -77,7 +77,7 @@ export default function CampaignBanner({
   campaign: Campaign;
   size?: "sm" | "md" | "lg";
   showLive?: boolean;
-  /** Cap badge overlaid on the banner, e.g. "Up to $75 per post". */
+  /** Cap badge overlaid on the banner, e.g. "Up to $100 per post". */
   badge?: string;
   /** Live pill vs amber Settling pill (P1-a) — pass false for an
    *  ended campaign still in its settlement window. Defaults to

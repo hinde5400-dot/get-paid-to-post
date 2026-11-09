@@ -1,3 +1,4 @@
+import { MAX_PAYOUT_DEFAULT } from "./constants";
 import { getServerClient } from "./supabase/server";
 import type { BrandMessage, Campaign, Submission, Wallet, Withdrawal } from "./types";
 import { platformsFromRow, ratesFromRow, rateForPlatform } from "./types";
@@ -48,9 +49,9 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
         ? null
         : Number(row.max_payout_per_creator),
     // Per-post cap (migration 0007); older rows fall back to the old
-    // per-video / earn-up-to value, then the $75 default.
+    // per-video / earn-up-to value, then the $100 default.
     max_payout_per_post: Number(
-      row.max_payout_per_post ?? row.max_per_video ?? row.earn_up_to ?? 75
+      row.max_payout_per_post ?? row.max_per_video ?? row.earn_up_to ?? MAX_PAYOUT_DEFAULT
     ),
     views_tracked_days: Number(row.views_tracked_days ?? 14),
     max_posts: Number(row.max_posts ?? 7),

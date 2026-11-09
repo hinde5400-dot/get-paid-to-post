@@ -8,7 +8,7 @@ export function earningsForViews(views: number, ratePer1m: number): number {
 /**
  * Per-post payout with the campaign cap applied: a creator never earns
  * more than `cap` on one post, even if the views would pay more.
- * Example: 50,000 views at $2/1k = $100 uncapped; cap $75 → $75 earned.
+ * Example: 100,000 views at $2/1k = $200 uncapped; cap $100 → $100 earned.
  */
 export function payoutForViews(
   views: number,
