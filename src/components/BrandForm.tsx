@@ -26,7 +26,7 @@ import {
  * any of TikTok / Instagram / YouTube, at least one), Rate per 1k
  * views PER selected platform (any rate above $0 — your choice),
  * Total Budget (any amount above $0 — your choice, no minimum),
- * Max Payout Per Post (default $75, $10–$200), Minimum views per
+ * Max Payout Per Post (default $100, $10–$200), Minimum views per
  * clip (floor 1,000 — pre-filled with 1,000, blank = 1,000, values
  * below 1,000 are rejected) and Maximum payout per creator
  * (optional, blank = no cap), Campaign Description, Video
@@ -735,13 +735,13 @@ export default function BrandForm({
             step="1"
             value={maxPayout}
             onChange={(e) => setMaxPayout(e.target.value)}
-            placeholder="75"
+            placeholder="100"
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
             Creator will never earn more than this on one post, even if
-            views are higher. Example: rate $2 per 1k views, cap $75 — a
-            video with 100k views earns $75, not $200. Range $
+            views are higher. Example: rate $2 per 1k views, cap $100 — a
+            video with 100k views earns $100, not $200. Range $
             {MAX_PAYOUT_MIN}–${MAX_PAYOUT_MAX}.
           </span>
           {fieldErrors.maxPayout && (
