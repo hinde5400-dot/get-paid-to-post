@@ -6,6 +6,7 @@ import {
   MAX_PAYOUT_MIN,
 } from "@/lib/constants";
 import { platformFeeFor } from "@/lib/money";
+import { notifyCampaignCreated } from "@/lib/notify";
 import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 
@@ -349,6 +350,19 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+  // Notify the owner on Discord (Item 11a) — full campaign details
+  // + payment page link, fire-and-forget.
+  void notifyCampaignCreated({
+    id: (data as { id: string }).id,
+    brand_name: brandName,
+    title,
+    budget_total: budgetTotal,
+    platform_fee: platformFee,
+    rates,
+    view_bonus_per_1k: ratePer1k,
+    min_views: minViews,
+    max_payout_per_post: cap,
+  });
   return NextResponse.json({
     ok: true,
     id: (data as { id: string }).id,
