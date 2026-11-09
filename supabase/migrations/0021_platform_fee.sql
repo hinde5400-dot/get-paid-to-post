@@ -1,10 +1,11 @@
 -- GET PAID TO POST — 15% flat platform fee + drop base pay (0021)
 --
 -- P0 batch 2 (2026-11-09, Turn's decisions):
--- (a) Platform fee is 15% FLAT, taken INSIDE the brand's budget —
---     first campaign = repeat campaign, no inversion. The brand
---     still SENDS the full budget_total; platform_fee is the 15%
---     slice and budget_left is the creators pool (budget - fee).
+-- (a) Platform fee is 15% FLAT, charged ON TOP of the brand's
+--     budget — first campaign = repeat campaign, no inversion.
+--     The brand SENDS budget_total + 15% (totalToSend); the campaign
+--     runs on the full budget_total (budget_left = budget_total)
+--     and platform_fee is the 15% slice kept separately.
 --     The insert in src/app/api/campaigns/route.ts computes both.
 -- (b) Base pay is views-only: there is no $10 base pay per approved
 --     post anywhere any more. The base_pay column (migration 0001,
