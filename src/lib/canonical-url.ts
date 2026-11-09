@@ -100,7 +100,24 @@ export async function canonicalizePostUrl(
   }
   const host = hostOf(url);
   if (host && (REDIRECT_HOSTS.has(host) || host.endsWith(".vm.tiktok.com") || host.endsWith(".vt.tiktok.com"))) {
-    return resolveRedirectUrl(url);
+    const resolved = await resolveRedirectUrl(url);
+    // A dead/unknown short code redirects to the platform's
+    // homepage (e.g. tiktok.com/?_r=1). That is NOT the video —
+    // and every dead code would collapse to the same homepage
+    // URL and false-positive as duplicates of each other. Keep
+    // the submitted short link instead.
+    try {
+      const finalUrl = new URL(resolved);
+      if (finalUrl.pathname === "/" || finalUrl.pathname === "") {
+        console.warn(
+          `Short-link resolve: ${url} landed on ${finalUrl.hostname} homepage, keeping submitted URL.`
+        );
+        return url;
+      }
+    } catch {
+      return url;
+    }
+    return resolved;
   }
   return url;
 }
