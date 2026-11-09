@@ -58,6 +58,12 @@ export default function TermsPage() {
           keeping your password safe and for everything posted from your
           account. One account per person.
         </p>
+        <p className="mt-2 text-sm leading-relaxed text-fg/70">
+          Payouts are for creators aged 18 or older. You must be at least
+          18 years old to receive a payout; if you are under 18 you may
+          still browse campaigns, but your earnings cannot be withdrawn
+          until you turn 18.
+        </p>
       </section>
 
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
@@ -87,7 +93,8 @@ export default function TermsPage() {
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           A brand campaign only goes live after its budget is funded. The
           brand sets its own budget — any amount above $0. Brands pay
-          only for verified views. Unspent budget stays the brand&apos;s.
+          only for verified views. Unspent budget stays the brand&apos;s:
+          it is refunded within 5–7 business days of the request.
         </p>
         <h3 className="mt-4 text-sm font-extrabold text-fg">
           How brand funds are protected

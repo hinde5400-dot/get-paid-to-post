@@ -115,6 +115,9 @@ export interface Submission {
   platform: Platform;
   views: number;
   likes: number;
+  /** Comment count (migration 0022) — with likes, feeds the 1%
+   *  engagement minimum: (likes + comments) / views. */
+  comments: number;
   status: SubmissionStatus;
   earnings: number;
   /** Why the submission was rejected, when the owner gave one. */

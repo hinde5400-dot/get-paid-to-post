@@ -15,9 +15,9 @@
 
 const TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/";
 const VIDEO_QUERY_URL =
-  "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count";
+  "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count,like_count,comment_count";
 const VIDEO_LIST_URL =
-  "https://open.tiktokapis.com/v2/video/list/?fields=id,share_url,view_count";
+  "https://open.tiktokapis.com/v2/video/list/?fields=id,share_url,view_count,like_count,comment_count";
 
 export interface TikTokTokens {
   accessToken: string;
@@ -95,10 +95,19 @@ async function refreshAccessToken(
   };
 }
 
+/** Views + engagement counts for one video. likes/comments may be
+ *  absent from the API response — the caller falls back to the
+ *  stored counts rather than zeroing them. */
+export interface TikTokVideoStats {
+  views: number;
+  likes: number | null;
+  comments: number | null;
+}
+
 async function queryVideoViews(
   accessToken: string,
   videoId: string
-): Promise<number | null> {
+): Promise<TikTokVideoStats | null> {
   let res: Response;
   try {
     res = await fetch(VIDEO_QUERY_URL, {
@@ -117,16 +126,29 @@ async function queryVideoViews(
     return null;
   }
   const data = (await res.json()) as {
-    data?: { videos?: { id?: string; view_count?: number }[] };
+    data?: {
+      videos?: {
+        id?: string;
+        view_count?: number;
+        like_count?: number;
+        comment_count?: number;
+      }[];
+    };
   };
   const video = data?.data?.videos?.find((v) => v.id === videoId);
-  return typeof video?.view_count === "number" ? video.view_count : null;
+  if (typeof video?.view_count !== "number") return null;
+  return {
+    views: video.view_count,
+    likes: typeof video.like_count === "number" ? video.like_count : null,
+    comments:
+      typeof video.comment_count === "number" ? video.comment_count : null,
+  };
 }
 
 async function listVideoViews(
   accessToken: string,
   videoId: string
-): Promise<number | null> {
+): Promise<TikTokVideoStats | null> {
   let cursor = 0;
   for (let page = 0; page < 5; page++) {
     let res: Response;
@@ -148,7 +170,13 @@ async function listVideoViews(
     }
     const data = (await res.json()) as {
       data?: {
-        videos?: { id?: string; share_url?: string; view_count?: number }[];
+        videos?: {
+          id?: string;
+          share_url?: string;
+          view_count?: number;
+          like_count?: number;
+          comment_count?: number;
+        }[];
         cursor?: number;
         has_more?: boolean;
       };
@@ -158,7 +186,12 @@ async function listVideoViews(
       (v) => v.id === videoId || (v.share_url ?? "").includes(videoId)
     );
     if (match && typeof match.view_count === "number") {
-      return match.view_count;
+      return {
+        views: match.view_count,
+        likes: typeof match.like_count === "number" ? match.like_count : null,
+        comments:
+          typeof match.comment_count === "number" ? match.comment_count : null,
+      };
     }
     if (!data?.data?.has_more) return null;
     cursor = data.data.cursor ?? 0;
@@ -167,13 +200,15 @@ async function listVideoViews(
 }
 
 export type TikTokViewResult =
-  | { views: number; tokens?: TikTokTokens }
+  | { views: number; likes: number | null; comments: number | null; tokens?: TikTokTokens }
   | { error: string; tokens?: TikTokTokens };
 
 /**
- * Read one TikTok video's view count. Refreshes the access token
- * first when it is expired (or about to), and returns the new tokens
- * so the caller can save them back encrypted.
+ * Read one TikTok video's view count plus its like and comment
+ * counts (for the 1% engagement minimum — likes + comments only).
+ * Refreshes the access token first when it is expired (or about
+ * to), and returns the new tokens so the caller can save them back
+ * encrypted.
  */
 export async function fetchTikTokViews(
   postUrl: string,
@@ -202,14 +237,19 @@ export async function fetchTikTokViews(
     };
   }
 
-  const views =
+  const stats =
     (await queryVideoViews(accessToken, videoId)) ??
     (await listVideoViews(accessToken, videoId));
-  if (views === null) {
+  if (stats === null) {
     return {
       error: "Video not found in the creator's TikTok account.",
       tokens: freshTokens,
     };
   }
-  return { views, tokens: freshTokens };
+  return {
+    views: stats.views,
+    likes: stats.likes,
+    comments: stats.comments,
+    tokens: freshTokens,
+  };
 }

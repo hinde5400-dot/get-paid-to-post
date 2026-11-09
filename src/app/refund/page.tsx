@@ -10,7 +10,8 @@ export default function RefundPage() {
           Your campaign budget is funded before your campaign goes live.
           Creators are paid only for verified views at the rate you set.
           Any budget left unspent when your campaign ends stays yours —
-          it is returned to you on request.
+          it is returned to you on request, within 5–7 business days of
+          the request.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           There is no refund on budget already spent on verified views:
@@ -21,7 +22,7 @@ export default function RefundPage() {
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           If your campaign is rejected before it goes live, none of your
           budget has been spent, and your full budget is returned to you
-          on request.
+          on request, within 5–7 business days of the request.
         </p>
       </section>
 

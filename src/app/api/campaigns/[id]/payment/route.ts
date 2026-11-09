@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
+import { adminMention, notifyDiscord } from "@/lib/notify";
 
 /**
  * Brand records the Transaction ID / hash of the USDT budget payment
@@ -28,7 +29,7 @@ export async function POST(
 
   const { data: campaign, error: campError } = await supabase
     .from("campaigns")
-    .select("id, user_id, status")
+    .select("id, user_id, status, title, budget_total, brand_name")
     .eq("id", params.id)
     .single();
   if (campError || !campaign) {
@@ -72,6 +73,23 @@ export async function POST(
       : error.message;
     return NextResponse.json({ error: msg }, { status: 400 });
   }
+  // Notify the owner on Discord (fire-and-forget — a Discord
+  // failure never breaks the brand's request; no webhook is
+  // configured yet, so this is a silent no-op until Turn creates one).
+  const mention = adminMention();
+  const brand = String(
+    (campaign as { brand_name?: string | null }).brand_name ?? "A brand"
+  );
+  const budget = Number(
+    (campaign as { budget_total?: number }).budget_total ?? 0
+  );
+  const title = String(
+    (campaign as { title?: string | null }).title ?? "Untitled campaign"
+  );
+  const prefix = mention ? `${mention} ` : "";
+  void notifyDiscord(
+    `${prefix}💰 New brand payment — ${brand} submitted budget $${budget} for campaign "${title}". Tx: ${txId}. Check the proof and your wallet, then approve: https://get-paid-to-post.vercel.app/admin`
+  );
   return NextResponse.json({
     ok: true,
     message: "Payment submitted. The admin will verify it and your campaign will go LIVE in 1-2 hours.",

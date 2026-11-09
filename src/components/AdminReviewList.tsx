@@ -5,9 +5,22 @@ import { useRouter } from "next/navigation";
 import type { Submission } from "@/lib/types";
 import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
+import { engagementRate, formatEngagementRate } from "@/lib/engagement";
 import StatusBadge from "./StatusBadge";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
+
+/** Fixed rejection reasons (P0 batch 3) — a fixed set so later
+ *  fraud tooling can count them (e.g. how many "bot views"
+ *  rejections a creator has). "other" takes a short free-text note,
+ *  combined into the stored reason string. */
+export const REJECTION_REASONS = [
+  "bot views",
+  "brief mismatch",
+  "wrong content",
+  "duplicate",
+  "other",
+] as const;
 
 export interface AdminSubmission extends Submission {
   creator_email: string;
@@ -29,6 +42,9 @@ export default function AdminReviewList({
   const router = useRouter();
   const [views, setViews] = useState<Record<string, string>>({});
   const [likes, setLikes] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState<Record<string, string>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [reasonNotes, setReasonNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -89,14 +105,34 @@ export default function AdminReviewList({
   ) {
     const v = Number(views[s.id] ?? s.views ?? 0);
     const l = Number(likes[s.id] ?? s.likes ?? 0);
+    const c = Number(comments[s.id] ?? s.comments ?? 0);
     if (action === "approve" && (!v || v <= 0)) {
       showError("Enter the verified views before approving.");
       return;
     }
+    let reason: string | undefined;
+    if (action === "reject") {
+      const picked = reasons[s.id] ?? "";
+      if (!picked) {
+        showError("Pick a rejection reason before rejecting.");
+        return;
+      }
+      const note = (reasonNotes[s.id] ?? "").trim();
+      // "other" with no note still stores the fixed "other" value —
+      // that is what fraud tooling counts later.
+      reason = picked === "other" && note ? `other: ${note}` : picked;
+    }
     setBusyAction(action);
     void call(
       "/api/admin/review",
-      { submissionId: s.id, action, views: v, likes: l },
+      {
+        submissionId: s.id,
+        action,
+        views: v,
+        likes: l,
+        comments: c,
+        ...(reason ? { reason } : {}),
+      },
       s.id,
       `Submission ${action}d.`
     );
@@ -209,7 +245,7 @@ export default function AdminReviewList({
             </div>
           )}
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <label className="block text-xs font-bold text-fg">
               Verified views
               <input
@@ -234,15 +270,99 @@ export default function AdminReviewList({
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
               />
             </label>
+            <label className="block text-xs font-bold text-fg">
+              Comments
+              <input
+                type="number"
+                min="0"
+                value={comments[s.id] ?? String(s.comments ?? 0)}
+                onChange={(e) =>
+                  setComments((prev) => ({
+                    ...prev,
+                    [s.id]: e.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+              />
+            </label>
           </div>
           <p className="mt-2 text-xs text-fg/50">
             Current earnings: {formatUSD(s.earnings)} · Views:{" "}
             {s.views.toLocaleString()} · Likes: {s.likes.toLocaleString()}
+            {" · "}Comments: {(s.comments ?? 0).toLocaleString()}
+            {" · "}
+            {(() => {
+              const v = Number(views[s.id] ?? s.views ?? 0);
+              const l = Number(likes[s.id] ?? s.likes ?? 0);
+              const c = Number(comments[s.id] ?? s.comments ?? 0);
+              const rate = engagementRate(l, c, v);
+              if (rate === null) return "Engagement: — (no views yet)";
+              const below = rate < 0.01;
+              return (
+                <>
+                  Engagement:{" "}
+                  <span
+                    className={
+                      below ? "font-bold text-red-300" : "font-bold text-lime"
+                    }
+                  >
+                    {formatEngagementRate(rate)}
+                  </span>
+                  {below
+                    ? " — below the 1% minimum, cannot approve (likes + comments only)"
+                    : " — meets the 1% minimum"}
+                </>
+              );
+            })()}
             {" · "}
             {s.views_refreshed_at
               ? `Auto-checked ${timeAgo(s.views_refreshed_at)}`
               : "Not auto-checked yet"}
           </p>
+
+          {s.status === "rejected" && s.rejection_reason && (
+            <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
+              Rejected: {s.rejection_reason}
+            </p>
+          )}
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs font-bold text-fg">
+              Rejection reason (required to reject)
+              <select
+                value={reasons[s.id] ?? ""}
+                onChange={(e) =>
+                  setReasons((prev) => ({ ...prev, [s.id]: e.target.value }))
+                }
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+              >
+                <option value="">Select a reason…</option>
+                {REJECTION_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {reasons[s.id] === "other" && (
+              <label className="block text-xs font-bold text-fg">
+                Short note (optional)
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder="e.g. wrong platform link"
+                  value={reasonNotes[s.id] ?? ""}
+                  onChange={(e) =>
+                    setReasonNotes((prev) => ({
+                      ...prev,
+                      [s.id]: e.target.value,
+                    }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                />
+              </label>
+            )}
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button

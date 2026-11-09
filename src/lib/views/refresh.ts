@@ -19,9 +19,12 @@
 // - Instagram: NOT connected yet (no Meta app / API access — setup
 //   paused at mobile verification), so those rows are skipped with
 //   a clear reason instead of failing silently.
-// - A refreshed number only ever updates the stored `views` on a
-//   still-pending submission. Nothing is approved and no earnings
-//   move here — the owner still confirms the views on /admin.
+// - A refreshed number only ever updates the stored `views`,
+//   `likes` and `comments` on a still-pending submission. The
+//   like/comment counts feed the 1% engagement minimum
+//   ((likes + comments) / views) checked at review time. Nothing
+//   is approved and no earnings move here — the owner still
+//   confirms the views on /admin.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { VIEW_REFRESH_MS } from "@/lib/constants";
@@ -47,6 +50,8 @@ interface PendingRow {
   platform: string;
   post_url: string;
   views: number;
+  likes: number;
+  comments: number;
   views_refreshed_at: string | null;
 }
 
@@ -183,6 +188,8 @@ export async function refreshPendingViews(
       const { error: applyError } = await supabase.rpc("apply_view_refresh", {
         p_submission_id: row.id,
         p_views: result.views,
+        p_likes: result.likes,
+        p_comments: result.comments,
       });
       if (applyError) {
         summary.failed += 1;
@@ -244,6 +251,10 @@ export async function refreshPendingViews(
       const { error: applyError } = await supabase.rpc("apply_view_refresh", {
         p_submission_id: row.id,
         p_views: result.views,
+        // TikTok may omit an engagement count — keep the stored
+        // number then, instead of zeroing it.
+        p_likes: result.likes ?? row.likes ?? 0,
+        p_comments: result.comments ?? row.comments ?? 0,
       });
       if (applyError) {
         summary.failed += 1;

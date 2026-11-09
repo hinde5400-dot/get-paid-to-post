@@ -158,6 +158,11 @@ export default function SignupForm({ role }: { role: Role | null }) {
           ← Back to roles
         </Link>
       </p>
+      {role === "creator" && (
+        <p className="mt-4 rounded-xl bg-fg/5 px-4 py-2.5 text-center text-xs leading-relaxed text-fg/60">
+          Payouts are for creators aged 18 and older.
+        </p>
+      )}
       {!isSupabaseConfigured && (
         <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
           Supabase is not configured yet — add NEXT_PUBLIC_SUPABASE_URL and

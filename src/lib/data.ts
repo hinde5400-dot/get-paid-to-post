@@ -66,6 +66,7 @@ function mapSubmission(row: Record<string, unknown>): Submission {
     platform: (row.platform as Submission["platform"]) ?? "tiktok",
     views: Number(row.views ?? 0),
     likes: Number(row.likes ?? 0),
+    comments: Number(row.comments ?? 0),
     status: (row.status as Submission["status"]) ?? "pending",
     earnings: Number(row.earnings ?? 0),
     rejection_reason: (row.rejection_reason as string | null) ?? null,

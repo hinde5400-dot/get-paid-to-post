@@ -39,18 +39,21 @@ export function extractYouTubeVideoId(rawUrl: string): string | null {
   }
 }
 
-type YouTubeResult = { views: number } | { error: string };
+type YouTubeResult = { views: number; likes: number; comments: number } | { error: string };
 
 type YouTubeVideoResult =
-  | { views: number; channelId: string; channelTitle: string }
+  | { views: number; likes: number; comments: number; channelId: string; channelTitle: string }
   | { error: string };
 
 /**
- * Fetch a video's public view count AND the channel that owns it.
- * The channelId is what stops the viral-link scam: a submission is
- * only accepted when this channel matches the creator's CONNECTED
- * YouTube channel (see /api/submissions and the refresh job). One
- * videos.list call costs 1 quota unit (10,000 free units/day).
+ * Fetch a video's public view count AND the channel that owns it,
+ * plus the like and comment counts used for the 1% engagement
+ * minimum ((likes + comments) / views — likes and comments ONLY,
+ * never shares/saves). The channelId is what stops the viral-link
+ * scam: a submission is only accepted when this channel matches the
+ * creator's CONNECTED YouTube channel (see /api/submissions and the
+ * refresh job). One videos.list call costs 1 quota unit (10,000
+ * free units/day).
  */
 export async function fetchYouTubeVideoDetails(
   postUrl: string
@@ -81,7 +84,7 @@ export async function fetchYouTubeVideoDetails(
   }
   const data = (await res.json()) as {
     items?: {
-      statistics?: { viewCount?: string };
+      statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
       snippet?: { channelId?: string; channelTitle?: string };
     }[];
   };
@@ -91,7 +94,17 @@ export async function fetchYouTubeVideoDetails(
   if (!item || Number.isNaN(views) || !channelId) {
     return { error: "Video not found or not public." };
   }
-  return { views, channelId, channelTitle: item.snippet?.channelTitle ?? "" };
+  // likeCount / commentCount may be absent when the uploader hid
+  // them or comments are disabled — treat a missing count as 0.
+  const likes = Number(item?.statistics?.likeCount ?? 0);
+  const comments = Number(item?.statistics?.commentCount ?? 0);
+  return {
+    views,
+    likes: Number.isNaN(likes) ? 0 : likes,
+    comments: Number.isNaN(comments) ? 0 : comments,
+    channelId,
+    channelTitle: item.snippet?.channelTitle ?? "",
+  };
 }
 
 export async function fetchYouTubeViews(
@@ -99,5 +112,5 @@ export async function fetchYouTubeViews(
 ): Promise<YouTubeResult> {
   const result = await fetchYouTubeVideoDetails(postUrl);
   if ("error" in result) return { error: result.error };
-  return { views: result.views };
+  return { views: result.views, likes: result.likes, comments: result.comments };
 }

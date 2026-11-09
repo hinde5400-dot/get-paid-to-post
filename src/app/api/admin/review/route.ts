@@ -3,12 +3,18 @@ import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { holdUntil, payoutForViews } from "@/lib/money";
 import { HOLD_HOURS } from "@/lib/constants";
+import {
+  MIN_ENGAGEMENT_RATE,
+  engagementRate,
+  formatEngagementRate,
+} from "@/lib/engagement";
 
 interface ReviewBody {
   submissionId?: string;
   action?: "approve" | "reject";
   views?: number;
   likes?: number;
+  comments?: number;
   /** Optional reason for a rejection (bot views, brief mismatch, ...). */
   reason?: string;
 }
@@ -185,9 +191,23 @@ export async function POST(request: Request) {
     }
     const views = Math.max(0, Math.floor(Number(body.views ?? 0)));
     const likes = Math.max(0, Math.floor(Number(body.likes ?? 0)));
+    const comments = Math.max(0, Math.floor(Number(body.comments ?? 0)));
     if (!views || views <= 0) {
       return NextResponse.json(
         { error: "Enter the verified views before approving." },
+        { status: 400 }
+      );
+    }
+    // Minimum 1% engagement (likes + comments ONLY, never
+    // shares/saves), at any view count. A clip whose likes +
+    // comments are under 1% of its views cannot be approved —
+    // the owner must reject it instead (with a reason).
+    const rate = engagementRate(likes, comments, views);
+    if (rate !== null && rate < MIN_ENGAGEMENT_RATE) {
+      return NextResponse.json(
+        {
+          error: `Engagement ${formatEngagementRate(rate)} is below the 1% minimum (likes + comments only).`,
+        },
         { status: 400 }
       );
     }
@@ -229,6 +249,7 @@ export async function POST(request: Request) {
         status: "approved",
         views,
         likes,
+        comments,
         earnings,
         hold_until: hold.toISOString(),
       })
