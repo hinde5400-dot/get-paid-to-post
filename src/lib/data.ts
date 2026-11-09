@@ -91,6 +91,7 @@ function mapSubmission(row: Record<string, unknown>): Submission {
       : [],
     is_duplicate: Boolean(row.is_duplicate),
     created_at: String(row.created_at ?? ""),
+    updated_at: (row.updated_at as string | null) ?? null,
   };
 }
 
@@ -501,5 +502,110 @@ export async function getBrandMessages(): Promise<BrandMessage[]> {
     return (data as Record<string, unknown>[]).map(mapBrandMessage);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Fraud watch (P1-c, admin-only): creators with bot-view
+ * rejections, counted LIVE from the submissions table — the
+ * submissions table is the single source of truth for the count,
+ * so this can never drift from what the review route stored.
+ * One row per creator with at least one 'bot views' rejection,
+ * newest bot rejection first, with the latest rejection's
+ * campaign, link and date. The caller joins emails / blocked
+ * state from the users table.
+ */
+export interface CreatorBotRejections {
+  user_id: string;
+  bot_rejections: number;
+  latest: {
+    campaign_id: string;
+    campaign_title: string | null;
+    post_url: string;
+    created_at: string;
+  } | null;
+}
+
+export async function getCreatorBotRejections(): Promise<
+  CreatorBotRejections[]
+> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("submissions")
+      .select("user_id, campaign_id, post_url, created_at, campaigns(title)")
+      .eq("status", "rejected")
+      .eq("rejection_reason", "bot views")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error || !data) return [];
+    const byUser = new Map<string, CreatorBotRejections>();
+    for (const row of data as Record<string, unknown>[]) {
+      const userId = String(row.user_id ?? "");
+      if (!userId) continue;
+      const camp = row.campaigns as { title?: string } | null;
+      const entry = byUser.get(userId);
+      if (entry) {
+        entry.bot_rejections += 1;
+      } else {
+        byUser.set(userId, {
+          user_id: userId,
+          bot_rejections: 1,
+          latest: {
+            campaign_id: String(row.campaign_id ?? ""),
+            campaign_title: camp?.title ?? null,
+            post_url: String(row.post_url ?? ""),
+            created_at: String(row.created_at ?? ""),
+          },
+        });
+      }
+    }
+    return [...byUser.values()].sort(
+      (a, b) => b.bot_rejections - a.bot_rejections
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Flag state from creator_flags (migration 0026): when a creator
+ * was flagged / auto-banned. The review route keeps this updated;
+ * the COUNT itself is read live from submissions (above). Returns
+ * {} when the migration has not run yet — the fraud view still
+ * works from the live counts, it just has no flagged/banned dates.
+ */
+export interface CreatorFlag {
+  user_id: string;
+  bot_rejections: number;
+  flagged_at: string | null;
+  banned_at: string | null;
+}
+
+export async function getCreatorFlags(): Promise<
+  Record<string, CreatorFlag>
+> {
+  const supabase = getServerClient();
+  if (!supabase) return {};
+  try {
+    const { data, error } = await supabase
+      .from("creator_flags")
+      .select("user_id, bot_rejections, flagged_at, banned_at");
+    if (error || !data) return {};
+    const out: Record<string, CreatorFlag> = {};
+    for (const row of data as Record<string, unknown>[]) {
+      const userId = String(row.user_id ?? "");
+      if (!userId) continue;
+      out[userId] = {
+        user_id: userId,
+        bot_rejections: Number(row.bot_rejections ?? 0),
+        flagged_at: (row.flagged_at as string | null) ?? null,
+        banned_at: (row.banned_at as string | null) ?? null,
+      };
+    }
+    return out;
+  } catch {
+    return {};
   }
 }

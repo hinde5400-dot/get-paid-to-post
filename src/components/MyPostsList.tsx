@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Submission, SubmissionStatus } from "@/lib/types";
 import { formatUSD, payoutForViews } from "@/lib/money";
-import { PLATFORM_LABELS } from "@/lib/constants";
+import { DISCORD_URL, PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
 
 const FILTERS: { key: "all" | SubmissionStatus; label: string }[] = [
@@ -110,6 +110,27 @@ export default function MyPostsList({
               {s.status === "rejected" && s.rejection_reason && (
                 <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
                   Rejected: {s.rejection_reason}
+                </p>
+              )}
+              {/* Appeals (P1-c, Content Rewards model: one appeal per
+                  flag, aim 10 business days; Terms §8). One appeal
+                  per rejection, via Discord — a person reviews it.
+                  No in-app appeals system: the appeal itself happens
+                  on Discord. */}
+              {s.status === "rejected" && (
+                <p className="mt-3 rounded-xl bg-fg/5 px-4 py-2.5 text-sm leading-relaxed text-fg/70">
+                  Think this was a mistake? You get one appeal for this
+                  rejection — open a ticket on our{" "}
+                  <a
+                    href={DISCORD_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-bold text-lime underline"
+                  >
+                    Discord server
+                  </a>{" "}
+                  and a person will review it. We aim to reply within 10
+                  business days.
                 </p>
               )}
               <div className="mt-4 grid grid-cols-3 gap-3 text-center">

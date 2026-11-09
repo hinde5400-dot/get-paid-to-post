@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages } from "@/lib/data";
+import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getDiscoverCampaigns, isCampaignSettling } from "@/lib/data";
+import { fraudStatus } from "@/lib/fraud";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewList";
+import AdminFraudList, { type FraudCreator } from "@/components/AdminFraudList";
+import AdminRecheckList from "@/components/AdminRecheckList";
 import AdminCampaignList from "@/components/AdminCampaignList";
 import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
@@ -41,14 +44,26 @@ export default async function AdminPage() {
   const withdrawals = await getAllWithdrawals();
   const adminWallet = await getAdminUsdtWallet();
   const brandMessages = await getBrandMessages();
+  const botRows = await getCreatorBotRejections();
+  const creatorFlags = await getCreatorFlags();
+  const discoverCampaigns = await getDiscoverCampaigns();
 
-  // Creator emails for the review list (owner can read all users).
+  // Creator emails + blocked state for the review and fraud lists
+  // (owner can read all users).
   const supabase = getServerClient();
   const emailById = new Map<string, string>();
+  const blockedById = new Map<string, boolean>();
   if (supabase) {
-    const { data } = await supabase.from("users").select("id, email");
-    for (const row of (data ?? []) as { id: string; email: string }[]) {
+    const { data } = await supabase
+      .from("users")
+      .select("id, email, is_blocked");
+    for (const row of (data ?? []) as {
+      id: string;
+      email: string;
+      is_blocked?: boolean;
+    }[]) {
       emailById.set(row.id, row.email);
+      blockedById.set(row.id, Boolean(row.is_blocked));
     }
   }
 
@@ -66,6 +81,34 @@ export default async function AdminPage() {
     ...w,
     creator_email: emailById.get(w.user_id) ?? w.user_id.slice(0, 8),
   }));
+
+  // P1-c fraud watch: live bot-rejection counts from submissions,
+  // flag state (flagged/banned dates) from creator_flags.
+  const fraudCreators: FraudCreator[] = botRows.map((row) => {
+    const isBlocked = blockedById.get(row.user_id) ?? false;
+    const flag = creatorFlags[row.user_id];
+    return {
+      user_id: row.user_id,
+      email: emailById.get(row.user_id) ?? row.user_id.slice(0, 8),
+      bot_rejections: row.bot_rejections,
+      status: fraudStatus(row.bot_rejections, isBlocked),
+      is_blocked: isBlocked,
+      flagged_at: flag?.flagged_at ?? null,
+      banned_at: flag?.banned_at ?? null,
+      latest: row.latest,
+    };
+  });
+
+  // P1-c post-end re-check queue: APPROVED submissions on campaigns
+  // in their settlement window (ended, not yet auto-deleted).
+  const settlingIds = new Set(
+    discoverCampaigns
+      .filter((c) => isCampaignSettling(c))
+      .map((c) => c.id)
+  );
+  const recheckItems = items.filter(
+    (s) => settlingIds.has(s.campaign_id) && s.status === "approved"
+  );
 
   return (
     <div className="space-y-10">
@@ -172,12 +215,72 @@ export default async function AdminPage() {
         </div>
       </section>
 
+      {/* Fraud watch — owner-only. Bot-view rejections counted live
+          per creator across all campaigns: 6 = concern, 10 = flag,
+          one more bot rejection after the flag = auto-ban (11).
+          Creators never see bot counts or flags. */}
       <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Fraud watch
+          </h2>
+          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+            {fraudCreators.length} creator
+            {fraudCreators.length === 1 ? "" : "s"} with bot-view rejections
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Creators with bot-view rejections. 6 rejections is a concern —
+          watch their next submissions. 10 is a flag, and one more bot
+          rejection after the flag bans them automatically. You also get
+          a Discord alert at 6, 10, and when an auto-ban happens.
+          Botting means a permanent ban, with one appeal via Discord
+          (Terms §8).
+        </p>
+        <div className="mt-4">
+          <AdminFraudList creators={fraudCreators} />
+        </div>
+      </section>
+
+      <section id="submission-review">
         <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
           Submission review
         </h2>
         <div className="mt-4">
           <AdminReviewList submissions={items} />
+        </div>
+      </section>
+
+      {/* Post-end re-check — owner-only. Approved clips on campaigns
+          in their settlement window: re-check suspicious videos
+          after the campaign ends. Real ones stay; a suspicious one
+          is rejected even after the end (its earnings reverse). */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Post-end re-check
+          </h2>
+          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+            {recheckItems.length} approved clip
+            {recheckItems.length === 1 ? "" : "s"} to re-check
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Approved clips on campaigns that have ended but are still in
+          their settlement window. Check suspicious videos again — bot
+          views often only show up after the fact. A real video stays
+          approved; a suspicious one can still be rejected here, and
+          rejecting it reverses its earnings and restores the campaign
+          budget.
+        </p>
+        <div className="mt-4">
+          {recheckItems.length === 0 ? (
+            <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center text-sm text-fg/60">
+              No ended campaigns with approved clips to re-check.
+            </div>
+          ) : (
+            <AdminRecheckList submissions={recheckItems} />
+          )}
         </div>
       </section>
     </div>

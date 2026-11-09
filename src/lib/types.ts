@@ -268,6 +268,10 @@ export interface Submission {
   proof_screenshots: string[];
   is_duplicate: boolean;
   created_at: string;
+  /** Last update (migration 0001) — for approved rows this is the
+   *  approval time, used as the approval date in the post-end
+   *  re-check view (P1-c). */
+  updated_at?: string | null;
 }
 
 export interface Wallet {

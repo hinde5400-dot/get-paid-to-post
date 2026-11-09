@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { holdUntil, payoutForViews } from "@/lib/money";
 import { HOLD_HOURS } from "@/lib/constants";
 import { ratesFromRow, rateForPlatform } from "@/lib/types";
+import {
+  BOT_REJECTION_REASON,
+  handleBotRejection,
+  type BotRejectionOutcome,
+} from "@/lib/fraud";
 import {
   MIN_ENGAGEMENT_RATE,
   engagementRate,
@@ -18,6 +24,36 @@ interface ReviewBody {
   comments?: number;
   /** Optional reason for a rejection (bot views, brief mismatch, ...). */
   reason?: string;
+}
+
+/**
+ * P1-c fraud ladder: after a rejection is stored, a 'bot views'
+ * reason counts toward the creator's ladder (6 = concern, 10 =
+ * flag, 11 = auto-ban). Only the exact 'bot views' value counts.
+ * Returns a short suffix for the response message when a
+ * threshold was hit, so the owner sees it in the toast. Never
+ * throws — handleBotRejection already swallows its own failures.
+ */
+async function runBotRejectionCheck(
+  supabase: SupabaseClient,
+  userId: string,
+  reason: string | null
+): Promise<string> {
+  if (reason !== BOT_REJECTION_REASON) return "";
+  const result: BotRejectionOutcome = await handleBotRejection(
+    supabase,
+    userId
+  );
+  if (result.outcome === "concern") {
+    return ` Bot-view concern: this creator now has ${result.count} bot-view rejections.`;
+  }
+  if (result.outcome === "flagged") {
+    return ` Creator flagged: ${result.count} bot-view rejections — one more bot rejection will auto-ban them.`;
+  }
+  if (result.outcome === "auto-banned") {
+    return ` Creator auto-banned after ${result.count} bot-view rejections.`;
+  }
+  return "";
 }
 
 export async function POST(request: Request) {
@@ -154,9 +190,13 @@ export async function POST(request: Request) {
           rejection_reason: reason,
         })
         .eq("id", submission.id);
+      // P1-c: a 'bot views' rejection feeds the fraud ladder
+      // (6 = concern, 10 = flag, 11 = auto-ban + owner alert).
+      const fraud = await runBotRejectionCheck(supabase, submission.user_id, reason);
       return NextResponse.json({
         ok: true,
-        message: "Submission rejected — its earnings were reversed.",
+        message:
+          "Submission rejected — its earnings were reversed." + fraud,
       });
     }
 
@@ -172,7 +212,13 @@ export async function POST(request: Request) {
       .from("submissions")
       .update({ status: "rejected", rejection_reason: reason })
       .eq("id", submission.id);
-    return NextResponse.json({ ok: true, message: "Submission rejected." });
+    // P1-c: a 'bot views' rejection feeds the fraud ladder
+    // (6 = concern, 10 = flag, 11 = auto-ban + owner alert).
+    const fraud = await runBotRejectionCheck(supabase, submission.user_id, reason);
+    return NextResponse.json({
+      ok: true,
+      message: "Submission rejected." + fraud,
+    });
   }
 
   if (body.action === "approve") {
