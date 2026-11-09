@@ -1,11 +1,20 @@
 // Discord notifications to the owner (P0 batch 3).
 //
 // Turn creates the Discord webhook later — until then there is no
-// webhook URL configured and this is a graceful no-op. The two
-// call sites (brand payment submitted, brand proof screenshot
-// uploaded) fire-and-forget: a Discord failure must NEVER throw
-// or break the brand's request, so every failure is swallowed
-// after a server-side log. The webhook URL itself is never logged.
+// webhook URL configured and this is a graceful no-op. The call
+// sites fire-and-forget: a Discord failure must NEVER throw or
+// break the brand's request, so every failure is swallowed after a
+// server-side log. The webhook URL itself is never logged.
+//
+// Call sites (all fire-and-forget via the helpers below):
+// - campaign created → notifyCampaignCreated (full details +
+//   payment page link), wired in src/app/api/campaigns/route.ts.
+// - brand payment submitted (TxID) → notifyPaymentProof,
+//   wired in src/app/api/campaigns/[id]/payment/route.ts.
+// - brand proof screenshot / TxID in the brand chat →
+//   notifyPaymentProof, wired in
+//   src/app/api/campaigns/[id]/messages/route.ts.
+// - fraud flags → notifyDiscord directly (src/lib/fraud.ts).
 //
 // Per-brand threads: #admin-alerts must be a FORUM channel for
 // per-brand threads to work — passing thread_name in the webhook
@@ -22,6 +31,13 @@
 // - DISCORD_ADMIN_MENTION — Turn's Discord user ID, used as the
 //   <@USER_ID> mention prefix. Optional; the message is sent
 //   without a mention when it is unset.
+
+import {
+  MAX_PAYOUT_DEFAULT,
+  PLATFORM_LABELS,
+  SITE_URL,
+} from "./constants";
+import { formatUSD } from "./money";
 
 /** "<@123…>" mention, or "" when no admin mention is configured. */
 export function adminMention(): string {
@@ -80,4 +96,152 @@ export async function notifyDiscord(
     console.error("[notifyDiscord] Failed to send Discord notification:", err);
     return false;
   }
+}
+
+/**
+ * The campaign fields a Discord notification needs. Every field
+ * except `id` is optional so callers can pass a raw DB row, a
+ * mapped Campaign, or just the values the creation route already
+ * has in scope — missing values fall back to the site defaults
+ * (min views 1,000, max per post $100) instead of breaking the
+ * message. `rates` is the per-platform map ({ tiktok: 2 }); when
+ * it is absent the single legacy rate (`view_bonus_per_1k`, else
+ * `rate_per_1m` / 1,000) is used, so this also works if the form
+ * moves to one rate for all platforms.
+ */
+export type NotifyCampaign = {
+  id: string;
+  brand_name?: string | null;
+  title?: string | null;
+  budget_total?: number | null;
+  platform_fee?: number | null;
+  rates?: Record<string, number> | null;
+  view_bonus_per_1k?: number | null;
+  rate_per_1m?: number | null;
+  min_views?: number | null;
+  max_payout_per_post?: number | null;
+  payment_tx_id?: string | null;
+};
+
+function campaignBrand(campaign: NotifyCampaign): string {
+  return String(campaign.brand_name ?? "").trim() || "A brand";
+}
+
+function campaignTitle(campaign: NotifyCampaign): string {
+  return String(campaign.title ?? "").trim() || "Untitled campaign";
+}
+
+function campaignThreadName(campaign: NotifyCampaign): string {
+  return `${campaignBrand(campaign)} — ${campaignTitle(campaign)}`;
+}
+
+/** "Rate: $2.00 per 1k views" — or one entry per platform when the
+ *  campaign pays different rates per platform. */
+function rateLine(campaign: NotifyCampaign): string {
+  const entries = Object.entries(campaign.rates ?? {}).filter(
+    (entry): entry is [string, number] =>
+      typeof entry[1] === "number" &&
+      Number.isFinite(entry[1]) &&
+      entry[1] > 0
+  );
+  if (entries.length > 0) {
+    const unique = [...new Set(entries.map(([, v]) => v))];
+    if (unique.length === 1) {
+      return `Rate: ${formatUSD(unique[0])} per 1k views`;
+    }
+    return `Rates per 1k views: ${entries
+      .map(
+        ([p, v]) =>
+          `${PLATFORM_LABELS[p] ?? p} ${formatUSD(v)}`
+      )
+      .join(" · ")}`;
+  }
+  const single =
+    Number(campaign.view_bonus_per_1k ?? 0) ||
+    Number(campaign.rate_per_1m ?? 0) / 1000;
+  return `Rate: ${formatUSD(single)} per 1k views`;
+}
+
+/**
+ * The full campaign details block shared by every brand
+ * notification, so Turn can decide from Discord alone: brand,
+ * title, budget (with the 15% fee split and the total the brand
+ * has to send), rate per 1k views, max payout per post, and
+ * minimum views per clip.
+ */
+export function formatCampaignDetails(campaign: NotifyCampaign): string {
+  const budget = Number(campaign.budget_total ?? 0);
+  const fee = Number(campaign.platform_fee ?? 0);
+  const budgetLine =
+    fee > 0
+      ? `Budget: ${formatUSD(budget)} (+ ${formatUSD(fee)} platform fee = ${formatUSD(budget + fee)} total to send)`
+      : `Budget: ${formatUSD(budget)}`;
+  return [
+    `Brand: ${campaignBrand(campaign)}`,
+    `Campaign: "${campaignTitle(campaign)}"`,
+    budgetLine,
+    rateLine(campaign),
+    `Max per post: ${formatUSD(Number(campaign.max_payout_per_post ?? MAX_PAYOUT_DEFAULT))}`,
+    `Min views per clip: ${Number(campaign.min_views ?? 1000).toLocaleString("en-US")}`,
+  ].join("\n");
+}
+
+/**
+ * Campaign-created notification (Item 11a): fires when a brand
+ * submits a campaign, with the FULL details plus the payment page
+ * link — the brand lands there next, and Turn sees the numbers
+ * before any money moves. Same per-brand forum thread as the
+ * payment notifications. Fire-and-forget; never throws.
+ */
+export async function notifyCampaignCreated(
+  campaign: NotifyCampaign
+): Promise<boolean> {
+  const mention = adminMention();
+  const prefix = mention ? `${mention} ` : "";
+  const message = [
+    `${prefix}🆕 New campaign created — ${campaignBrand(campaign)} submitted "${campaignTitle(campaign)}".`,
+    ``,
+    formatCampaignDetails(campaign),
+    ``,
+    `💳 Payment page: ${SITE_URL}/brands/payment/${campaign.id}`,
+    `The campaign stays PENDING until the brand sends the budget + 15% fee — check your wallet, then approve it: ${SITE_URL}/admin`,
+  ].join("\n");
+  return notifyDiscord(message, campaignThreadName(campaign));
+}
+
+/**
+ * Payment-proof notification (Item 11b): fires when the brand
+ * sends payment proof — a Transaction ID (via the payment form or
+ * pasted in the brand chat) and/or a proof screenshot in the brand
+ * chat — with the TxID, the proof link, and the full campaign
+ * details. This is the moment Turn needs to check his wallet and
+ * approve, so the message says so outright. `proofUrl` is the
+ * owner-only proof-image link (or the brand-chat link when the
+ * proof is text-only); omit it when there is no proof to link to.
+ * Same per-brand forum thread as the campaign-created
+ * notification. Fire-and-forget; never throws.
+ */
+export async function notifyPaymentProof(
+  campaign: NotifyCampaign,
+  opts?: { txId?: string | null; proofUrl?: string | null }
+): Promise<boolean> {
+  const mention = adminMention();
+  const prefix = mention ? `${mention} ` : "";
+  const txId = String(
+    opts?.txId ?? campaign.payment_tx_id ?? ""
+  ).trim();
+  const proofUrl = String(opts?.proofUrl ?? "").trim();
+  const message = [
+    `${prefix}💰 Payment proof received — ${campaignBrand(campaign)} sent payment proof for "${campaignTitle(campaign)}".`,
+    ``,
+    formatCampaignDetails(campaign),
+    ``,
+    txId
+      ? `Transaction ID: ${txId}`
+      : `Transaction ID: not submitted yet — ask the brand to paste it on the payment page.`,
+    proofUrl ? `Proof: ${proofUrl}` : `Proof: no screenshot attached yet.`,
+    `Chat: ${SITE_URL}/brands/payment/${campaign.id}#brand-chat`,
+    `Check your wallet, then approve the campaign: ${SITE_URL}/admin`,
+  ].join("\n");
+  return notifyDiscord(message, campaignThreadName(campaign));
 }

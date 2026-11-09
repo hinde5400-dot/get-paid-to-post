@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
-import { adminMention, notifyDiscord } from "@/lib/notify";
+import { SITE_URL } from "@/lib/constants";
+import { notifyPaymentProof } from "@/lib/notify";
 
 /**
  * Private two-way brand <-> admin chat for one campaign (migration
@@ -27,7 +28,9 @@ async function loadCampaign(
 ) {
   const { data, error } = await supabase
     .from("campaigns")
-    .select("id, user_id, status, title, budget_total, brand_name")
+    .select(
+      "id, user_id, status, title, budget_total, brand_name, platform_fee, rates, view_bonus_per_1k, rate_per_1m, min_views, max_payout_per_post, payment_tx_id"
+    )
     .eq("id", campaignId)
     .single();
   if (error || !data) return null;
@@ -38,6 +41,13 @@ async function loadCampaign(
     title?: string | null;
     budget_total?: number;
     brand_name?: string | null;
+    platform_fee?: number;
+    rates?: Record<string, number> | null;
+    view_bonus_per_1k?: number;
+    rate_per_1m?: number;
+    min_views?: number;
+    max_payout_per_post?: number;
+    payment_tx_id?: string | null;
   };
 }
 
@@ -211,23 +221,31 @@ export async function POST(
     }
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  // Notify the owner on Discord when the BRAND uploads a payment
-  // proof screenshot (fire-and-forget — never breaks the request;
-  // a no-op until Turn creates the webhook).
-  if (sender === "brand" && messageType === "image") {
-    const mention = adminMention();
-    const brand = String(
-      campaign.brand_name ??
-        (profile as { brand_name?: string | null } | null)?.brand_name ??
-        "A brand"
-    );
-    const budget = Number(campaign.budget_total ?? 0);
-    const title = String(campaign.title ?? "Untitled campaign");
-    const prefix = mention ? `${mention} ` : "";
-    void notifyDiscord(
-      `${prefix}🧾 Payment proof uploaded — ${brand} attached a screenshot for "${title}" ($${budget} budget). View it: https://get-paid-to-post.vercel.app/admin`,
-      `${brand} — ${title}`
-    );
+  // Notify the owner on Discord when the BRAND sends payment proof
+  // in this chat: a proof screenshot upload, or a Transaction ID
+  // pasted as a chat message. A TxID in chat text is recognised
+  // only by its shape — a 64-hex-char hash, with or without a 0x
+  // prefix, the shape of a TRC20/BEP20 transaction hash — so an
+  // ordinary word can never trigger it. The notification carries
+  // the TxID, the proof link and the full campaign details, because
+  // this is the moment Turn checks his wallet and approves.
+  // Fire-and-forget — never breaks the request; a no-op until Turn
+  // creates the webhook. Same per-brand forum thread as the
+  // campaign-created notification.
+  if (sender === "brand") {
+    const txHashInText = /^(?:0x)?[0-9a-fA-F]{64}$/.test(text)
+      ? text
+      : null;
+    if (messageType === "image" || txHashInText) {
+      const messageId = (data as { id?: string } | null)?.id;
+      void notifyPaymentProof(campaign, {
+        txId: txHashInText ?? campaign.payment_tx_id ?? undefined,
+        proofUrl:
+          messageType === "image" && messageId
+            ? `${SITE_URL}/api/campaigns/${params.id}/messages/${messageId}/image`
+            : undefined,
+      });
+    }
   }
   return NextResponse.json({ ok: true, message: data });
 }
