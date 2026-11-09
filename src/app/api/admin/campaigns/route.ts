@@ -48,6 +48,34 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "approve") {
+    // Approve guards: only a pending campaign with a payment
+    // transaction ID may go live. Approving a live campaign would
+    // restart its started_at/ends_at clock, approving a rejected
+    // one would resurrect it, and approving without a transaction
+    // ID would mark a campaign funded whose budget never arrived.
+    if (campaign.status !== "pending") {
+      return NextResponse.json(
+        {
+          error:
+            campaign.status === "live"
+              ? "This campaign is already live."
+              : `This campaign has already been ${campaign.status} and cannot be approved.`,
+        },
+        { status: 400 }
+      );
+    }
+    const paymentTxId = String(
+      (campaign as { payment_tx_id?: string | null }).payment_tx_id ?? ""
+    ).trim();
+    if (!paymentTxId) {
+      return NextResponse.json(
+        {
+          error:
+            "This campaign has no payment transaction ID — the brand's budget has not been confirmed. Do not approve until the payment proof is in.",
+        },
+        { status: 400 }
+      );
+    }
     // Approving starts the clock: the campaign runs from now until
     // its duration ends (no duration = until the budget ends) and
     // auto-ends when the duration finishes OR the budget hits 0.
@@ -87,6 +115,17 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "reject") {
+    if (campaign.status !== "pending") {
+      return NextResponse.json(
+        {
+          error:
+            campaign.status === "live"
+              ? "This campaign is already live and cannot be rejected."
+              : `This campaign has already been ${campaign.status}.`,
+        },
+        { status: 400 }
+      );
+    }
     const { error } = await supabase
       .from("campaigns")
       .update({ status: "rejected" })

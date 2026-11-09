@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { getCampaign, getUserSubmissions } from "@/lib/data";
+import Link from "next/link";
+import { getCampaign, getUserSubmissions, isCampaignLive } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
 import SubmitBundleForm, { type LastSubmission } from "@/components/SubmitBundleForm";
 import type { Platform } from "@/lib/types";
@@ -11,6 +12,46 @@ export default async function SubmitPage({
 }) {
   const campaign = await getCampaign(params.id);
   if (!campaign) notFound();
+
+  // No working form for a campaign that is not live — pending,
+  // rejected, ended (duration passed) or out of budget. The API
+  // enforces the same check, so this is the honest face of it.
+  if (!isCampaignLive(campaign)) {
+    const ended =
+      (campaign.ends_at &&
+        new Date(campaign.ends_at).getTime() <= Date.now()) ||
+      campaign.budget_left <= 0;
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div>
+          <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">
+            {ended ? "This campaign has ended" : "This campaign is not live"}
+          </h1>
+          <p className="mt-2 text-sm text-fg/60">
+            {campaign.brand_name} — {campaign.title}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
+          <p className="font-bold text-fg">
+            {ended
+              ? "This campaign has ended, so new submissions are closed."
+              : "This campaign is not live yet, so submissions are not open."}
+          </p>
+          <p className="mt-2 text-sm text-fg/60">
+            {ended
+              ? "Check Discover for live campaigns you can join instead."
+              : "New campaigns appear on Discover once the brand has funded them and they go live."}
+          </p>
+          <Link
+            href="/campaigns"
+            className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
+          >
+            Browse live campaigns
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const user = await getCurrentUser();
   let lastByPlatform: LastSubmission[] = [];

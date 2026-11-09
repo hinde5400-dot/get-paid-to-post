@@ -6,9 +6,11 @@ import { HOLD_HOURS } from "@/lib/constants";
 
 interface ReviewBody {
   submissionId?: string;
-  action?: "approve" | "reject" | "revoke";
+  action?: "approve" | "reject";
   views?: number;
   likes?: number;
+  /** Optional reason for a rejection (bot views, brief mismatch, ...). */
+  reason?: string;
 }
 
 export async function POST(request: Request) {
@@ -44,43 +46,143 @@ export async function POST(request: Request) {
     );
   }
 
+  const reason =
+    typeof body.reason === "string" && body.reason.trim()
+      ? body.reason.trim()
+      : null;
+
   if (body.action === "reject") {
+    if (submission.status === "rejected") {
+      return NextResponse.json(
+        { error: "This submission has already been rejected." },
+        { status: 400 }
+      );
+    }
+
+    // Rejecting an APPROVED submission must fully reverse it: take
+    // the earnings back out of the creator's wallet and restore the
+    // campaign budget. (There is no revoke status any more — reject
+    // is the only way back from approved.)
+    if (submission.status === "approved") {
+      const prevEarnings = Number(submission.earnings ?? 0);
+      if (prevEarnings > 0) {
+        // Release any matured 72h holds first, so the balances we
+        // read are current (earnings may already have moved from
+        // pending to available).
+        try {
+          await supabase.rpc("release_matured_holds");
+        } catch {
+          // Migration 0011 not run yet — balances are as stored.
+        }
+        const { data: wallet } = await supabase
+          .from("wallets")
+          .select("*")
+          .eq("user_id", submission.user_id)
+          .single();
+        if (wallet) {
+          const pending = Number(wallet.pending_balance ?? 0);
+          const available = Number(wallet.available_balance ?? 0);
+          // Take from the pending (held) balance first, then from
+          // the available balance if the hold already matured.
+          const fromPending = Math.min(pending, prevEarnings);
+          const remaining = prevEarnings - fromPending;
+          const fromAvailable = Math.min(available, remaining);
+          const shortfall = Math.round((remaining - fromAvailable) * 100) / 100;
+          await supabase
+            .from("wallets")
+            .update({
+              pending_balance: Math.max(
+                0,
+                Math.round((pending - fromPending) * 100) / 100
+              ),
+              available_balance: Math.max(
+                0,
+                Math.round((available - fromAvailable) * 100) / 100
+              ),
+            })
+            .eq("user_id", submission.user_id);
+          if (shortfall > 0) {
+            // Part of the earnings was already withdrawn — it cannot
+            // be clawed back. Reject anyway and restore what is
+            // possible; the shortfall is logged for the owner.
+            console.error(
+              `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be fully reversed — $${shortfall.toFixed(2)} already withdrawn/unrecoverable.`
+            );
+          }
+        } else {
+          console.error(
+            `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be reversed — no wallet found for user ${submission.user_id}.`
+          );
+        }
+        // Restore the campaign budget: the earnings go back into
+        // budget_left and come off paid_out.
+        const { data: campaign } = await supabase
+          .from("campaigns")
+          .select("budget_left, paid_out")
+          .eq("id", submission.campaign_id)
+          .single();
+        if (campaign) {
+          await supabase
+            .from("campaigns")
+            .update({
+              budget_left:
+                Math.round(
+                  (Number(campaign.budget_left ?? 0) + prevEarnings) * 100
+                ) / 100,
+              paid_out: Math.max(
+                0,
+                Math.round(
+                  (Number(campaign.paid_out ?? 0) - prevEarnings) * 100
+                ) / 100
+              ),
+            })
+            .eq("id", submission.campaign_id);
+        }
+      }
+      await supabase
+        .from("submissions")
+        .update({
+          status: "rejected",
+          earnings: 0,
+          rejection_reason: reason,
+        })
+        .eq("id", submission.id);
+      return NextResponse.json({
+        ok: true,
+        message: "Submission rejected — its earnings were reversed.",
+      });
+    }
+
+    // Pending (or any other non-approved, non-rejected) submission:
+    // no money has moved yet, so there is nothing to reverse.
+    if (submission.status !== "pending") {
+      return NextResponse.json(
+        { error: `Cannot reject a submission with status "${submission.status}".` },
+        { status: 400 }
+      );
+    }
     await supabase
       .from("submissions")
-      .update({ status: "rejected" })
+      .update({ status: "rejected", rejection_reason: reason })
       .eq("id", submission.id);
     return NextResponse.json({ ok: true, message: "Submission rejected." });
   }
 
-  if (body.action === "revoke") {
-    // Reverse any hold credit, then zero the earnings.
-    const prevEarnings = Number(submission.earnings ?? 0);
-    if (prevEarnings > 0 && submission.status === "approved") {
-      const { data: wallet } = await supabase
-        .from("wallets")
-        .select("*")
-        .eq("user_id", submission.user_id)
-        .single();
-      if (wallet) {
-        const holdUntil = (submission as { hold_until?: string | null })
-          .hold_until;
-        const stillHeld =
-          holdUntil && new Date(holdUntil).getTime() > Date.now();
-        const field = stillHeld ? "pending_balance" : "available_balance";
-        await supabase
-          .from("wallets")
-          .update({ [field]: Math.max(0, Number(wallet[field]) - prevEarnings) })
-          .eq("user_id", submission.user_id);
-      }
-    }
-    await supabase
-      .from("submissions")
-      .update({ status: "revoked", earnings: 0 })
-      .eq("id", submission.id);
-    return NextResponse.json({ ok: true, message: "Submission revoked." });
-  }
-
   if (body.action === "approve") {
+    // Double-approve guard: approving an already-approved (or
+    // rejected) submission would credit the wallet and decrement
+    // the campaign budget a second time. Only pending may approve.
+    if (submission.status !== "pending") {
+      return NextResponse.json(
+        {
+          error:
+            submission.status === "approved"
+              ? "This submission has already been approved."
+              : `This submission has already been ${submission.status} and cannot be approved.`,
+        },
+        { status: 400 }
+      );
+    }
     const views = Math.max(0, Math.floor(Number(body.views ?? 0)));
     const likes = Math.max(0, Math.floor(Number(body.likes ?? 0)));
     if (!views || views <= 0) {

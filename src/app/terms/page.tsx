@@ -110,7 +110,7 @@ export default function TermsPage() {
           Only real views from real people count. Fake engagement will lead
           to your account being strictly blocked or banned. Submitting someone
           else&apos;s content, or the same clip twice, will lead to the
-          submission being revoked.
+          submission being rejected.
         </p>
       </section>
 
@@ -123,10 +123,11 @@ export default function TermsPage() {
           and reply within 10 business days.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
-          Approved earnings that have already settled to your
-          Withdrawable Balance are never reversed. Only unsettled
-          amounts — earnings still in your Pending Balance — can be
-          returned to the campaign budget.
+          If a submission is rejected after it was approved, its
+          earnings are reversed — taken back from your Pending Balance
+          first, then from your Withdrawable Balance — and returned to
+          the campaign budget. If the amount was already withdrawn, it
+          cannot be clawed back.
         </p>
       </section>
 

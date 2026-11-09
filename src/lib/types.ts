@@ -54,11 +54,7 @@ export function platformNamesText(platforms: Platform[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-export type SubmissionStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "revoked";
+export type SubmissionStatus = "pending" | "approved" | "rejected";
 
 export interface Campaign {
   id: string;
@@ -119,6 +115,8 @@ export interface Submission {
   likes: number;
   status: SubmissionStatus;
   earnings: number;
+  /** Why the submission was rejected, when the owner gave one. */
+  rejection_reason?: string | null;
   hold_until: string | null;
   /** Last time the 3-hour auto-refresh checked this clip's views. */
   views_refreshed_at?: string | null;

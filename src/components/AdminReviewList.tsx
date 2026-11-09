@@ -85,7 +85,7 @@ export default function AdminReviewList({
 
   function review(
     s: AdminSubmission,
-    action: "approve" | "reject" | "revoke"
+    action: "approve" | "reject"
   ) {
     const v = Number(views[s.id] ?? s.views ?? 0);
     const l = Number(likes[s.id] ?? s.likes ?? 0);
@@ -184,7 +184,7 @@ export default function AdminReviewList({
 
           {s.is_duplicate && (
             <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-              ⚠️ Duplicate of a post already submitted — auto-revoked.
+              ⚠️ Duplicate of a post already submitted — auto-rejected.
             </p>
           )}
 
@@ -269,19 +269,6 @@ export default function AdminReviewList({
                 </>
               ) : (
                 "Reject"
-              )}
-            </button>
-            <button
-              onClick={() => review(s, "revoke")}
-              disabled={busy === s.id}
-              className="inline-flex items-center gap-1.5 rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg disabled:opacity-40"
-            >
-              {busy === s.id && busyAction === "revoke" ? (
-                <>
-                  <Spinner /> Loading...
-                </>
-              ) : (
-                "Revoke"
               )}
             </button>
             <button

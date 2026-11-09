@@ -61,6 +61,23 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Ended campaigns must not accept submissions by direct API call
+  // either: duration passed, or the budget is spent.
+  if (
+    campaign.ends_at &&
+    new Date(campaign.ends_at as string).getTime() <= Date.now()
+  ) {
+    return NextResponse.json(
+      { error: "This campaign has ended." },
+      { status: 400 }
+    );
+  }
+  if (Number(campaign.budget_left ?? 0) <= 0) {
+    return NextResponse.json(
+      { error: "This campaign's budget has run out." },
+      { status: 400 }
+    );
+  }
 
   // Platforms this campaign accepts (migration 0012): the platforms
   // array when present, otherwise the legacy single platform column.
@@ -172,13 +189,13 @@ export async function POST(request: Request) {
     );
   }
 
-  // Max 7 posts per campaign per creator.
+  // Max 7 posts per campaign per creator. (Clip-limit rework is
+  // batch 2 — this count is unchanged here.)
   const { count: myCount } = await supabase
     .from("submissions")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .eq("campaign_id", campaign.id)
-    .neq("status", "revoked");
+    .eq("campaign_id", campaign.id);
   if ((myCount ?? 0) >= MAX_POSTS_PER_CAMPAIGN) {
     return NextResponse.json(
       {
@@ -219,7 +236,7 @@ export async function POST(request: Request) {
   let duplicateWarning = false;
 
   for (const l of links) {
-    // Same link already submitted by someone else → duplicate, auto-revoked.
+    // Same link already submitted by someone else → duplicate, auto-rejected.
     const { data: existing } = await supabase
       .from("submissions")
       .select("id, user_id")
@@ -239,8 +256,9 @@ export async function POST(request: Request) {
       platform: l.platform,
       views: 0,
       likes: 0,
-      status: isDuplicate ? "revoked" : "pending",
+      status: isDuplicate ? "rejected" : "pending",
       earnings: 0,
+      rejection_reason: isDuplicate ? "duplicate" : null,
       how_made: howMade,
       proof_screenshots: proof,
       is_duplicate: isDuplicate,
@@ -261,7 +279,7 @@ export async function POST(request: Request) {
     bundleId,
     duplicateWarning,
     message: duplicateWarning
-      ? "Submitted, but a duplicate link was detected and revoked automatically."
+      ? "Submitted, but a duplicate link was detected and rejected as a duplicate."
       : "Your bundle was submitted and is Under Review at $0 until approved.",
   });
 }

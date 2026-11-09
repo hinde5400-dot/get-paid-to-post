@@ -12,7 +12,6 @@ const FILTERS: { key: "all" | SubmissionStatus; label: string }[] = [
   { key: "approved", label: "Approved" },
   { key: "pending", label: "Under Review" },
   { key: "rejected", label: "Rejected" },
-  { key: "revoked", label: "Revoked" },
 ];
 
 export default function MyPostsList({
@@ -86,7 +85,7 @@ export default function MyPostsList({
               {s.is_duplicate && (
                 <p className="mb-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
                   ⚠️ This post duplicates content that has already been
-                  submitted. It was revoked automatically.
+                  submitted. It was rejected automatically.
                 </p>
               )}
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -108,6 +107,11 @@ export default function MyPostsList({
                 </div>
                 <StatusBadge status={s.status} />
               </div>
+              {s.status === "rejected" && s.rejection_reason && (
+                <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
+                  Rejected: {s.rejection_reason}
+                </p>
+              )}
               <div className="mt-4 grid grid-cols-3 gap-3 text-center">
                 <div className="rounded-xl bg-fg/5 py-2">
                   <p className="text-lg font-black text-fg">
