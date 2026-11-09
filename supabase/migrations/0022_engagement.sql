@@ -29,6 +29,10 @@ alter table public.submissions
 -- The refresh list also returns the stored likes/comments, so the
 -- refresh code can keep them when a platform does not return fresh
 -- engagement numbers instead of zeroing them.
+-- NOTE: the return type changed (likes + comments added), so
+-- PostgreSQL cannot CREATE OR REPLACE the existing function —
+-- drop it first (42P13 otherwise).
+drop function if exists public.list_pending_submissions_for_refresh();
 create or replace function public.list_pending_submissions_for_refresh()
 returns table (
   id uuid,
