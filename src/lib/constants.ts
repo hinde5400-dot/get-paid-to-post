@@ -62,8 +62,8 @@ export const MAX_PAYOUT_DEFAULT = 75; // USD, default max payout per post
 export const MAX_PAYOUT_MIN = 10; // USD, minimum max payout per post
 export const MAX_PAYOUT_MAX = 200; // USD, maximum max payout per post
 export const WITHDRAW_MIN = 15; // USD, minimum withdrawal
-export const WITHDRAW_FEE_RATE = 0.07; // 7% at withdrawal
-export const PLATFORM_FEE_RATE = 0.15; // 15% flat platform fee, taken inside the brand's budget (first campaign = repeat campaign)
+export const WITHDRAW_FEE_RATE = 0.05; // 5% at withdrawal
+export const PLATFORM_FEE_RATE = 0.15; // 15% flat platform fee, charged ON TOP of the brand's budget (first campaign = repeat campaign): the brand sends budget + 15%, and the campaign runs on the full budget
 export const HOLD_HOURS = 72; // approved earnings sit in a 72-hour hold
 export const VIEW_REFRESH_HOURS = 3; // pending clips re-check views every 3 hours
 export const VIEW_REFRESH_MS = VIEW_REFRESH_HOURS * 60 * 60 * 1000;

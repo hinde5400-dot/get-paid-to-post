@@ -6,8 +6,8 @@ import {
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
-  PLATFORM_FEE_RATE,
 } from "@/lib/constants";
+import { platformFeeFor, totalToSend } from "@/lib/money";
 import type { Platform } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
@@ -206,21 +206,16 @@ export default function BrandForm({
       ? Number(budget)
       : 200;
   const exampleViews = Math.round((exampleBudget / exampleRate) * 1000);
-  // Platform fee (P0 batch 2): 15% flat, taken INSIDE the budget.
-  // You still send the full budget; creators are paid from the pool.
-  const exampleFee =
-    Math.round(exampleBudget * PLATFORM_FEE_RATE * 100) / 100;
-  const examplePool =
-    Math.round((exampleBudget - exampleFee) * 100) / 100;
+  // Platform fee: 15% flat, charged ON TOP of the budget. You
+  // send budget + fee; the creators pool is the full budget.
+  const exampleFee = platformFeeFor(exampleBudget);
+  const exampleTotal = totalToSend(exampleBudget);
   const budgetNum = Number(budget);
   const liveFeeSplit =
     Number.isFinite(budgetNum) && budgetNum > 0
       ? {
-          fee: Math.round(budgetNum * PLATFORM_FEE_RATE * 100) / 100,
-          pool:
-            Math.round(
-              (budgetNum - budgetNum * PLATFORM_FEE_RATE) * 100
-            ) / 100,
+          fee: platformFeeFor(budgetNum),
+          total: totalToSend(budgetNum),
         }
       : null;
   const fmtChoice = (n: number) =>
@@ -356,9 +351,10 @@ export default function BrandForm({
           </span>
           {liveFeeSplit && (
             <span className="mt-1 block text-xs font-semibold text-lime">
-              Platform fee (15%): {fmtChoice(liveFeeSplit.fee)} · Creators
-              pool: {fmtChoice(liveFeeSplit.pool)} — creators are paid from
-              the pool.
+              Budget {fmtChoice(budgetNum)} + Platform fee (15%):{" "}
+              {fmtChoice(liveFeeSplit.fee)} = Total to send{" "}
+              {fmtChoice(liveFeeSplit.total)} · Creators pool (full
+              budget): {fmtChoice(budgetNum)}.
             </span>
           )}
           {fieldErrors.budget && (
@@ -444,8 +440,11 @@ export default function BrandForm({
       <div className="mt-4 rounded-2xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
         Example: If you set {fmtChoice(exampleRate)} per 1k and budget{" "}
         {fmtChoice(exampleBudget)}, you will get approx{" "}
-        {exampleViews.toLocaleString("en-US")} views. Platform fee (15%):{" "}
-        {fmtChoice(exampleFee)} · Creators pool: {fmtChoice(examplePool)}.
+        {exampleViews.toLocaleString("en-US")} views. Budget{" "}
+        {fmtChoice(exampleBudget)} + Platform fee (15%):{" "}
+        {fmtChoice(exampleFee)} = Total to send{" "}
+        {fmtChoice(exampleTotal)} · Creators pool (full budget):{" "}
+        {fmtChoice(exampleBudget)}.
       </div>
       <label className="mt-4 block text-sm font-bold text-fg">
         Campaign Description
@@ -503,9 +502,10 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
         )}
       </button>
       <p className="mt-3 text-center text-xs text-fg/40">
-        No payment is taken here. After you submit, send your budget in
-        USDT (TRC20) to the admin wallet on the payment page — your
-        campaign goes live once the admin verifies your payment.
+        No payment is taken here. After you submit, send your budget
+        plus the 15% platform fee in USDT (TRC20) to the admin wallet
+        on the payment page — your campaign goes live once the admin
+        verifies your payment.
       </p>
     </form>
   );

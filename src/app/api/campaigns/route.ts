@@ -4,8 +4,8 @@ import {
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
-  PLATFORM_FEE_RATE,
 } from "@/lib/constants";
+import { platformFeeFor } from "@/lib/money";
 import type { Platform } from "@/lib/types";
 
 const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
@@ -164,11 +164,12 @@ export async function POST(request: Request) {
     );
   }
 
-  // Platform fee (P0 batch 2): 15% FLAT, taken INSIDE the budget.
-  // The brand still SENDS the full budget_total (the payment page
-  // "Amount to Send" stays budget_total); budget_left is the
-  // creators pool the payouts draw from.
-  const platformFee = Math.round(budgetTotal * PLATFORM_FEE_RATE * 100) / 100;
+  // Platform fee: 15% FLAT, charged ON TOP of the budget. The
+  // brand sends budget_total + fee (the payment page shows the
+  // split); budget_left is the FULL budget_total — the creators
+  // pool the payouts draw from. There is no hidden internal
+  // budget, and the admin must not edit the budget down.
+  const platformFee = platformFeeFor(budgetTotal);
   const insertRow: Record<string, unknown> = {
     brand_name: brandName,
     title,
@@ -179,7 +180,7 @@ export async function POST(request: Request) {
     // the same rate scaled up, so the two fields stay coherent.
     rate_per_1m: Math.round(ratePer1k * 1000 * 100) / 100,
     budget_total: budgetTotal,
-    budget_left: Math.round((budgetTotal - platformFee) * 100) / 100,
+    budget_left: budgetTotal,
     platform_fee: platformFee,
     spots_left: 0,
     spots_total: 0,

@@ -81,7 +81,7 @@ export default function AdminWithdrawalList({
                 Wallet: {w.details}
               </p>
               <p className="mt-1 text-xs text-fg/50">
-                You send {formatUSD(w.final_amount)} after the 7% fee.
+                You send {formatUSD(w.final_amount)} after the 5% fee.
               </p>
             </div>
             <span

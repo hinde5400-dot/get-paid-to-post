@@ -77,7 +77,7 @@ export default async function EarningsPage() {
         <h2 className="text-lg font-extrabold text-fg">Payout info</h2>
         <ul className="mt-3 space-y-2 text-sm text-fg/70">
           <li>• Minimum withdrawal: {formatUSD(WITHDRAW_MIN)}.</li>
-          <li>• Withdrawal fee: 7% — you receive amount × 0.93 in USDT.</li>
+          <li>• Withdrawal fee: 5% — you receive amount × 0.95 in USDT.</li>
           <li>• Methods: USDT (TRC20) and USDT (BEP20) only.</li>
           <li>• Approved earnings are held for {HOLD_HOURS} hours before they become available.</li>
           <li>• Payouts are processed by the platform owner from the funded campaign budget, within 24-48 hours.</li>

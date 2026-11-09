@@ -103,11 +103,13 @@ export default function AdminCampaignList({
             </div>
           </div>
 
-          {/* Fee split (P0 batch 2): 15% flat platform fee inside the
-              budget; the creators pool is what payouts draw from. */}
+          {/* Fee split: 15% flat platform fee charged ON TOP of the
+              budget; the creators pool is the full budget. The admin
+              approves only after verifying the TOTAL arrived. */}
           <p className="mt-3 text-xs font-semibold text-fg/60">
-            Platform fee (15%): {formatUSD(c.platform_fee)} · Creators
-            pool: {formatUSD(c.budget_left)}
+            Platform fee (15%): {formatUSD(c.platform_fee)} · Total to
+            verify: {formatUSD(c.budget_total + c.platform_fee)} ·
+            Creators pool (full budget): {formatUSD(c.budget_total)}
           </p>
 
           {c.description && (

@@ -9,7 +9,7 @@ const STEPS = [
   { n: "4", t: "Make your clip", d: "Film vertical 9:16, add captions, and hook viewers in the first 3 seconds. Keep it original and on-brief." },
   { n: "5", t: "Post and submit", d: "Post on the campaign's platforms and submit the links as one bundle, with proof and a short note on how you made it." },
   { n: "6", t: "Wait for approval", d: "Submissions stay Pending at $0 until approved. Approved earnings move into a 72-hour hold, then to your available balance." },
-  { n: "7", t: "Withdraw your earnings", d: "Withdraw from $15 in USDT (TRC20 or BEP20). A 7% fee applies at withdrawal." },
+  { n: "7", t: "Withdraw your earnings", d: "Withdraw from $15 in USDT (TRC20 or BEP20). A 5% fee applies at withdrawal." },
 ];
 
 export default async function HowItWorksPage() {
@@ -45,7 +45,7 @@ export default async function HowItWorksPage() {
           <li>• Earnings are views only — you are paid the campaign&apos;s rate per 1,000 verified views, up to the per-post cap. There is no base pay per post.</li>
           <li>• View bonus: the campaign&apos;s rate per 1,000 views, tracked for 14 days.</li>
           <li>• Approved earnings sit in a 72-hour hold, then become available.</li>
-          <li>• Minimum withdrawal: $15. Withdrawal fee: 7%.</li>
+          <li>• Minimum withdrawal: $15. Withdrawal fee: 5%.</li>
           <li>• Payouts: USDT (TRC20 or BEP20) only.</li>
           <li>• Brands fund every campaign upfront — any budget, set by the brand.</li>
           <li>• One clip per platform every 2 hours, up to 15 approved clips per platform.</li>

@@ -117,7 +117,7 @@ export async function POST(request: Request) {
   }
   return NextResponse.json({
     ok: true,
-    message: `Withdrawal requested — you will receive $${final.toFixed(2)} after the 7% fee.`,
+    message: `Withdrawal requested — you will receive $${final.toFixed(2)} after the 5% fee.`,
     finalAmount: final,
   });
 }

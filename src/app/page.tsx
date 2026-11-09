@@ -12,7 +12,7 @@ import { formatUSD } from "@/lib/money";
 const FAQS = [
   {
     q: "How do I get paid?",
-    a: "Pick a funded campaign, post your clip, and submit the link. Approved earnings go into a 72-hour hold, then move to your available balance. Withdraw from $15 in USDT (TRC20 or BEP20). A 7% fee applies at withdrawal.",
+    a: "Pick a funded campaign, post your clip, and submit the link. Approved earnings go into a 72-hour hold, then move to your available balance. Withdraw from $15 in USDT (TRC20 or BEP20). A 5% fee applies at withdrawal.",
   },
   {
     q: "Do I need followers to join?",

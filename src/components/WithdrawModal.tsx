@@ -184,7 +184,7 @@ export default function WithdrawModal({
                   <span className="font-bold text-fg">{formatUSD(amountNum)}</span>
                 </div>
                 <div className="mt-1 flex justify-between">
-                  <span>Fee (7%)</span>
+                  <span>Fee (5%)</span>
                   <span className="font-bold text-fg">−{formatUSD(fee)}</span>
                 </div>
                 <div className="mt-2 flex justify-between border-t border-fg/10 pt-2 text-base">
@@ -192,7 +192,7 @@ export default function WithdrawModal({
                   <span className="font-black text-lime">{formatUSD(final)}</span>
                 </div>
                 <p className="mt-2 text-xs text-fg/50">
-                  You receive amount × 0.93 after the 7% fee, in USDT.
+                  You receive amount × 0.95 after the 5% fee, in USDT.
                 </p>
               </div>
             )}

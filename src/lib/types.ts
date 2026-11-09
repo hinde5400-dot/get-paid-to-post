@@ -68,8 +68,9 @@ export interface Campaign {
   rate_per_1m: number;
   budget_total: number;
   budget_left: number;
-  /** 15% flat platform fee, taken inside budget_total (migration
-   *  0021). budget_left is the creators pool: budget - fee. */
+  /** 15% flat platform fee, charged ON TOP of budget_total
+   *  (migration 0021). budget_left is the creators pool: the full
+   *  budget — the fee is paid on top, never taken out of it. */
   platform_fee: number;
   spots_left: number;
   spots_total: number;

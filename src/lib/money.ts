@@ -1,4 +1,4 @@
-import { HOLD_HOURS, WITHDRAW_FEE_RATE } from "./constants";
+import { HOLD_HOURS, PLATFORM_FEE_RATE, WITHDRAW_FEE_RATE } from "./constants";
 
 /** earnings = views / 1,000,000 × rate per 1M views */
 export function earningsForViews(views: number, ratePer1m: number): number {
@@ -20,9 +20,23 @@ export function payoutForViews(
   return { uncapped, earnings, capped: uncapped > cap };
 }
 
-/** 7% withdrawal fee. */
+/** 5% withdrawal fee. */
 export function feeFor(amount: number): number {
   return Math.round(amount * WITHDRAW_FEE_RATE * 100) / 100;
+}
+
+/**
+ * Platform fee (15% flat, charged ON TOP of the campaign budget):
+ * the brand sends budget + fee, and the campaign runs on the full
+ * budget — there is no reduced internal pool.
+ */
+export function platformFeeFor(budget: number): number {
+  return Math.round(budget * PLATFORM_FEE_RATE * 100) / 100;
+}
+
+/** Total the brand sends: campaign budget + 15% platform fee. */
+export function totalToSend(budget: number): number {
+  return Math.round((budget + platformFeeFor(budget)) * 100) / 100;
 }
 
 /**
@@ -53,7 +67,7 @@ export function budgetBarClass(remainingPct: number): string {
   return "bg-red-800";
 }
 
-/** Final payout after the 7% fee: amount × 0.93 */
+/** Final payout after the 5% fee: amount × 0.95 */
 export function finalFor(amount: number): number {
   return Math.round((amount - feeFor(amount)) * 100) / 100;
 }
