@@ -63,6 +63,17 @@ export default function AdminCampaignList({
               </p>
               <p className="truncate text-sm text-fg/60">{c.title}</p>
             </div>
+            {/* Payment status — at a glance: has the brand actually
+                submitted payment, or is this a junk pending campaign? */}
+            <span
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+                c.payment_tx_id
+                  ? "bg-lime/15 text-lime"
+                  : "bg-amber-500/15 text-amber-300"
+              }`}
+            >
+              {c.payment_tx_id ? "Payment submitted" : "No payment yet"}
+            </span>
             <span
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
                 c.is_funded
@@ -118,19 +129,44 @@ export default function AdminCampaignList({
             </p>
           )}
 
-          {/* Payment Transaction ID — the proof the budget was sent. */}
-          <div className="mt-3 rounded-xl bg-fg/5 px-4 py-3">
+          {/* Payment status — the proof the budget was sent. Green =
+              the brand submitted a Transaction ID; amber = no payment
+              yet, so this is junk until the budget actually arrives. */}
+          <div
+            className={`mt-3 rounded-xl px-4 py-3 ${
+              c.payment_tx_id
+                ? "border border-lime/30 bg-lime/10"
+                : "border border-amber-400/30 bg-amber-500/10"
+            }`}
+          >
             <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
-              Transaction ID
+              Payment status
             </p>
             {c.payment_tx_id ? (
-              <p className="mt-1 break-all font-mono text-xs font-bold text-lime">
-                {c.payment_tx_id}
-              </p>
+              <>
+                <p className="mt-1 text-xs font-black text-lime">
+                  Payment submitted
+                </p>
+                <p
+                  className="mt-1 font-mono text-xs font-bold text-fg/80"
+                  title={c.payment_tx_id}
+                >
+                  TxID:{" "}
+                  {c.payment_tx_id.length > 12
+                    ? `${c.payment_tx_id.slice(0, 12)}…`
+                    : c.payment_tx_id}
+                </p>
+              </>
             ) : (
-              <p className="mt-1 text-xs font-semibold text-fg/50">
-                Not submitted yet
-              </p>
+              <>
+                <p className="mt-1 text-xs font-black text-amber-300">
+                  No payment yet
+                </p>
+                <p className="mt-1 text-xs font-semibold text-fg/60">
+                  The brand has not submitted a payment. Do not approve
+                  until the budget reaches you.
+                </p>
+              </>
             )}
           </div>
 

@@ -135,6 +135,31 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-10">
+      {/* Wallet warning — brands cannot pay while the admin USDT
+          wallet is unset, so pending campaigns pile up with no
+          payment. Shown only when no wallet is saved. */}
+      {!adminWallet && (
+        <div
+          role="alert"
+          className="rounded-3xl border border-amber-400/40 bg-amber-500/10 p-5"
+        >
+          <p className="font-display text-base font-black uppercase tracking-tight text-amber-300">
+            Admin USDT wallet not set — brands cannot pay.
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-fg/70">
+            No USDT wallet is saved, so brands have nowhere to send
+            their campaign budget.{" "}
+            <a
+              href="#admin-settings"
+              className="font-bold text-amber-300 underline underline-offset-2 hover:text-amber-200"
+            >
+              Set it in Settings
+            </a>{" "}
+            below before approving any campaign.
+          </p>
+        </div>
+      )}
+
       <div>
         <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Admin Review</h1>
         <p className="mt-2 text-sm text-fg/60">
@@ -149,7 +174,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Admin settings — USDT wallet brands pay their budget to */}
-      <section>
+      <section id="admin-settings">
         <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
           Admin Settings
         </h2>
