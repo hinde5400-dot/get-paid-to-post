@@ -7,7 +7,7 @@ import { isCampaignLive } from "@/lib/campaigns";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
 import {
   budgetBarClass,
-  budgetRemainingPct,
+  budgetUsedPct,
   budgetDaysLeft,
   formatDeadline,
   payoutForViews,
@@ -29,7 +29,7 @@ import { PlatformChips } from "./PlatformIcons";
  * views, max earning per post ("up to $X per post"), budget used as
  * % only (never $ amounts), creators count (distinct creators who
  * submitted — stats.members, passed in from the grid), Live /
- * Settling status badge, deadline, and "~X days left at current
+ * Completed status badge, deadline, and "~X days left at current
  * rate" from the burn rate when payouts have started.
  */
 export default function CampaignCard({
@@ -43,13 +43,11 @@ export default function CampaignCard({
    *  (stats.members); null when the stats could not be loaded. */
   creatorsCount?: number | null;
 }) {
-  // Budget is shown as % remaining ONLY — never a $ amount
-  // (Turn's decision, P0 batch 2). The bar colour follows the %
-  // remaining: >50% green, 25–50% yellow, 10–25% red, <10% dark red.
-  const remainingPct = budgetRemainingPct(
-    campaign.budget_total,
-    campaign.budget_left
-  );
+  // Budget is shown as % USED ONLY — never a $ amount
+  // (Turn's decision, P0 batch 2; flipped from % remaining
+  // 2026-11-10). The bar FILLS as the budget is used: green below
+  // 50% used, yellow 50–75%, red 75–90%, dark red above 90%.
+  const usedPct = budgetUsedPct(campaign.budget_total, campaign.budget_left);
   // Ticking clock for the countdown (re-renders every minute).
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -132,7 +130,7 @@ export default function CampaignCard({
               live ? "bg-lime/15 text-lime" : "bg-amber-400/15 text-amber-300"
             }`}
           >
-            {live ? "● Live" : "● Settling"}
+            {live ? "● Live" : "● Completed"}
           </span>
           {creatorsCount !== null && creatorsCount !== undefined && (
             <span className="rounded-full bg-fg/10 px-2.5 py-1 text-fg/70">
@@ -144,29 +142,29 @@ export default function CampaignCard({
           </span>
         </div>
 
-        {/* Budget progress — % remaining only, never $ amounts */}
+        {/* Budget progress — % used only, never $ amounts */}
         <div className="mt-4">
           <div className="flex items-baseline justify-between text-sm">
             <span className="font-bold text-fg">
-              {remainingPct === 0
+              {usedPct === 100
                 ? "Campaign ended"
-                : `${remainingPct}% budget remaining`}
+                : `${usedPct}% budget used`}
             </span>
             <span className="text-xs font-bold text-fg/60">
-              {remainingPct}%
+              {usedPct}%
             </span>
           </div>
           <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-fg/10">
             <div
-              className={`h-full rounded-full ${budgetBarClass(remainingPct)}`}
-              style={{ width: `${remainingPct}%` }}
+              className={`h-full rounded-full ${budgetBarClass(usedPct)}`}
+              style={{ width: `${usedPct}%` }}
             />
           </div>
           {/* Countdown + example payout (real rate, cap applied) */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
             {!live ? (
               <span className="font-bold text-amber-300">
-                Settling — payouts in progress
+                Campaign Review — payouts in progress
               </span>
             ) : timeLeft ? (
               <span className="font-bold text-lime">⏳ {timeLeft}</span>

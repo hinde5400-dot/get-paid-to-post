@@ -195,15 +195,16 @@ export default async function CampaignsPage({
             {list.length} campaign{list.length === 1 ? "" : "s"}
             {tab === "joined" ? " joined" : ""}
             {settlingCount > 0 &&
-              ` · ${liveCount} live · ${settlingCount} settling`}
+              ` · ${liveCount} live · ${settlingCount} completed`}
           </p>
           {settlingCount > 0 && (
             <p className="rounded-2xl bg-amber-400/10 px-4 py-3 text-sm leading-relaxed text-amber-200/90">
-              Settling campaigns have ended — no new clips can be
-              submitted. Payouts finish about 1 week after a campaign
-              ends: a 3-day re-check window, then the 72-hour payment
-              hold, then payout. Settling campaigns are removed
-              automatically after the settlement window.
+              Completed campaigns have ended — no new clips can be
+              submitted. They are now in Campaign Review: payouts
+              finish about 1 week after a campaign ends: a 3-day
+              re-check window, then the 72-hour payment hold, then
+              payout. Completed campaigns are removed automatically
+              after the settlement window.
             </p>
           )}
           <CampaignGrid campaigns={list} stats={stats} />

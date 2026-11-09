@@ -40,10 +40,25 @@ export function totalToSend(budget: number): number {
 }
 
 /**
- * Budget shown as % remaining only — never a $ amount on public
- * cards, modals or the detail page (Turn's decision, P0 batch 2).
- * The payment page is the one place that still shows $ amounts
- * (the fee split). 0 when there is no budget to divide by.
+ * Budget shown as % USED only — never a $ amount on public
+ * cards, modals or the detail page (Turn's decision, P0 batch 2;
+ * flipped from % remaining 2026-11-10: the bar now FILLS as the
+ * budget is used). The payment page is the one place that still
+ * shows $ amounts (the fee split). 0 when there is no budget to
+ * divide by (a campaign with no budget yet shows 0% used).
+ */
+export function budgetUsedPct(
+  budgetTotal: number,
+  budgetLeft: number
+): number {
+  return 100 - budgetRemainingPct(budgetTotal, budgetLeft);
+}
+
+/**
+ * Budget shown as % remaining — kept for the "Recommended" sort
+ * (most budget remaining first = least used first) and for the
+ * burn-rate math, which works off budget_left. Public UI uses
+ * budgetUsedPct instead; never show a $ amount.
  */
 export function budgetRemainingPct(
   budgetTotal: number,
@@ -57,13 +72,14 @@ export function budgetRemainingPct(
 }
 
 /**
- * Budget-bar colour by % remaining: >50% green (lime), 25–50%
- * yellow, 10–25% red, <10% dark red. 0% remaining = campaign ended.
+ * Budget-bar colour by % USED: <50% green (lime), 50–75% yellow,
+ * 75–90% red, >90% dark red. 100% used = campaign ended (bar full,
+ * dark red).
  */
-export function budgetBarClass(remainingPct: number): string {
-  if (remainingPct > 50) return "bg-lime";
-  if (remainingPct >= 25) return "bg-yellow-400";
-  if (remainingPct >= 10) return "bg-red-500";
+export function budgetBarClass(usedPct: number): string {
+  if (usedPct < 50) return "bg-lime";
+  if (usedPct <= 75) return "bg-yellow-400";
+  if (usedPct <= 90) return "bg-red-500";
   return "bg-red-800";
 }
 

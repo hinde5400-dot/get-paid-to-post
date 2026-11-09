@@ -32,7 +32,7 @@ const SORT_OPTIONS: DropdownOption[] = [
 
 const SORT_EXPLAIN: Record<string, string> = {
   recommended:
-    "Recommended — live campaigns first, most budget remaining, then newest.",
+    "Recommended — live campaigns first, least budget used, then newest.",
   highest: "Highest Paying shows the best rate per 1,000 views first.",
   new: "New shows the most recently created campaigns first.",
   trending:

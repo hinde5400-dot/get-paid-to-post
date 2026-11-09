@@ -15,7 +15,7 @@ import { PlatformChips } from "@/components/PlatformIcons";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
 import {
   budgetBarClass,
-  budgetRemainingPct,
+  budgetUsedPct,
   budgetTimeLeftText,
   formatDeadline,
   payoutForViews,
@@ -53,9 +53,9 @@ export default async function CampaignDetailPage({
   // still preview any campaign from the admin panel.
   // SETTLING (P1-a): an ended campaign that has not been auto-deleted
   // yet (cleanup deletes >= 7 days after the end, migration 0023)
-  // DOES render for everyone — with a settling notice and NO submit
-  // form. After the cleanup deletes it, getCampaign returns null
-  // and the page 404s as before.
+  // DOES render for everyone — with a Completed / Campaign Review
+  // notice and NO submit form. After the cleanup deletes it,
+  // getCampaign returns null and the page 404s as before.
   const live = isCampaignLive(campaign);
   const settling = isCampaignSettling(campaign);
   if (!live && !settling) {
@@ -88,12 +88,10 @@ export default async function CampaignDetailPage({
     }));
   }
 
-  // Budget is shown as % remaining ONLY — never a $ amount
-  // (Turn's decision, P0 batch 2).
-  const remainingPct = budgetRemainingPct(
-    campaign.budget_total,
-    campaign.budget_left
-  );
+  // Budget is shown as % USED ONLY — never a $ amount
+  // (Turn's decision, P0 batch 2; flipped from % remaining
+  // 2026-11-10). The bar FILLS as the budget is used.
+  const usedPct = budgetUsedPct(campaign.budget_total, campaign.budget_left);
   // Payout examples with the campaign's REAL rate(s) and cap, so a
   // creator sees the exact math before filming. With per-platform
   // rates (P1-b) the headline example uses the HIGHEST platform rate
@@ -151,12 +149,15 @@ export default async function CampaignDetailPage({
         ← Back to campaigns
       </Link>
 
-      {/* Settling notice (P1-a): the campaign ended but is still in
+      {/* Completed notice (P1-a): the campaign ended but is still in
           its settlement window — visible, no new submissions. */}
       {settling && (
         <div className="rounded-3xl border border-amber-400/40 bg-amber-400/10 p-6">
           <p className="font-display text-lg font-black tracking-tight text-amber-300">
-            ● Settling — this campaign has ended
+            ● Completed — this campaign has ended
+          </p>
+          <p className="mt-1 text-sm font-bold text-amber-300">
+            Campaign Review — payouts in progress
           </p>
           <p className="mt-2 text-sm leading-relaxed text-fg/70">
             No new clips can be submitted. Payouts finish about 1 week
@@ -186,7 +187,7 @@ export default async function CampaignDetailPage({
               </h1>
               <p className="mt-0.5 text-sm font-bold text-fg/60">
                 {stats
-                  ? `${live ? "Live" : settling ? "Settling" : "Not live"} · ${stats.members} Member${stats.members === 1 ? "" : "s"} · ${stats.active30d} Active`
+                  ? `${live ? "Live" : settling ? "Completed" : "Not live"} · ${stats.members} Member${stats.members === 1 ? "" : "s"} · ${stats.active30d} Active`
                   : `${campaign.category} · ${platformListText}`}
               </p>
               <p className="mt-1 text-sm font-bold text-fg/60">
@@ -254,20 +255,20 @@ export default async function CampaignDetailPage({
             </div>
           </div>
 
-          {/* Budget bar — % remaining only, never $ amounts */}
+          {/* Budget bar — % used only, never $ amounts */}
           <div className="mt-6">
             <div className="flex justify-between text-sm text-fg/60">
               <span>
-                {remainingPct === 0
+                {usedPct === 100
                   ? "Campaign ended"
-                  : `${remainingPct}% budget remaining`}
+                  : `${usedPct}% budget used`}
               </span>
-              <span>{remainingPct}%</span>
+              <span>{usedPct}%</span>
             </div>
             <div className="mt-2 h-3 overflow-hidden rounded-full bg-fg/10">
               <div
-                className={`h-full rounded-full ${budgetBarClass(remainingPct)}`}
-                style={{ width: `${remainingPct}%` }}
+                className={`h-full rounded-full ${budgetBarClass(usedPct)}`}
+                style={{ width: `${usedPct}%` }}
               />
             </div>
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-fg/70">
@@ -291,7 +292,7 @@ export default async function CampaignDetailPage({
               )}
               <span className="font-bold text-lime">
                 {settling
-                  ? "Settling — payouts in progress"
+                  ? "Campaign Review — payouts in progress"
                   : timeLeft
                     ? `⏳ ${timeLeft}`
                     : "Runs until the budget ends"}
@@ -426,10 +427,11 @@ export default async function CampaignDetailPage({
                     Submissions are closed
                   </h2>
                   <p className="mt-3 text-sm leading-relaxed text-fg/70">
-                    This campaign has ended and is now settling. No new
-                    clips can be submitted. Payouts finish about 1 week
-                    after the campaign ends — a 3-day re-check window,
-                    then the 72-hour payment hold, then payout.
+                    This campaign has ended and is now in Campaign
+                    Review. No new clips can be submitted. Payouts
+                    finish about 1 week after the campaign ends — a
+                    3-day re-check window, then the 72-hour payment
+                    hold, then payout.
                   </p>
                 </div>
               ) : (
@@ -453,7 +455,7 @@ export default async function CampaignDetailPage({
                 ["Brand", campaign.brand_name],
                 ["Category", campaign.category],
                 ["Platforms", platformListText],
-                ["Budget", `${remainingPct}% remaining`],
+                ["Budget", `${usedPct}% used`],
                 ["Rate", `${formatUSD(campaign.rate_per_1m)} per 1M views`],
                 ["View bonus", `${formatUSD(campaign.view_bonus_per_1k)} per 1K views`],
                 [
@@ -487,7 +489,7 @@ export default async function CampaignDetailPage({
                     : live
                       ? "Funded & live"
                       : settling
-                        ? "Settling — payouts in progress"
+                        ? "Completed — payouts in progress"
                         : "Funded",
                 ],
               ].map(([label, value]) => (

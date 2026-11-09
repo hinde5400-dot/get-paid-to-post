@@ -138,7 +138,7 @@ export default function CampaignBanner({
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-black" />
-            {isLive ? "Live" : "Settling"}
+            {isLive ? "Live" : "Completed"}
           </span>
         )}
         <p className="mt-2 font-display text-xl font-black uppercase leading-none tracking-tight text-white md:text-2xl">

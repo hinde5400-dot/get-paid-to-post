@@ -10,7 +10,7 @@ import { isCampaignLive } from "@/lib/campaigns";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
 import {
   budgetBarClass,
-  budgetRemainingPct,
+  budgetUsedPct,
   budgetDaysLeft,
   formatDeadline,
   payoutForViews,
@@ -28,7 +28,8 @@ import { PlatformChips } from "./PlatformIcons";
  * "Join Shoot" button (to the detail page's submit form) and a
  * "View campaign" button. Closes on X, overlay tap, or Escape.
  * A settling campaign (ended, still in its settlement window) shows
- * a Settling badge and no Join button — submissions are closed.
+ * a Completed badge with "Campaign Review" below it and no Join
+ * button — submissions are closed.
  */
 export default function CampaignModal({
   campaign,
@@ -39,12 +40,10 @@ export default function CampaignModal({
   stats: CampaignStats | null;
   onClose: () => void;
 }) {
-  // Budget is shown as % remaining ONLY — never a $ amount
-  // (Turn's decision, P0 batch 2).
-  const remainingPct = budgetRemainingPct(
-    campaign.budget_total,
-    campaign.budget_left
-  );
+  // Budget is shown as % USED ONLY — never a $ amount
+  // (Turn's decision, P0 batch 2; flipped from % remaining
+  // 2026-11-10). The bar FILLS as the budget is used.
+  const usedPct = budgetUsedPct(campaign.budget_total, campaign.budget_left);
   const approvalPct =
     stats && stats.total > 0
       ? Math.round((stats.approved / stats.total) * 100)
@@ -120,22 +119,22 @@ export default function CampaignModal({
             {campaign.description}
           </p>
 
-          {/* Budget bar — % remaining only, never $ amounts */}
+          {/* Budget bar — % used only, never $ amounts */}
           <div className="mt-5">
             <div className="flex items-baseline justify-between text-sm">
               <span className="font-bold text-fg">
-                {remainingPct === 0
+                {usedPct === 100
                   ? "Campaign ended"
-                  : `${remainingPct}% budget remaining`}
+                  : `${usedPct}% budget used`}
               </span>
               <span className="text-xs font-bold text-fg/60">
-                {remainingPct}%
+                {usedPct}%
               </span>
             </div>
             <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-fg/10">
               <div
-                className={`h-full rounded-full ${budgetBarClass(remainingPct)}`}
-                style={{ width: `${remainingPct}%` }}
+                className={`h-full rounded-full ${budgetBarClass(usedPct)}`}
+                style={{ width: `${usedPct}%` }}
               />
             </div>
           </div>
@@ -187,9 +186,14 @@ export default function CampaignModal({
                   : "bg-amber-400/15 text-amber-300"
               }`}
             >
-              {live ? "● Live" : "● Settling — payouts in progress"}
+              {live ? "● Live" : "● Completed"}
             </span>
           </p>
+          {!live && (
+            <p className="mt-1.5 text-xs font-bold text-amber-300">
+              Campaign Review — payouts in progress
+            </p>
+          )}
 
           <div className="mt-4 flex items-center justify-between">
             <PlatformChips
@@ -212,9 +216,10 @@ export default function CampaignModal({
           <p className="mt-2 text-xs font-semibold text-fg/70">
             {!live ? (
               <span className="font-bold text-amber-300">
-                This campaign has ended and is settling — no new clips can
-                be submitted. Payouts finish about 1 week after the
-                campaign ends (3-day re-check → 72h hold → payout).
+                This campaign has ended and is now in Campaign Review
+                — no new clips can be submitted. Payouts finish about
+                1 week after the campaign ends (3-day re-check → 72h
+                hold → payout).
               </span>
             ) : (
               <>
@@ -258,7 +263,7 @@ export default function CampaignModal({
             </Link>
           ) : (
             <p className="mt-6 rounded-2xl bg-amber-400/10 px-4 py-3 text-center text-sm font-semibold text-amber-300">
-              Submissions are closed — this campaign is settling.
+              Submissions are closed — this campaign has ended.
             </p>
           )}
           <Link
