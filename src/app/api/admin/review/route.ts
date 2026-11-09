@@ -299,7 +299,7 @@ export async function POST(request: Request) {
       campaign.max_payout_per_post ??
         campaign.max_per_video ??
         campaign.earn_up_to ??
-        300
+        100
     );
     const { uncapped, earnings: cappedEarnings, capped } = payoutForViews(
       views,
