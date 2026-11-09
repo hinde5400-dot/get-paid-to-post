@@ -1,0 +1,45 @@
+# Auto-delete ended campaigns once a day.
+#
+# Why GitHub Actions: the free Vercel Hobby plan only allows cron jobs
+# once a day, which is exactly the cadence this job needs — a daily
+# run is enough, because deletion only ever happens 7+ days after a
+# campaign ends (3-day re-check window + 3-day hold + 1-day buffer).
+# Scheduled runs on a public repo are free.
+#
+# Setup (one time, by the owner):
+#   1. GitHub repo → Settings → Secrets and variables → Actions →
+#      New repository secret: CRON_SECRET (same value as the
+#      CRON_SECRET environment variable in Vercel, Production).
+#      Already set up for the refresh-views workflow — no new secret
+#      is needed.
+#   2. Vercel → get-paid-to-post → Settings → Environment Variables:
+#      CRON_SECRET (Production).
+#   3. Run supabase/migrations/0023_cleanup_ended_campaigns.sql once
+#      in the Supabase SQL Editor — the route returns 503 until it
+#      has been run.
+# The endpoint only deletes campaigns that pass every safety check
+# in migration 0023 (ended, no pending submissions, all holds
+# matured + 1 day, 7+ days since end). Wallets and withdrawals are
+# never deleted.
+
+name: Cleanup ended campaigns
+
+on:
+  schedule:
+    # Daily at 03:00 UTC — a quiet hour; deletion only ever happens
+    # 7+ days after a campaign ends, so the exact hour does not
+    # matter.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup ended campaigns (daily)
+        run: |
+          code=$(curl -s -o /tmp/cleanup.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://get-paid-to-post.vercel.app/api/cron/cleanup-ended-campaigns)
+          cat /tmp/cleanup.json
+          test "$code" = "200"
