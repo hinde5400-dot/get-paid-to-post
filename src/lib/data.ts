@@ -1,6 +1,6 @@
 import { getServerClient } from "./supabase/server";
 import type { BrandMessage, Campaign, Submission, Wallet, Withdrawal } from "./types";
-import { platformsFromRow } from "./types";
+import { platformsFromRow, ratesFromRow, rateForPlatform } from "./types";
 
 function mapCampaign(row: Record<string, unknown>): Campaign {
   // Platforms (migration 0012): the platforms array when present,
@@ -35,6 +35,16 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     description: String(row.description ?? ""),
     rules: (row.rules as string | null) ?? null,
     view_bonus_per_1k: Number(row.view_bonus_per_1k ?? 0),
+    // Per-platform rates (P1-b, migration 0025): {} on old rows —
+    // rateForPlatform() falls back to view_bonus_per_1k.
+    rates: ratesFromRow(row),
+    // Minimum views per clip (P1-b): 0 = no threshold (default).
+    min_views: Number(row.min_views ?? 0),
+    // Per-creator $ cap (P1-b): null = no cap (default).
+    max_payout_per_creator:
+      row.max_payout_per_creator == null
+        ? null
+        : Number(row.max_payout_per_creator),
     // Per-post cap (migration 0007); older rows fall back to the old
     // per-video / earn-up-to value, then the $75 default.
     max_payout_per_post: Number(
@@ -236,7 +246,7 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post)")
+    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error || !data) return [];
@@ -246,11 +256,23 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
       title?: string;
       view_bonus_per_1k?: number;
       max_payout_per_post?: number;
+      rates?: Record<string, unknown> | null;
+      min_views?: number | null;
+      max_payout_per_creator?: number | null;
     } | null;
     s.campaign_title = camp?.title;
-    s.rate_per_1k = Number(camp?.view_bonus_per_1k ?? 0) || undefined;
+    // Platform-specific rate (P1-b): the rate for THIS clip's
+    // platform, falling back to the legacy single rate.
+    const legacyRate = Number(camp?.view_bonus_per_1k ?? 0);
+    s.rate_per_1k =
+      rateForPlatform(
+        { rates: ratesFromRow((camp ?? {}) as Record<string, unknown>), view_bonus_per_1k: legacyRate },
+        s.platform
+      ) || undefined;
     s.max_payout_per_post =
       Number(camp?.max_payout_per_post ?? 0) || undefined;
+    s.campaign_min_views = camp?.min_views ?? null;
+    s.campaign_max_payout_per_creator = camp?.max_payout_per_creator ?? null;
     return s;
   });
 }
@@ -261,7 +283,7 @@ export async function getAllSubmissions(): Promise<Submission[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post)")
+    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator)")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error || !data) return [];
@@ -271,11 +293,23 @@ export async function getAllSubmissions(): Promise<Submission[]> {
       title?: string;
       view_bonus_per_1k?: number;
       max_payout_per_post?: number;
+      rates?: Record<string, unknown> | null;
+      min_views?: number | null;
+      max_payout_per_creator?: number | null;
     } | null;
     s.campaign_title = camp?.title;
-    s.rate_per_1k = Number(camp?.view_bonus_per_1k ?? 0) || undefined;
+    // Platform-specific rate (P1-b): the rate for THIS clip's
+    // platform, falling back to the legacy single rate.
+    const legacyRate = Number(camp?.view_bonus_per_1k ?? 0);
+    s.rate_per_1k =
+      rateForPlatform(
+        { rates: ratesFromRow((camp ?? {}) as Record<string, unknown>), view_bonus_per_1k: legacyRate },
+        s.platform
+      ) || undefined;
     s.max_payout_per_post =
       Number(camp?.max_payout_per_post ?? 0) || undefined;
+    s.campaign_min_views = camp?.min_views ?? null;
+    s.campaign_max_payout_per_creator = camp?.max_payout_per_creator ?? null;
     return s;
   });
 }

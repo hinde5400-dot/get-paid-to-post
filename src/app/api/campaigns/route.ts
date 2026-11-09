@@ -14,13 +14,16 @@ const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
 /**
  * Brand campaign submission. Saves with status "pending" and
  * is_funded = false — nothing goes live until the owner approves it
- * in /admin (after the budget is funded). "Rate per 1k views"
- * maps to view_bonus_per_1k, and rate_per_1m stays consistent at
- * rate-per-1k × 1000. There is no minimum budget and no minimum
- * rate — any budget above $0 and any rate above $0 are accepted.
- * Platforms are stored in campaigns.platforms
+ * in /admin (after the budget is funded). Per-platform rates (P1-b)
+ * map to `rates` (rate per 1k views per platform); the legacy
+ * `rate_per_1m` / `view_bonus_per_1k` carry the first selected
+ * platform's rate as the fallback. There is no minimum budget and no
+ * minimum rate — any budget above $0 and any rate above $0 are
+ * accepted. Platforms are stored in campaigns.platforms
  * (migration 0012) with the legacy platform column kept in sync:
  * "all" when all three are chosen, otherwise the first chosen.
+ * `min_views` (0 = no threshold) and `max_payout_per_creator`
+ * (null = no cap) are optional brand-set limits.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -42,6 +45,13 @@ export async function POST(request: Request) {
     platform?: string;
     platforms?: string[];
     ratePer1k?: number;
+    /** Per-platform rates (P1-b): { tiktok: 1.5, youtube: 2 } — rate
+     *  per 1,000 views for each selected platform. */
+    rates?: Record<string, number>;
+    /** Minimum views per clip, optional (P1-b). 0 / missing = no threshold. */
+    minViews?: number | string;
+    /** Max payout per creator in $, optional (P1-b). Missing/null = no cap. */
+    maxPayoutPerCreator?: number | string | null;
     budgetTotal?: number;
     maxPayoutPerPost?: number;
     description?: string;
@@ -102,9 +112,18 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Any rate above $0 — there is no minimum rate.
-  const ratePer1k = Number(body.ratePer1k ?? 0);
-  if (!Number.isFinite(ratePer1k) || ratePer1k <= 0) {
+  // Any rate above $0 — there is no minimum rate. Per-platform
+  // rates (P1-b): every selected platform must have its own rate
+  // above $0. The form sends `rates`; the legacy single `ratePer1k`
+  // is still accepted and applies to every selected platform.
+  // (Platforms are parsed below, so the per-platform check runs
+  // after that block — see the `rates` validation there.)
+  const legacyRatePer1k = Number(body.ratePer1k ?? 0);
+  const ratesInput =
+    body.rates && typeof body.rates === "object" && !Array.isArray(body.rates)
+      ? (body.rates as Record<string, unknown>)
+      : null;
+  if (!ratesInput && (!Number.isFinite(legacyRatePer1k) || legacyRatePer1k <= 0)) {
     return NextResponse.json(
       { error: "Error: Rate must be more than $0 per 1k views" },
       { status: 400 }
@@ -142,6 +161,58 @@ export async function POST(request: Request) {
   if (platforms.length === 0) {
     return NextResponse.json(
       { error: "Select at least one platform" },
+      { status: 400 }
+    );
+  }
+  // Per-platform rates (P1-b): every selected platform needs a rate
+  // above $0. With `rates`, each selected platform must carry its
+  // own; without it, the legacy single rate applies to all of them.
+  const rates: Record<string, number> = {};
+  for (const p of platforms) {
+    const v =
+      ratesInput && ratesInput[p] !== undefined
+        ? Number(ratesInput[p])
+        : legacyRatePer1k;
+    if (!Number.isFinite(v) || v <= 0) {
+      return NextResponse.json(
+        {
+          error: `Error: Rate for ${p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube"} must be more than $0 per 1k views`,
+        },
+        { status: 400 }
+      );
+    }
+    rates[p] = Math.round(v * 100) / 100;
+  }
+  // The legacy single rate is the FIRST selected platform's rate,
+  // so old code paths (rate_per_1m, view_bonus_per_1k) keep working.
+  const ratePer1k = rates[platforms[0]];
+  // Minimum views per clip (P1-b): optional, 0 = no threshold
+  // (the default — no site-wide number is imposed).
+  const minViewsRaw = body.minViews;
+  const minViews =
+    minViewsRaw === null || minViewsRaw === undefined || minViewsRaw === ""
+      ? 0
+      : Math.floor(Number(minViewsRaw));
+  if (!Number.isFinite(minViews) || minViews < 0) {
+    return NextResponse.json(
+      { error: "Error: Minimum views per clip must be 0 or more" },
+      { status: 400 }
+    );
+  }
+  // Per-creator $ cap (P1-b): optional, null = no cap (the default).
+  const maxPayoutPerCreatorRaw = body.maxPayoutPerCreator;
+  const maxPayoutPerCreator =
+    maxPayoutPerCreatorRaw === null ||
+    maxPayoutPerCreatorRaw === undefined ||
+    maxPayoutPerCreatorRaw === ""
+      ? null
+      : Number(maxPayoutPerCreatorRaw);
+  if (
+    maxPayoutPerCreator !== null &&
+    (!Number.isFinite(maxPayoutPerCreator) || maxPayoutPerCreator <= 0)
+  ) {
+    return NextResponse.json(
+      { error: "Error: Maximum payout per creator must be more than $0" },
       { status: 400 }
     );
   }
@@ -208,6 +279,14 @@ export async function POST(request: Request) {
     description,
     rules: requirements || null,
     view_bonus_per_1k: ratePer1k,
+    // Per-platform rates (P1-b, migration 0025) — the source of
+    // truth for review/earnings; the legacy fields above carry the
+    // first platform's rate as the fallback.
+    rates,
+    // Minimum views per clip (0 = no threshold) and per-creator $
+    // cap (null = no cap) — both brand-set, both optional.
+    min_views: minViews,
+    max_payout_per_creator: maxPayoutPerCreator,
     // The per-post cap IS the "earn up to" figure shown on cards.
     max_payout_per_post: cap,
     views_tracked_days: 14,
@@ -245,6 +324,9 @@ export async function POST(request: Request) {
       "platforms",
       "platform_fee",
       "user_id",
+      "rates",
+      "min_views",
+      "max_payout_per_creator",
     ] as const) {
       if (new RegExp(col, "i").test(msg)) {
         delete retryRow[col];

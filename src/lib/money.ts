@@ -72,6 +72,27 @@ export function finalFor(amount: number): number {
   return Math.round((amount - feeFor(amount)) * 100) / 100;
 }
 
+/**
+ * Rate display for per-platform rates (P1-b): "$1.00–$2.00 per 1k
+ * views" when the campaign pays different rates per platform, or
+ * "$1.50 per 1k views" when every platform pays the same. The range
+ * spans the lowest and highest platform rate; the legacy single rate
+ * is used when no per-platform rates exist.
+ */
+export function rateRangeText(campaign: {
+  rates?: Record<string, number> | null;
+  view_bonus_per_1k: number;
+}): string {
+  const values = Object.values(campaign.rates ?? {}).filter(
+    (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0
+  );
+  if (values.length === 0) return `${formatUSD(campaign.view_bonus_per_1k)} per 1k views`;
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  if (lo === hi) return `${formatUSD(lo)} per 1k views`;
+  return `${formatUSD(lo)}–${formatUSD(hi)} per 1k views`;
+}
+
 export function formatUSD(n: number): string {
   return `$${Number(n || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,

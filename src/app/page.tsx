@@ -7,7 +7,7 @@ import AdSlot from "@/components/AdSlot";
 import Faq from "@/components/Faq";
 import DiscordButton from "@/components/DiscordButton";
 import RoleCards from "@/components/RoleCards";
-import { formatUSD } from "@/lib/money";
+import { formatUSD, rateRangeText } from "@/lib/money";
 
 const FAQS = [
   {
@@ -158,7 +158,7 @@ export default async function HomePage() {
                 <div>
                   <p className="text-xs text-fg/50">View bonus</p>
                   <p className="text-lg font-bold text-fg">
-                    {formatUSD(featured.view_bonus_per_1k)} per 1K views
+                    {rateRangeText(featured)}
                   </p>
                 </div>
               </div>

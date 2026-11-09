@@ -19,10 +19,19 @@ import {
   budgetTimeLeftText,
   formatDeadline,
   payoutForViews,
+  rateRangeText,
 } from "@/lib/money";
 import { VIDEO_RULES } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
-import { campaignPlatforms, platformNamesText } from "@/lib/types";
+import {
+  campaignPlatforms,
+  maxRatePer1k,
+  minRatePer1k,
+  platformNamesText,
+  platformRatesText,
+  rateForPlatform,
+  ratesDiffer,
+} from "@/lib/types";
 
 /**
  * Campaign detail, TryShoot brand-page style: brand profile
@@ -85,11 +94,30 @@ export default async function CampaignDetailPage({
     campaign.budget_total,
     campaign.budget_left
   );
-  // Payout example with the campaign's REAL rate and cap, so a creator
-  // sees the exact math before filming.
+  // Payout examples with the campaign's REAL rate(s) and cap, so a
+  // creator sees the exact math before filming. With per-platform
+  // rates (P1-b) the headline example uses the HIGHEST platform rate
+  // and names that platform; the payout box below then shows one
+  // example per platform, so no platform's rate is hidden.
+  const differ = ratesDiffer(campaign);
+  const headlineRate = differ
+    ? maxRatePer1k(campaign)
+    : campaign.view_bonus_per_1k;
+  const headlinePlatform = differ
+    ? campaignPlatforms(campaign).find(
+        (p) => rateForPlatform(campaign, p) === headlineRate
+      )
+    : undefined;
+  const headlinePlatformLabel = headlinePlatform
+    ? headlinePlatform === "tiktok"
+      ? "TikTok"
+      : headlinePlatform === "instagram"
+        ? "Instagram"
+        : "YouTube"
+    : null;
   const example = payoutForViews(
     50000,
-    campaign.view_bonus_per_1k,
+    headlineRate,
     campaign.max_payout_per_post
   );
   const timeLeft = formatTimeLeft(campaign.ends_at);
@@ -99,9 +127,11 @@ export default async function CampaignDetailPage({
   const budgetTimeLeft = live ? budgetTimeLeftText(campaign) : null;
   const deadline = formatDeadline(campaign.ends_at);
   // 20k example with the per-post cap applied, like the 50k example.
+  // With per-platform rates it also uses the highest rate, labelled
+  // "up to" in the payout box.
   const example20k = payoutForViews(
     20000,
-    campaign.view_bonus_per_1k,
+    headlineRate,
     campaign.max_payout_per_post
   );
   // Platforms this campaign accepts (migration 0012), in prose form.
@@ -189,15 +219,37 @@ export default async function CampaignDetailPage({
             <div className="rounded-2xl bg-fg/5 p-4">
               <p className="text-xs text-fg/50">View bonus</p>
               <p className="mt-1 text-2xl font-black text-fg">
-                {formatUSD(campaign.view_bonus_per_1k)}
-                <span className="text-sm font-semibold text-fg/60"> / 1K views</span>
+                {differ ? (
+                  <span className="text-xl">{rateRangeText(campaign)}</span>
+                ) : (
+                  <>
+                    {formatUSD(campaign.view_bonus_per_1k)}
+                    <span className="text-sm font-semibold text-fg/60"> / 1K views</span>
+                  </>
+                )}
               </p>
+              {differ && (
+                <p className="mt-1 text-xs font-semibold text-fg/60">
+                  {platformRatesText(campaign, formatUSD)} / 1K views
+                </p>
+              )}
             </div>
             <div className="rounded-2xl bg-fg/5 p-4">
               <p className="text-xs text-fg/50">Rate</p>
               <p className="mt-1 text-2xl font-black text-fg">
-                {formatUSD(campaign.rate_per_1m)}
-                <span className="text-sm font-semibold text-fg/60"> / 1M views</span>
+                {differ ? (
+                  <span className="text-xl">
+                    {formatUSD(minRatePer1k(campaign) * 1000)}
+                    –
+                    {formatUSD(headlineRate * 1000)}
+                    <span className="text-sm font-semibold text-fg/60"> / 1M views</span>
+                  </span>
+                ) : (
+                  <>
+                    {formatUSD(campaign.rate_per_1m)}
+                    <span className="text-sm font-semibold text-fg/60"> / 1M views</span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -221,6 +273,17 @@ export default async function CampaignDetailPage({
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-fg/70">
               <span>👀 Views tracked {campaign.views_tracked_days} days</span>
               <span>📹 Up to 15 approved clips per platform</span>
+              {campaign.min_views > 0 && (
+                <span>
+                  🎯 Min {campaign.min_views.toLocaleString()} views per clip
+                </span>
+              )}
+              {campaign.max_payout_per_creator !== null && (
+                <span>
+                  💰 Max {formatUSD(campaign.max_payout_per_creator)} per
+                  creator
+                </span>
+              )}
               {stats && (
                 <span>
                   👥 {stats.members} creator{stats.members === 1 ? "" : "s"}
@@ -270,27 +333,81 @@ export default async function CampaignDetailPage({
 
               <div className="rounded-3xl border border-lime/40 bg-card p-6">
                 <h2 className="text-lg font-extrabold text-fg">How the payout works</h2>
-                <p className="mt-3 text-sm leading-relaxed text-fg/70">
-                  Your video got 50,000 views at{" "}
-                  {formatUSD(campaign.view_bonus_per_1k)}/1k ={" "}
-                  {formatUSD(example.uncapped)} earned.
-                  {example.capped
-                    ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(example.earnings)}.`
-                    : ` You earned ${formatUSD(example.earnings)}.`}
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-fg/70">
-                  Example: 20,000 views ×{" "}
-                  {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
-                  <span className="font-bold text-fg">
-                    {formatUSD(example20k.earnings)} earned
-                  </span>
-                  .
-                </p>
+                {differ ? (
+                  <>
+                    <p className="mt-3 text-sm leading-relaxed text-fg/70">
+                      This campaign pays a different rate per platform —{" "}
+                      {platformRatesText(campaign, formatUSD)} per 1k views.
+                      The highest rate is {headlinePlatformLabel} at{" "}
+                      {formatUSD(headlineRate)}/1k.
+                    </p>
+                    {campaignPlatformsList.map((p) => {
+                      const rate = rateForPlatform(campaign, p);
+                      const ex = payoutForViews(
+                        50000,
+                        rate,
+                        campaign.max_payout_per_post
+                      );
+                      const label =
+                        p === "tiktok"
+                          ? "TikTok"
+                          : p === "instagram"
+                            ? "Instagram"
+                            : "YouTube";
+                      return (
+                        <p
+                          key={p}
+                          className="mt-2 text-sm leading-relaxed text-fg/70"
+                        >
+                          {label}: 50,000 views at {formatUSD(rate)}/1k ={" "}
+                          {formatUSD(ex.uncapped)} earned.
+                          {ex.capped
+                            ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(ex.earnings)}.`
+                            : ` You earned ${formatUSD(ex.earnings)}.`}
+                        </p>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm leading-relaxed text-fg/70">
+                      Your video got 50,000 views at{" "}
+                      {formatUSD(campaign.view_bonus_per_1k)}/1k ={" "}
+                      {formatUSD(example.uncapped)} earned.
+                      {example.capped
+                        ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(example.earnings)}.`
+                        : ` You earned ${formatUSD(example.earnings)}.`}
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-fg/70">
+                      Example: 20,000 views ×{" "}
+                      {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
+                      <span className="font-bold text-fg">
+                        {formatUSD(example20k.earnings)} earned
+                      </span>
+                      .
+                    </p>
+                  </>
+                )}
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   A creator never earns more than{" "}
                   {formatUSD(campaign.max_payout_per_post)} on one post,
-                  even if the views would pay more. Approved earnings sit
-                  in a 72-hour hold, then become withdrawable.
+                  even if the views would pay more.
+                  {campaign.max_payout_per_creator !== null && (
+                    <>
+                      {" "}And never more than{" "}
+                      {formatUSD(campaign.max_payout_per_creator)} in total
+                      from this campaign.
+                    </>
+                  )}
+                  {campaign.min_views > 0 && (
+                    <>
+                      {" "}A clip needs at least{" "}
+                      {campaign.min_views.toLocaleString()} views before it
+                      can be approved.
+                    </>
+                  )}{" "}
+                  Approved earnings sit in a 72-hour hold, then become
+                  withdrawable.
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   When this campaign ends, a 3-day re-check window follows
@@ -339,6 +456,24 @@ export default async function CampaignDetailPage({
                 ["Budget", `${remainingPct}% remaining`],
                 ["Rate", `${formatUSD(campaign.rate_per_1m)} per 1M views`],
                 ["View bonus", `${formatUSD(campaign.view_bonus_per_1k)} per 1K views`],
+                [
+                  "Rates per platform",
+                  differ
+                    ? `${platformRatesText(campaign, formatUSD)} per 1K views`
+                    : `${formatUSD(campaign.view_bonus_per_1k)} per 1K views on every platform`,
+                ],
+                [
+                  "Minimum views per clip",
+                  campaign.min_views > 0
+                    ? `${campaign.min_views.toLocaleString()} views`
+                    : "None — every clip with real views can earn",
+                ],
+                [
+                  "Max payout per creator",
+                  campaign.max_payout_per_creator !== null
+                    ? `${formatUSD(campaign.max_payout_per_creator)} in total`
+                    : "No cap",
+                ],
                 ["Earn up to", `${formatUSD(campaign.max_payout_per_post)} per post`],
                 ["Creators", stats ? `${stats.members}` : "—"],
                 ["Deadline", live || !campaign.ends_at ? deadline : "Ended"],

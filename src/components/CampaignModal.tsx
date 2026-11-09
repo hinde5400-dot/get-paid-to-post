@@ -14,7 +14,9 @@ import {
   budgetDaysLeft,
   formatDeadline,
   payoutForViews,
+  rateRangeText,
 } from "@/lib/money";
+import { maxRatePer1k, ratesDiffer } from "@/lib/types";
 import CampaignBanner from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -59,9 +61,12 @@ export default function CampaignModal({
       : null;
   const deadline = formatDeadline(campaign.ends_at);
   // 20k example with the per-post cap applied, like the 50k example.
+  // With per-platform rates (P1-b) it uses the HIGHEST platform rate
+  // and is labelled "up to".
+  const differ = ratesDiffer(campaign);
   const example20k = payoutForViews(
     20000,
-    campaign.view_bonus_per_1k,
+    differ ? maxRatePer1k(campaign) : campaign.view_bonus_per_1k,
     campaign.max_payout_per_post
   );
 
@@ -142,7 +147,9 @@ export default function CampaignModal({
                 Per 1K views
               </p>
               <p className="mt-1 font-display text-lg font-black text-fg">
-                {formatUSD(campaign.view_bonus_per_1k)}
+                {differ
+                  ? rateRangeText(campaign).replace(" per 1k views", "")
+                  : formatUSD(campaign.view_bonus_per_1k)}
               </p>
             </div>
             <div className="rounded-2xl bg-fg/5 p-3">
@@ -216,11 +223,23 @@ export default function CampaignModal({
                 ) : (
                   "Runs until the budget ends"
                 )}
-                {" · "}Example: 20k views ×{" "}
-                {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
-                <span className="font-bold text-fg">
-                  {formatUSD(example20k.earnings)} earned
-                </span>
+                {" · "}
+                {differ ? (
+                  <>
+                    Example: 20k views = up to{" "}
+                    <span className="font-bold text-fg">
+                      {formatUSD(example20k.earnings)} earned
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Example: 20k views ×{" "}
+                    {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
+                    <span className="font-bold text-fg">
+                      {formatUSD(example20k.earnings)} earned
+                    </span>
+                  </>
+                )}
               </>
             )}
           </p>

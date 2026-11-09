@@ -320,6 +320,35 @@ export default function AdminReviewList({
               : "Not auto-checked yet"}
           </p>
 
+          {(s.campaign_min_views != null && s.campaign_min_views > 0) ||
+          (s.campaign_max_payout_per_creator != null &&
+            s.campaign_max_payout_per_creator > 0) ? (
+            <p className="mt-2 text-xs font-bold text-fg/70">
+              Campaign limits:{" "}
+              {s.campaign_min_views != null && s.campaign_min_views > 0
+                ? `min ${s.campaign_min_views.toLocaleString()} views per clip — below this, approve is blocked`
+                : "no min views"}
+              {" · "}
+              {s.campaign_max_payout_per_creator != null &&
+              s.campaign_max_payout_per_creator > 0
+                ? `max ${formatUSD(s.campaign_max_payout_per_creator)} per creator in total`
+                : "no per-creator cap"}
+              {" · "}
+              Rate for this clip ({PLATFORM_LABELS[s.platform]}):{" "}
+              {s.rate_per_1k !== undefined
+                ? `${formatUSD(s.rate_per_1k)}/1k`
+                : "—"}
+            </p>
+          ) : (
+            <p className="mt-2 text-xs font-bold text-fg/70">
+              Rate for this clip ({PLATFORM_LABELS[s.platform]}):{" "}
+              {s.rate_per_1k !== undefined
+                ? `${formatUSD(s.rate_per_1k)}/1k`
+                : "—"}
+              {" · "}No min views · No per-creator cap
+            </p>
+          )}
+
           {s.status === "rejected" && s.rejection_reason && (
             <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
               Rejected: {s.rejection_reason}

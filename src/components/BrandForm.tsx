@@ -22,12 +22,15 @@ import {
  * Brand campaign form — Brand Name, Brand Logo (optional), Campaign
  * Title, Category (UGC / Clipping / Lifestyle / Entertainment /
  * Gaming / Technology, required, defaults to UGC), Platforms (pick
- * any of TikTok / Instagram / YouTube, at least one), Rate per 1k views (any rate above $0 — your choice),
+ * any of TikTok / Instagram / YouTube, at least one), Rate per 1k
+ * views PER selected platform (any rate above $0 — your choice),
  * Total Budget (any amount above $0 — your choice, no minimum),
- * Max Payout Per Post (default $75, $10–$200), Campaign
- * Description, Video Requirements. Saves with status "pending" —
- * nothing goes live until the brand pays the budget in USDT on the
- * payment page and the admin approves it.
+ * Max Payout Per Post (default $75, $10–$200), Minimum views per
+ * clip (optional, 0 = no threshold) and Maximum payout per creator
+ * (optional, blank = no cap), Campaign Description, Video
+ * Requirements. Saves with status "pending" — nothing goes live
+ * until the brand pays the budget in USDT on the payment page and
+ * the admin approves it.
  *
  * Every validation failure shows the red error popup + shake + buzz
  * and blocks submit; a saved campaign redirects to the payment page.
@@ -49,7 +52,14 @@ export default function BrandForm({
   // categories; required, defaults to UGC.
   const [category, setCategory] = useState<string>("UGC");
   const [platforms, setPlatforms] = useState<Platform[]>(["tiktok"]);
-  const [ratePer1k, setRatePer1k] = useState("");
+  // Per-platform rates (P1-b): one rate per selected platform —
+  // e.g. TikTok $1.50/1k, YouTube $2.00/1k. Values persist when a
+  // platform is toggled off and back on.
+  const [rates, setRates] = useState<Partial<Record<Platform, string>>>({
+    tiktok: "",
+  });
+  const [minViews, setMinViews] = useState("");
+  const [maxPayoutPerCreator, setMaxPayoutPerCreator] = useState("");
   const [budget, setBudget] = useState("");
   const [maxPayout, setMaxPayout] = useState(String(MAX_PAYOUT_DEFAULT));
   const [description, setDescription] = useState("");
@@ -103,9 +113,43 @@ export default function BrandForm({
     if (!Number.isFinite(budgetNum) || budgetNum <= 0) {
       return fail("budget", "Error: Budget must be more than $0");
     }
-    const rateNum = Number(ratePer1k);
-    if (!Number.isFinite(rateNum) || rateNum <= 0) {
-      return fail("ratePer1k", "Error: Rate must be more than $0 per 1k views");
+    // Per-platform rates (P1-b): every selected platform needs its
+    // own rate above $0.
+    const platformLabel = (p: Platform) =>
+      p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube";
+    const ratesNum: Partial<Record<Platform, number>> = {};
+    for (const p of platforms) {
+      const v = Number(rates[p] ?? "");
+      if (!Number.isFinite(v) || v <= 0) {
+        return fail(
+          `rate-${p}`,
+          `Error: Rate for ${platformLabel(p)} must be more than $0 per 1k views`
+        );
+      }
+      ratesNum[p] = v;
+    }
+    // Minimum views per clip (P1-b, optional): 0 / blank = no threshold.
+    const minViewsNum =
+      minViews.trim() === "" ? 0 : Math.floor(Number(minViews));
+    if (!Number.isFinite(minViewsNum) || minViewsNum < 0) {
+      return fail(
+        "minViews",
+        "Error: Minimum views per clip must be 0 or more"
+      );
+    }
+    // Max payout per creator (P1-b, optional): blank = no cap.
+    const maxPerCreatorNum =
+      maxPayoutPerCreator.trim() === ""
+        ? null
+        : Number(maxPayoutPerCreator);
+    if (
+      maxPerCreatorNum !== null &&
+      (!Number.isFinite(maxPerCreatorNum) || maxPerCreatorNum <= 0)
+    ) {
+      return fail(
+        "maxPayoutPerCreator",
+        "Error: Maximum payout per creator must be more than $0"
+      );
     }
     const capNum = Number(maxPayout);
     if (
@@ -151,7 +195,12 @@ export default function BrandForm({
           // Legacy single-platform column: "all" when all three are
           // chosen, otherwise the first chosen platform.
           platform: platforms.length === 3 ? "all" : platforms[0],
-          ratePer1k: rateNum,
+          // Per-platform rates (P1-b); the legacy single rate is the
+          // first selected platform's rate.
+          rates: ratesNum,
+          ratePer1k: ratesNum[platforms[0]],
+          minViews: minViewsNum,
+          maxPayoutPerCreator: maxPerCreatorNum,
           budgetTotal: budgetNum,
           maxPayoutPerPost: capNum,
           description: description.trim(),
@@ -206,12 +255,17 @@ export default function BrandForm({
     );
   }
 
-  // Live calculation example, updating as the brand types the rate
+  // Live calculation example, updating as the brand types the rates
   // and budget. Defaults ($1 per 1k, $200 budget) show the exact
-  // example while the fields are empty.
+  // example while the fields are empty. With different rates per
+  // platform, the estimate uses the AVERAGE of the entered rates
+  // across the selected platforms — it is an estimate, labelled so.
+  const enteredRates = platforms
+    .map((p) => Number(rates[p] ?? ""))
+    .filter((v) => Number.isFinite(v) && v > 0);
   const exampleRate =
-    Number.isFinite(Number(ratePer1k)) && Number(ratePer1k) > 0
-      ? Number(ratePer1k)
+    enteredRates.length > 0
+      ? enteredRates.reduce((a, b) => a + b, 0) / enteredRates.length
       : 1;
   const exampleBudget =
     Number.isFinite(Number(budget)) && Number(budget) > 0
@@ -350,24 +404,50 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.platforms}</span>
           )}
         </div>
-        <label className="block text-sm font-bold text-fg">
+        {/* Per-platform rates (P1-b): one rate input per selected
+            platform — different platforms can pay different rates,
+            e.g. TikTok $1.50/1k, YouTube $2.00/1k. */}
+        <div className="block text-sm font-bold text-fg">
           Rate Per 1000 Views (Your Choice)
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            value={ratePer1k}
-            onChange={(e) => setRatePer1k(e.target.value)}
-            placeholder="e.g. 1"
-            className={inputCls}
-          />
           <span className="mt-1 block text-xs font-medium text-fg/50">
-            Higher rate = More creators will join fast.
+            One rate per platform — each must be more than $0. Higher
+            rate = More creators will join fast.
           </span>
-          {fieldErrors.ratePer1k && (
-            <span className={errCls}>{fieldErrors.ratePer1k}</span>
-          )}
-        </label>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {platforms.map((p) => {
+              const label =
+                p === "tiktok"
+                  ? "TikTok"
+                  : p === "instagram"
+                    ? "Instagram"
+                    : "YouTube";
+              return (
+                <label
+                  key={p}
+                  className="block text-xs font-bold text-fg/80"
+                >
+                  {label} rate / 1k views ($)
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={rates[p] ?? ""}
+                    onChange={(e) =>
+                      setRates((prev) => ({ ...prev, [p]: e.target.value }))
+                    }
+                    placeholder="e.g. 1"
+                    className={inputCls}
+                  />
+                  {fieldErrors[`rate-${p}`] && (
+                    <span className={errCls}>
+                      {fieldErrors[`rate-${p}`]}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
         <label className="block text-sm font-bold text-fg">
           Budget (Your Choice)
           <input
@@ -414,6 +494,48 @@ export default function BrandForm({
           </span>
           {fieldErrors.maxPayout && (
             <span className={errCls}>{fieldErrors.maxPayout}</span>
+          )}
+        </label>
+        <label className="block text-sm font-bold text-fg">
+          Minimum views per clip{" "}
+          <span className="font-medium text-fg/50">(optional)</span>
+          <input
+            type="number"
+            min={0}
+            step="1"
+            value={minViews}
+            onChange={(e) => setMinViews(e.target.value)}
+            placeholder="e.g. 1000"
+            className={inputCls}
+          />
+          <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
+            A clip needs at least this many views before it can be
+            approved. Leave blank for no minimum (0) — every clip with
+            real views can earn.
+          </span>
+          {fieldErrors.minViews && (
+            <span className={errCls}>{fieldErrors.minViews}</span>
+          )}
+        </label>
+        <label className="block text-sm font-bold text-fg">
+          Maximum payout per creator ($){" "}
+          <span className="font-medium text-fg/50">(optional)</span>
+          <input
+            type="number"
+            min={0}
+            step="1"
+            value={maxPayoutPerCreator}
+            onChange={(e) => setMaxPayoutPerCreator(e.target.value)}
+            placeholder="e.g. 500"
+            className={inputCls}
+          />
+          <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
+            The most one creator can earn from this campaign in total,
+            across all their approved clips. Leave blank for no cap.
+            This is on top of the 15-approved-clips-per-platform limit.
+          </span>
+          {fieldErrors.maxPayoutPerCreator && (
+            <span className={errCls}>{fieldErrors.maxPayoutPerCreator}</span>
           )}
         </label>
         <label className="block text-sm font-bold text-fg md:col-span-2">
@@ -469,9 +591,14 @@ export default function BrandForm({
           )}
         </label>
       </div>
-      {/* Live calculation example — updates as the brand types. */}
+      {/* Live calculation example — updates as the brand types. The
+          views figure is an estimate from the average rate across
+          the selected platforms (exact views depend on which
+          platform each clip is posted on). */}
       <div className="mt-4 rounded-2xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
-        Example: If you set {fmtChoice(exampleRate)} per 1k and budget{" "}
+        Example (estimate, at the average rate of{" "}
+        {fmtChoice(Math.round(exampleRate * 100) / 100)} per 1k across
+        your selected platforms): If you set a budget of{" "}
         {fmtChoice(exampleBudget)}, you will get approx{" "}
         {exampleViews.toLocaleString("en-US")} views. Budget{" "}
         {fmtChoice(exampleBudget)} + Platform fee (15%):{" "}

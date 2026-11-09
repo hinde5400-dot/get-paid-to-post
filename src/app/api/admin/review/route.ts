@@ -3,6 +3,7 @@ import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { holdUntil, payoutForViews } from "@/lib/money";
 import { HOLD_HOURS } from "@/lib/constants";
+import { ratesFromRow, rateForPlatform } from "@/lib/types";
 import {
   MIN_ENGAGEMENT_RATE,
   engagementRate,
@@ -222,7 +223,28 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-    const ratePer1k = Number(campaign.rate_per_1m ?? 0) / 1000;
+    // Minimum views per clip (P1-b, migration 0025): when the brand
+    // set a threshold (min_views > 0), a clip below it cannot be
+    // approved — the owner must reject it instead.
+    const minViews = Number(campaign.min_views ?? 0);
+    if (minViews > 0 && views < minViews) {
+      return NextResponse.json(
+        {
+          error: `This clip has ${views.toLocaleString()} views, below the campaign's minimum of ${minViews.toLocaleString()} views per clip.`,
+        },
+        { status: 400 }
+      );
+    }
+    // Per-platform rate (P1-b): the rate for THIS clip's platform
+    // (rates[platform]), falling back to the campaign's legacy
+    // single rate when no per-platform rate is set.
+    const ratePer1k = rateForPlatform(
+      {
+        rates: ratesFromRow(campaign as Record<string, unknown>),
+        view_bonus_per_1k: Number(campaign.rate_per_1m ?? 0) / 1000,
+      },
+      submission.platform
+    );
     const budgetLeft = Number(campaign.budget_left ?? 0);
     // The per-post cap (migration 0007) — a creator never earns more
     // than this on one post, even if the views would pay more. Older
@@ -241,6 +263,38 @@ export async function POST(request: Request) {
     // Never pay beyond the per-post cap or the remaining campaign budget.
     let earnings = Math.min(cappedEarnings, budgetLeft);
     earnings = Math.max(0, Math.round(earnings * 100) / 100);
+
+    // Per-creator $ cap (P1-b, migration 0025): when the brand set
+    // one (max_payout_per_creator), approving is blocked when the
+    // creator's APPROVED earnings on this campaign plus this clip's
+    // earnings would exceed the cap. On top of the 15-approved-clips
+    // count cap — this is the money cap.
+    const creatorCap =
+      campaign.max_payout_per_creator == null
+        ? null
+        : Number(campaign.max_payout_per_creator);
+    if (creatorCap !== null && Number.isFinite(creatorCap)) {
+      const { data: approvedRows } = await supabase
+        .from("submissions")
+        .select("earnings")
+        .eq("campaign_id", campaign.id)
+        .eq("user_id", submission.user_id)
+        .eq("status", "approved");
+      const creatorTotal = Math.round(
+        ((approvedRows ?? []) as { earnings?: number }[]).reduce(
+          (sum, r) => sum + Number(r.earnings ?? 0),
+          0
+        ) * 100
+      ) / 100;
+      if (creatorTotal + earnings > creatorCap) {
+        return NextResponse.json(
+          {
+            error: `This creator has already earned $${creatorTotal.toFixed(2)} on this campaign, and approving this clip ($${earnings.toFixed(2)}) would exceed the campaign's maximum payout of $${creatorCap.toFixed(2)} per creator.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     const hold = holdUntil(new Date());
     await supabase

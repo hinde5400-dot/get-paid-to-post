@@ -1,4 +1,5 @@
 import type { Campaign } from "./types";
+import { maxRatePer1k } from "./types";
 import { budgetRemainingPct } from "./money";
 
 /**
@@ -63,7 +64,10 @@ export type CampaignSort =
  * - recommended (default): live campaigns first, then by most
  *   budget remaining % (creators should join campaigns that can
  *   still pay), then newest.
- * - highest: by rate per 1,000 views (view_bonus_per_1k) descending.
+ * - highest: by rate per 1,000 views descending — with per-platform
+ *   rates (P1-b) a campaign sorts by its HIGHEST platform rate, so a
+ *   campaign paying $2/1k on YouTube is not hidden behind a $1/1k
+ *   flat campaign.
  * - new: by created_at descending.
  * - trending: by creator/submission activity descending (count of
  *   submissions, then newest). Needs the stats map; a campaign
@@ -82,7 +86,7 @@ export function sortCampaigns(
   const createdAt = (c: Campaign) => new Date(c.created_at ?? 0).getTime();
   switch (sort) {
     case "highest":
-      return out.sort((a, b) => b.view_bonus_per_1k - a.view_bonus_per_1k);
+      return out.sort((a, b) => maxRatePer1k(b) - maxRatePer1k(a));
     case "new":
       return out.sort((a, b) => createdAt(b) - createdAt(a));
     case "trending":
