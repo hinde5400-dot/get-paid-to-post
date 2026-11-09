@@ -225,7 +225,8 @@ export async function POST(
     const title = String(campaign.title ?? "Untitled campaign");
     const prefix = mention ? `${mention} ` : "";
     void notifyDiscord(
-      `${prefix}🧾 Payment proof uploaded — ${brand} attached a screenshot for "${title}" ($${budget} budget). View it: https://get-paid-to-post.vercel.app/admin`
+      `${prefix}🧾 Payment proof uploaded — ${brand} attached a screenshot for "${title}" ($${budget} budget). View it: https://get-paid-to-post.vercel.app/admin`,
+      `${brand} — ${title}`
     );
   }
   return NextResponse.json({ ok: true, message: data });

@@ -7,6 +7,15 @@
 // or break the brand's request, so every failure is swallowed
 // after a server-side log. The webhook URL itself is never logged.
 //
+// Per-brand threads: #admin-alerts must be a FORUM channel for
+// per-brand threads to work — passing thread_name in the webhook
+// payload makes Discord create a separate forum post (thread)
+// per brand there. If #admin-alerts is a plain text channel
+// instead, Discord rejects the forum post (non-2xx) and
+// notifyDiscord falls back to a plain webhook post without
+// thread_name, so the notification still arrives (in the one
+// shared channel, not a per-brand thread).
+//
 // Env (set in Vercel when Turn creates the webhook — never in the
 // repo):
 // - DISCORD_WEBHOOK_URL — the webhook URL to POST to.
@@ -25,16 +34,41 @@ export function adminMention(): string {
 /**
  * Post a message to the owner's Discord webhook. Returns false
  * when no webhook is configured or the send fails — never throws.
+ *
+ * @param content — the message text.
+ * @param threadName — optional forum-post title, e.g.
+ *   "BrandName — Campaign Title". When given, the webhook payload
+ *   includes thread_name so Discord creates a separate forum post
+ *   (thread) per brand in the #admin-alerts forum channel. When
+ *   Discord rejects that forum post (non-2xx, e.g. #admin-alerts
+ *   is a plain text channel), this falls back to one plain webhook
+ *   post without thread_name so the notification still arrives.
+ *   Fraud alerts call this with content only — no thread name.
  */
-export async function notifyDiscord(content: string): Promise<boolean> {
+export async function notifyDiscord(
+  content: string,
+  threadName?: string
+): Promise<boolean> {
   const url = (process.env.DISCORD_WEBHOOK_URL ?? "").trim();
   if (!url) return false;
-  try {
-    const res = await fetch(url, {
+  // Discord forum post titles are capped at 100 characters.
+  const thread = threadName?.trim().slice(0, 100) || undefined;
+  const post = (body: Record<string, string>) =>
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(body),
     });
+  try {
+    if (thread) {
+      const res = await post({ content, thread_name: thread });
+      if (res.ok) return true;
+      console.error(
+        `[notifyDiscord] Discord webhook rejected forum thread (${res.status}); retrying as a plain message.`
+      );
+      // Fall through to the plain-post retry below (one retry only).
+    }
+    const res = await post({ content });
     if (!res.ok) {
       console.error(
         `[notifyDiscord] Discord webhook returned ${res.status}.`

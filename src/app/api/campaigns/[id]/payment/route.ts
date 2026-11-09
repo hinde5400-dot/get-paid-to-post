@@ -88,7 +88,8 @@ export async function POST(
   );
   const prefix = mention ? `${mention} ` : "";
   void notifyDiscord(
-    `${prefix}💰 New brand payment — ${brand} submitted budget $${budget} for campaign "${title}". Tx: ${txId}. Check the proof and your wallet, then approve: https://get-paid-to-post.vercel.app/admin`
+    `${prefix}💰 New brand payment — ${brand} submitted budget $${budget} for campaign "${title}". Tx: ${txId}. Check the proof and your wallet, then approve: https://get-paid-to-post.vercel.app/admin`,
+    `${brand} — ${title}`
   );
   return NextResponse.json({
     ok: true,
