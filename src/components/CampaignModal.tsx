@@ -6,8 +6,15 @@ import Link from "next/link";
 import type { Campaign } from "@/lib/types";
 import { campaignPlatforms } from "@/lib/types";
 import type { CampaignStats } from "@/lib/data";
+import { isCampaignLive } from "@/lib/campaigns";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
-import { budgetBarClass, budgetRemainingPct, payoutForViews } from "@/lib/money";
+import {
+  budgetBarClass,
+  budgetRemainingPct,
+  budgetDaysLeft,
+  formatDeadline,
+  payoutForViews,
+} from "@/lib/money";
 import CampaignBanner from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -18,6 +25,8 @@ import { PlatformChips } from "./PlatformIcons";
  * there are no submissions yet, never invented), a big lime
  * "Join Shoot" button (to the detail page's submit form) and a
  * "View campaign" button. Closes on X, overlay tap, or Escape.
+ * A settling campaign (ended, still in its settlement window) shows
+ * a Settling badge and no Join button — submissions are closed.
  */
 export default function CampaignModal({
   campaign,
@@ -39,6 +48,16 @@ export default function CampaignModal({
       ? Math.round((stats.approved / stats.total) * 100)
       : null;
   const timeLeft = formatTimeLeft(campaign.ends_at);
+  // "Time left at current rate" (P1-a): burn basis only here — the
+  // deadline fallback is already shown as the countdown / deadline
+  // below, so it is not repeated.
+  const live = isCampaignLive(campaign);
+  const burn = live ? budgetDaysLeft(campaign) : null;
+  const burnText =
+    burn && burn.basis === "burn"
+      ? `~${burn.days} ${burn.days === 1 ? "day" : "days"} left at current rate`
+      : null;
+  const deadline = formatDeadline(campaign.ends_at);
   // 20k example with the per-post cap applied, like the 50k example.
   const example20k = payoutForViews(
     20000,
@@ -73,6 +92,7 @@ export default function CampaignModal({
           <CampaignBanner
             campaign={campaign}
             badge={`Up to ${formatUSD(campaign.max_payout_per_post)} per post`}
+            isLive={live}
           />
           <button
             type="button"
@@ -133,7 +153,36 @@ export default function CampaignModal({
                 {formatUSD(campaign.max_payout_per_post)}
               </p>
             </div>
+            <div className="rounded-2xl bg-fg/5 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
+                Creators
+              </p>
+              <p className="mt-1 font-display text-lg font-black text-fg">
+                {stats ? stats.members : "—"}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-fg/5 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
+                Deadline
+              </p>
+              <p className="mt-1 font-display text-lg font-black text-fg">
+                {live ? deadline : "Ended"}
+              </p>
+            </div>
           </div>
+
+          {/* Status badge */}
+          <p className="mt-4">
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                live
+                  ? "bg-lime/15 text-lime"
+                  : "bg-amber-400/15 text-amber-300"
+              }`}
+            >
+              {live ? "● Live" : "● Settling — payouts in progress"}
+            </span>
+          </p>
 
           <div className="mt-4 flex items-center justify-between">
             <PlatformChips
@@ -154,24 +203,45 @@ export default function CampaignModal({
             approved clips per platform
           </p>
           <p className="mt-2 text-xs font-semibold text-fg/70">
-            {timeLeft ? (
-              <span className="font-bold text-lime">⏳ {timeLeft}</span>
+            {!live ? (
+              <span className="font-bold text-amber-300">
+                This campaign has ended and is settling — no new clips can
+                be submitted. Payouts finish about 1 week after the
+                campaign ends (3-day re-check → 72h hold → payout).
+              </span>
             ) : (
-              "Runs until the budget ends"
+              <>
+                {timeLeft ? (
+                  <span className="font-bold text-lime">⏳ {timeLeft}</span>
+                ) : (
+                  "Runs until the budget ends"
+                )}
+                {" · "}Example: 20k views ×{" "}
+                {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
+                <span className="font-bold text-fg">
+                  {formatUSD(example20k.earnings)} earned
+                </span>
+              </>
             )}
-            {" · "}Example: 20k views ×{" "}
-            {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
-            <span className="font-bold text-fg">
-              {formatUSD(example20k.earnings)} earned
-            </span>
           </p>
+          {burnText && (
+            <p className="mt-1.5 text-xs font-bold text-lime">
+              ⏳ {burnText}
+            </p>
+          )}
 
-          <Link
-            href={`/campaign/${campaign.id}#submit`}
-            className="mt-6 block rounded-full bg-lime py-3.5 text-center text-base font-black text-black transition hover:bg-limedark"
-          >
-            Join Shoot →
-          </Link>
+          {live ? (
+            <Link
+              href={`/campaign/${campaign.id}#submit`}
+              className="mt-6 block rounded-full bg-lime py-3.5 text-center text-base font-black text-black transition hover:bg-limedark"
+            >
+              Join Shoot →
+            </Link>
+          ) : (
+            <p className="mt-6 rounded-2xl bg-amber-400/10 px-4 py-3 text-center text-sm font-semibold text-amber-300">
+              Submissions are closed — this campaign is settling.
+            </p>
+          )}
           <Link
             href={`/campaign/${campaign.id}`}
             className="mt-3 block rounded-full border border-fg/20 py-3 text-center text-sm font-bold text-fg transition hover:border-lime hover:text-lime"

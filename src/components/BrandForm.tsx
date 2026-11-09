@@ -9,6 +9,7 @@ import {
 } from "@/lib/constants";
 import { platformFeeFor, totalToSend } from "@/lib/money";
 import type { Platform } from "@/lib/types";
+import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
 import {
@@ -19,8 +20,9 @@ import {
 
 /**
  * Brand campaign form — Brand Name, Brand Logo (optional), Campaign
- * Title, Platforms (pick any of TikTok / Instagram / YouTube, at
- * least one), Rate per 1k views (any rate above $0 — your choice),
+ * Title, Category (UGC / Clipping / Lifestyle / Entertainment /
+ * Gaming / Technology, required, defaults to UGC), Platforms (pick
+ * any of TikTok / Instagram / YouTube, at least one), Rate per 1k views (any rate above $0 — your choice),
  * Total Budget (any amount above $0 — your choice, no minimum),
  * Max Payout Per Post (default $75, $10–$200), Campaign
  * Description, Video Requirements. Saves with status "pending" —
@@ -43,6 +45,9 @@ export default function BrandForm({
   const [brandName, setBrandName] = useState(initialBrandName ?? "");
   const [logoUrl, setLogoUrl] = useState("");
   const [title, setTitle] = useState("");
+  // Category (P1-a): one of the six Content Rewards-style
+  // categories; required, defaults to UGC.
+  const [category, setCategory] = useState<string>("UGC");
   const [platforms, setPlatforms] = useState<Platform[]>(["tiktok"]);
   const [ratePer1k, setRatePer1k] = useState("");
   const [budget, setBudget] = useState("");
@@ -78,6 +83,12 @@ export default function BrandForm({
     // Required fields first.
     if (!brandName.trim()) return fail("brandName", "This field is required");
     if (!title.trim()) return fail("title", "This field is required");
+    if (!isCampaignCategory(category)) {
+      return fail(
+        "category",
+        "Error: Category must be one of UGC, Clipping, Lifestyle, Entertainment, Gaming, Technology."
+      );
+    }
     if (!description.trim())
       return fail("description", "This field is required");
     if (!requirements.trim())
@@ -135,6 +146,7 @@ export default function BrandForm({
           brandName: brandName.trim(),
           logoUrl: logoUrl.trim() || null,
           title: title.trim(),
+          category,
           platforms,
           // Legacy single-platform column: "all" when all three are
           // chosen, otherwise the first chosen platform.
@@ -276,6 +288,27 @@ export default function BrandForm({
           />
           {fieldErrors.title && (
             <span className={errCls}>{fieldErrors.title}</span>
+          )}
+        </label>
+        <label className="block text-sm font-bold text-fg">
+          Category
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className={inputCls}
+          >
+            {CAMPAIGN_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs font-medium text-fg/50">
+            What kind of clips is this campaign for? Creators browse by
+            category.
+          </span>
+          {fieldErrors.category && (
+            <span className={errCls}>{fieldErrors.category}</span>
           )}
         </label>
         <div className="block text-sm font-bold text-fg md:col-span-2">

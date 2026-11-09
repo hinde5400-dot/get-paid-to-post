@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import {
-  getCampaigns,
+  getDiscoverCampaigns,
   getCampaignStatsMap,
   getUserSubmissions,
 } from "@/lib/data";
@@ -10,7 +10,12 @@ import CampaignGrid from "@/components/CampaignGrid";
 import CampaignFilters from "@/components/CampaignFilters";
 import AdSlot from "@/components/AdSlot";
 import type { Campaign, Platform } from "@/lib/types";
-import { campaignPlatforms } from "@/lib/types";
+import { campaignPlatforms, isCampaignCategory } from "@/lib/types";
+import {
+  isCampaignLive,
+  sortCampaigns,
+  type CampaignSort,
+} from "@/lib/campaigns";
 
 function hrefWith(
   searchParams: Record<string, string | string[] | undefined>,
@@ -28,9 +33,18 @@ function hrefWith(
 export default async function CampaignsPage({
   searchParams,
 }: {
-  searchParams: { platform?: string; sort?: string; tab?: string; message?: string };
+  searchParams: {
+    platform?: string;
+    category?: string;
+    sort?: string;
+    tab?: string;
+    message?: string;
+  };
 }) {
-  const all = await getCampaigns();
+  // Discover (P1-a): live campaigns PLUS settling ones — ended
+  // campaigns stay visible until the cleanup deletes them >= 7 days
+  // after the end (migration 0023). Home keeps live-only.
+  const all = await getDiscoverCampaigns();
   const tab = searchParams.tab === "joined" ? "joined" : "explore";
   const user = await getCurrentUser();
 
@@ -44,20 +58,43 @@ export default async function CampaignsPage({
       list = [];
     }
   }
+  // Filters compose: platform first, then category, then sort.
   if (searchParams.platform && searchParams.platform !== "all") {
     // A multi-platform campaign appears under every platform it
     // accepts (migration 0012) — not just its first one.
     const wanted = searchParams.platform as Platform;
     list = list.filter((c) => campaignPlatforms(c).includes(wanted));
   }
-  if (searchParams.sort === "highest") {
-    list.sort((a, b) => b.rate_per_1m - a.rate_per_1m);
-  } else if (searchParams.sort === "budget") {
-    list.sort((a, b) => b.budget_total - a.budget_total);
+  if (searchParams.category && searchParams.category !== "all") {
+    // Unknown category values are ignored (show everything) rather
+    // than emptying the list.
+    if (isCampaignCategory(searchParams.category)) {
+      list = list.filter((c) => c.category === searchParams.category);
+    }
   }
+  // Stats are loaded BEFORE sorting: the Trending sort orders by
+  // submission count. No extra queries — the same stats map already
+  // fed the cards and the modal.
+  const stats = await getCampaignStatsMap(list.map((c) => c.id));
+  // Sorts (P1-a, Content Rewards model — definitions in
+  // src/lib/campaigns.ts sortCampaigns). "best" is the old
+  // Recommended value and still maps to it; unknown values fall back
+  // to Recommended.
+  const sortParam = searchParams.sort ?? "recommended";
+  const sort: CampaignSort =
+    sortParam === "best"
+      ? "recommended"
+      : sortParam === "highest" ||
+          sortParam === "new" ||
+          sortParam === "trending" ||
+          sortParam === "ending"
+        ? sortParam
+        : "recommended";
+  list = sortCampaigns(list, sort, stats);
 
   const hasAny = all.length > 0;
-  const stats = await getCampaignStatsMap(list.map((c) => c.id));
+  const liveCount = list.filter((c) => isCampaignLive(c)).length;
+  const settlingCount = list.length - liveCount;
 
   return (
     <div className="space-y-6">
@@ -100,7 +137,8 @@ export default async function CampaignsPage({
 
       <Suspense
         fallback={
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="h-11 rounded-2xl border border-fg/10 bg-card" />
             <div className="h-11 rounded-2xl border border-fg/10 bg-card" />
             <div className="h-11 rounded-2xl border border-fg/10 bg-card" />
           </div>
@@ -148,15 +186,26 @@ export default async function CampaignsPage({
           <p className="mt-2 text-sm text-fg/60">
             {tab === "joined"
               ? "Pick a campaign from Explore, post your clip, and it will show up here."
-              : "Try a different platform or sort order."}
+              : "Try a different platform, category or sort order."}
           </p>
         </div>
       ) : (
         <>
           <p className="text-sm font-semibold text-fg/50">
             {list.length} campaign{list.length === 1 ? "" : "s"}
-            {tab === "joined" ? " joined" : " live"}
+            {tab === "joined" ? " joined" : ""}
+            {settlingCount > 0 &&
+              ` · ${liveCount} live · ${settlingCount} settling`}
           </p>
+          {settlingCount > 0 && (
+            <p className="rounded-2xl bg-amber-400/10 px-4 py-3 text-sm leading-relaxed text-amber-200/90">
+              Settling campaigns have ended — no new clips can be
+              submitted. Payouts finish about 1 week after a campaign
+              ends: a 3-day re-check window, then the 72-hour payment
+              hold, then payout. Settling campaigns are removed
+              automatically after the settlement window.
+            </p>
+          )}
           <CampaignGrid campaigns={list} stats={stats} />
         </>
       )}

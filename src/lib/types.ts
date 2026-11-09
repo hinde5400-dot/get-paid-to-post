@@ -3,6 +3,28 @@ export type Platform = "tiktok" | "instagram" | "youtube";
 export const ALL_PLATFORMS: Platform[] = ["tiktok", "instagram", "youtube"];
 
 /**
+ * Campaign categories (P1-a, Content Rewards model — the filterable
+ * board: UGC, Clipping, Lifestyle, Entertainment, Gaming,
+ * Technology). A campaign has exactly one. The brand form defaults
+ * to "UGC"; the API rejects anything outside this list. Rows written
+ * before categories existed carry the legacy "General" value, which
+ * migration 0024 backfills to "UGC".
+ */
+export const CAMPAIGN_CATEGORIES = [
+  "UGC",
+  "Clipping",
+  "Lifestyle",
+  "Entertainment",
+  "Gaming",
+  "Technology",
+] as const;
+export type CampaignCategory = (typeof CAMPAIGN_CATEGORIES)[number];
+
+export function isCampaignCategory(value: string): value is CampaignCategory {
+  return (CAMPAIGN_CATEGORIES as readonly string[]).includes(value);
+}
+
+/**
  * Platforms a campaign accepts clips on (migration 0012).
  * New rows store the chosen platforms in campaigns.platforms
  * (text[]); rows written before that migration have platforms null
@@ -68,6 +90,9 @@ export interface Campaign {
   rate_per_1m: number;
   budget_total: number;
   budget_left: number;
+  /** Total paid out to creators so far (migration 0001) — feeds the
+   *  "time left at current rate" burn-rate estimate (P1-a). */
+  paid_out: number;
   /** 15% flat platform fee, charged ON TOP of budget_total
    *  (migration 0021). budget_left is the creators pool: the full
    *  budget — the fee is paid on top, never taken out of it. */

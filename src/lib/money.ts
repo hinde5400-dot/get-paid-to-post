@@ -113,3 +113,94 @@ export function formatTimeLeft(
   if (h > 0) return `Ends in ${h}h ${m}m`;
   return `Ends in ${m}m`;
 }
+
+/**
+ * Deadline as a plain date — "Ends 12 Nov 2026" when a deadline is
+ * set and still ahead, "Ended 12 Nov 2026" once it has passed, or
+ * "Open-ended" when the campaign runs until its budget ends.
+ */
+export function formatDeadline(
+  endsAt: string | null | undefined,
+  now: number = Date.now()
+): string {
+  if (!endsAt) return "Open-ended";
+  const d = new Date(endsAt);
+  const date = d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return d.getTime() <= now ? `Ended ${date}` : `Ends ${date}`;
+}
+
+/**
+ * "Time left ~X days at current rate" (P1-a, Content Rewards model).
+ *
+ * FORMULA — burn rate first, deadline as the honest fallback:
+ *   1. If the campaign has actually paid anything out AND has been
+ *      running at least 1 day, daily burn = paid_out / days elapsed
+ *      since started_at, and days left = budget_left / daily burn
+ *      (rounded, min 0). Basis: "burn".
+ *   2. Otherwise, if a deadline (ends_at) is set, days left =
+ *      days until ends_at (rounded up, min 0). Basis: "deadline".
+ *   3. Otherwise (open-ended, nothing paid out yet) there is no
+ *      honest estimate — return null and the UI shows nothing
+ *      instead of inventing a burn rate.
+ * A burn rate is never invented from zero data: a campaign with no
+ * payouts yet falls back to its deadline, or to null.
+ */
+export function budgetDaysLeft(
+  campaign: {
+    paid_out: number;
+    budget_left: number;
+    started_at?: string | null;
+    ends_at?: string | null;
+  },
+  now: number = Date.now()
+): { days: number; basis: "burn" | "deadline" } | null {
+  const startedAt = campaign.started_at
+    ? new Date(campaign.started_at).getTime()
+    : NaN;
+  if (
+    campaign.paid_out > 0 &&
+    Number.isFinite(startedAt) &&
+    (now - startedAt) / 86400000 >= 1
+  ) {
+    const daysElapsed = (now - startedAt) / 86400000;
+    const dailyBurn = campaign.paid_out / daysElapsed;
+    if (dailyBurn > 0) {
+      return {
+        days: Math.max(0, Math.round(campaign.budget_left / dailyBurn)),
+        basis: "burn",
+      };
+    }
+  }
+  if (campaign.ends_at) {
+    const ms = new Date(campaign.ends_at).getTime() - now;
+    if (ms > 0) {
+      return { days: Math.max(0, Math.ceil(ms / 86400000)), basis: "deadline" };
+    }
+    return { days: 0, basis: "deadline" };
+  }
+  return null;
+}
+
+/** Display text for budgetDaysLeft: "~3 days left at current rate"
+ *  (burn) or "~3 days left" (deadline fallback); null when there is
+ *  no honest estimate. */
+export function budgetTimeLeftText(
+  campaign: {
+    paid_out: number;
+    budget_left: number;
+    started_at?: string | null;
+    ends_at?: string | null;
+  },
+  now: number = Date.now()
+): string | null {
+  const r = budgetDaysLeft(campaign, now);
+  if (!r) return null;
+  const label = r.days === 1 ? "day" : "days";
+  return r.basis === "burn"
+    ? `~${r.days} ${label} left at current rate`
+    : `~${r.days} ${label} left`;
+}

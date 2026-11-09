@@ -4,7 +4,7 @@ import type { Campaign } from "@/lib/types";
  * Bold typographic banner graphic for a campaign — no fake brand logos,
  * no stock photos, no invented imagery. A dark gradient picked from the
  * brand name, the brand's initials in huge display type, a subtle dot
- * pattern, and a LIVE pill. The same banner is used on cards, the
+ * pattern, and a LIVE / SETTLING pill. The same banner is used on cards, the
  * featured section and the campaign detail page.
  */
 
@@ -72,12 +72,17 @@ export default function CampaignBanner({
   size = "md",
   showLive = true,
   badge,
+  isLive = true,
 }: {
   campaign: Campaign;
   size?: "sm" | "md" | "lg";
   showLive?: boolean;
   /** Cap badge overlaid on the banner, e.g. "Up to $75 per post". */
   badge?: string;
+  /** Live pill vs amber Settling pill (P1-a) — pass false for an
+   *  ended campaign still in its settlement window. Defaults to
+   *  true so existing live-only callers are unchanged. */
+  isLive?: boolean;
 }) {
   const [from, to] = GRADIENTS[hashBrand(campaign.brand_name) % GRADIENTS.length];
   const height =
@@ -127,9 +132,13 @@ export default function CampaignBanner({
       )}
       <div className="relative">
         {showLive && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-lime px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-black">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${
+              isLive ? "bg-lime text-black" : "bg-amber-400 text-black"
+            }`}
+          >
             <span className="h-1.5 w-1.5 rounded-full bg-black" />
-            Live
+            {isLive ? "Live" : "Settling"}
           </span>
         )}
         <p className="mt-2 font-display text-xl font-black uppercase leading-none tracking-tight text-white md:text-2xl">

@@ -3,8 +3,15 @@
 import { useEffect, useState } from "react";
 import type { Campaign } from "@/lib/types";
 import { campaignPlatforms } from "@/lib/types";
+import { isCampaignLive } from "@/lib/campaigns";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
-import { budgetBarClass, budgetRemainingPct, payoutForViews } from "@/lib/money";
+import {
+  budgetBarClass,
+  budgetRemainingPct,
+  budgetDaysLeft,
+  formatDeadline,
+  payoutForViews,
+} from "@/lib/money";
 import CampaignBanner, { BrandLogoTile } from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -15,13 +22,24 @@ import { PlatformChips } from "./PlatformIcons";
  * the campaign popup modal (via onOpen) instead of navigating away.
  * Shows a live countdown while the campaign runs, and an example
  * payout computed from the campaign's real rate.
+ *
+ * Card completeness (P1-a, Content Rewards model): rate per 1,000
+ * views, max earning per post ("up to $X per post"), budget used as
+ * % only (never $ amounts), creators count (distinct creators who
+ * submitted — stats.members, passed in from the grid), Live /
+ * Settling status badge, deadline, and "~X days left at current
+ * rate" from the burn rate when payouts have started.
  */
 export default function CampaignCard({
   campaign,
   onOpen,
+  creatorsCount,
 }: {
   campaign: Campaign;
   onOpen: () => void;
+  /** Distinct creators who submitted to this campaign
+   *  (stats.members); null when the stats could not be loaded. */
+  creatorsCount?: number | null;
 }) {
   // Budget is shown as % remaining ONLY — never a $ amount
   // (Turn's decision, P0 batch 2). The bar colour follows the %
@@ -37,6 +55,16 @@ export default function CampaignCard({
     return () => clearInterval(t);
   }, []);
   const timeLeft = formatTimeLeft(campaign.ends_at, now);
+  // "Time left at current rate" (P1-a): only shown when the burn
+  // rate is real (payouts have started) — the deadline fallback is
+  // already covered by the countdown above, so it is not repeated.
+  const live = isCampaignLive(campaign, now);
+  const burn = live ? budgetDaysLeft(campaign, now) : null;
+  const burnText =
+    burn && burn.basis === "burn"
+      ? `~${burn.days} ${burn.days === 1 ? "day" : "days"} left at current rate`
+      : null;
+  const deadline = formatDeadline(campaign.ends_at, now);
   // Example payout from the campaign's real rate, with the per-post
   // cap applied — same math as the 50k example, so it never
   // overstates earnings above the cap.
@@ -65,6 +93,7 @@ export default function CampaignCard({
       <CampaignBanner
         campaign={campaign}
         badge={`Up to ${formatUSD(campaign.max_payout_per_post)} per post`}
+        isLive={live}
       />
       <div className="flex flex-1 flex-col p-5">
         {/* Brand row */}
@@ -91,6 +120,25 @@ export default function CampaignCard({
           {campaign.description}
         </p>
 
+        {/* Status + creators + deadline (P1-a card completeness) */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
+          <span
+            className={`rounded-full px-2.5 py-1 ${
+              live ? "bg-lime/15 text-lime" : "bg-amber-400/15 text-amber-300"
+            }`}
+          >
+            {live ? "● Live" : "● Settling"}
+          </span>
+          {creatorsCount !== null && creatorsCount !== undefined && (
+            <span className="rounded-full bg-fg/10 px-2.5 py-1 text-fg/70">
+              {creatorsCount} creator{creatorsCount === 1 ? "" : "s"}
+            </span>
+          )}
+          <span className="rounded-full bg-fg/10 px-2.5 py-1 text-fg/70">
+            {live ? deadline : "Ended"}
+          </span>
+        </div>
+
         {/* Budget progress — % remaining only, never $ amounts */}
         <div className="mt-4">
           <div className="flex items-baseline justify-between text-sm">
@@ -111,7 +159,11 @@ export default function CampaignCard({
           </div>
           {/* Countdown + example payout (real rate, cap applied) */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-            {timeLeft ? (
+            {!live ? (
+              <span className="font-bold text-amber-300">
+                Settling — payouts in progress
+              </span>
+            ) : timeLeft ? (
               <span className="font-bold text-lime">⏳ {timeLeft}</span>
             ) : (
               <span className="font-bold text-fg/60">
@@ -125,6 +177,11 @@ export default function CampaignCard({
               </span>
             </span>
           </div>
+          {burnText && (
+            <p className="mt-1.5 text-xs font-bold text-lime">
+              ⏳ {burnText}
+            </p>
+          )}
         </div>
 
         {/* Platform chips + per-post cap */}

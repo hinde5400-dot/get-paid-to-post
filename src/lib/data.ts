@@ -21,6 +21,9 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     rate_per_1m: Number(row.rate_per_1m ?? 0),
     budget_total: Number(row.budget_total ?? 0),
     budget_left: Number(row.budget_left ?? 0),
+    // Total paid out so far (migration 0001) — burn-rate input for
+    // the "time left at current rate" estimate (P1-a).
+    paid_out: Number(row.paid_out ?? 0),
     // 15% flat platform fee (migration 0021); rows written before
     // it have no fee column and fall back to 0.
     platform_fee: Number(row.platform_fee ?? 0),
@@ -81,19 +84,11 @@ function mapSubmission(row: Record<string, unknown>): Submission {
   };
 }
 
-/**
- * A campaign is live only while it is funded, status "live", has
- * budget left, and its duration has not run out (ends_at null means
- * it runs until the budget ends). Use for Discover lists and the
- * detail-page guard — a campaign auto-ends on duration OR budget 0,
- * whichever comes first.
- */
-export function isCampaignLive(c: Campaign, now: number = Date.now()): boolean {
-  if (!c.is_funded || c.status !== "live") return false;
-  if (c.budget_left <= 0) return false;
-  if (c.ends_at && new Date(c.ends_at).getTime() <= now) return false;
-  return true;
-}
+// Live / settling definitions live in src/lib/campaigns.ts (pure,
+// client-safe) and are re-exported here so existing server imports
+// (`from "@/lib/data"`) keep working.
+export { isCampaignLive, isCampaignSettling, campaignStatus } from "./campaigns";
+import { isCampaignLive } from "./campaigns";
 
 /**
  * Live funded campaigns from Supabase only. There are no sample or
@@ -115,6 +110,32 @@ export async function getCampaigns(): Promise<Campaign[]> {
       return (data as Record<string, unknown>[])
         .map(mapCampaign)
         .filter((c) => isCampaignLive(c, now));
+    }
+  }
+  return [];
+}
+
+/**
+ * Discover list (P1-a): live campaigns PLUS settling ones — funded,
+ * status "live" campaigns that have ended (budget_left <= 0 OR
+ * ends_at passed) but have not been auto-deleted yet. The cleanup
+ * job (migration 0023) deletes an ended campaign only >= 7 days
+ * after it ended (3-day re-check + 3-day/72h hold + 1-day buffer),
+ * so until then it stays visible here with a "Settling" badge and
+ * no submit form. The page sorts live first by default. Home and
+ * the navbar keep using getCampaigns() (live only).
+ */
+export async function getDiscoverCampaigns(): Promise<Campaign[]> {
+  const supabase = getServerClient();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("is_funded", true)
+      .eq("status", "live")
+      .order("created_at", { ascending: false });
+    if (!error && data) {
+      return (data as Record<string, unknown>[]).map(mapCampaign);
     }
   }
   return [];

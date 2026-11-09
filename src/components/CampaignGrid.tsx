@@ -28,6 +28,9 @@ export default function CampaignGrid({
             key={c.id}
             campaign={c}
             onOpen={() => setSelected(c)}
+            // Distinct creators who submitted (campaign_stats.members)
+            // — no extra query: the page already loads this stats map.
+            creatorsCount={stats[c.id]?.members ?? null}
           />
         ))}
       </div>

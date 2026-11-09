@@ -5,6 +5,7 @@ import {
   getCampaignStats,
   getUserSubmissions,
   isCampaignLive,
+  isCampaignSettling,
 } from "@/lib/data";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import SubmitBundleForm, { type LastSubmission } from "@/components/SubmitBundleForm";
@@ -12,7 +13,13 @@ import CampaignBanner, { BrandLogoTile } from "@/components/CampaignBanner";
 import CampaignDetailTabs from "@/components/CampaignDetailTabs";
 import { PlatformChips } from "@/components/PlatformIcons";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
-import { budgetBarClass, budgetRemainingPct, payoutForViews } from "@/lib/money";
+import {
+  budgetBarClass,
+  budgetRemainingPct,
+  budgetTimeLeftText,
+  formatDeadline,
+  payoutForViews,
+} from "@/lib/money";
 import { VIDEO_RULES } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
 import { campaignPlatforms, platformNamesText } from "@/lib/types";
@@ -32,11 +39,17 @@ export default async function CampaignDetailPage({
   if (!campaign) notFound();
 
   const user = await getCurrentUser();
-  // Only live, funded campaigns are public — a pending, rejected,
-  // unfunded, expired or out-of-budget campaign must never render
-  // for creators. The owner can still preview any campaign from the
-  // admin panel.
-  if (!isCampaignLive(campaign)) {
+  // Only live, funded campaigns are public — a pending, rejected or
+  // unfunded campaign must never render for creators. The owner can
+  // still preview any campaign from the admin panel.
+  // SETTLING (P1-a): an ended campaign that has not been auto-deleted
+  // yet (cleanup deletes >= 7 days after the end, migration 0023)
+  // DOES render for everyone — with a settling notice and NO submit
+  // form. After the cleanup deletes it, getCampaign returns null
+  // and the page 404s as before.
+  const live = isCampaignLive(campaign);
+  const settling = isCampaignSettling(campaign);
+  if (!live && !settling) {
     const profile = user ? await getProfile(user.id) : null;
     if (!isOwner(profile)) notFound();
   }
@@ -80,6 +93,11 @@ export default async function CampaignDetailPage({
     campaign.max_payout_per_post
   );
   const timeLeft = formatTimeLeft(campaign.ends_at);
+  // "Time left at current rate" (P1-a) — burn rate when payouts have
+  // started, days until the deadline otherwise, "—" when neither
+  // exists. Only meaningful while the campaign is live.
+  const budgetTimeLeft = live ? budgetTimeLeftText(campaign) : null;
+  const deadline = formatDeadline(campaign.ends_at);
   // 20k example with the per-post cap applied, like the 50k example.
   const example20k = payoutForViews(
     20000,
@@ -103,12 +121,31 @@ export default async function CampaignDetailPage({
         ← Back to campaigns
       </Link>
 
+      {/* Settling notice (P1-a): the campaign ended but is still in
+          its settlement window — visible, no new submissions. */}
+      {settling && (
+        <div className="rounded-3xl border border-amber-400/40 bg-amber-400/10 p-6">
+          <p className="font-display text-lg font-black tracking-tight text-amber-300">
+            ● Settling — this campaign has ended
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-fg/70">
+            No new clips can be submitted. Payouts finish about 1 week
+            after the campaign ends: first a 3-day re-check window, during
+            which an approved video can still be rejected if fake or bot
+            views show up, then the 72-hour payment hold, then payout.
+            This campaign will be removed automatically after the
+            settlement window.
+          </p>
+        </div>
+      )}
+
       {/* Brand profile header */}
       <div className="overflow-hidden rounded-3xl border border-fg/10 bg-card">
         <CampaignBanner
           campaign={campaign}
           size="lg"
           badge={`Up to ${formatUSD(campaign.max_payout_per_post)} per post`}
+          isLive={live}
         />
         <div className="p-6 md:p-8">
           <div className="flex flex-wrap items-center gap-4">
@@ -119,8 +156,12 @@ export default async function CampaignDetailPage({
               </h1>
               <p className="mt-0.5 text-sm font-bold text-fg/60">
                 {stats
-                  ? `${stats.members} Member${stats.members === 1 ? "" : "s"} · ${stats.active30d} Active`
+                  ? `${live ? "Live" : settling ? "Settling" : "Not live"} · ${stats.members} Member${stats.members === 1 ? "" : "s"} · ${stats.active30d} Active`
                   : `${campaign.category} · ${platformListText}`}
+              </p>
+              <p className="mt-1 text-sm font-bold text-fg/60">
+                {live ? deadline : settling ? "Ended" : deadline}
+                {budgetTimeLeft ? ` · ${budgetTimeLeft}` : ""}
               </p>
             </div>
             <PlatformChips
@@ -180,10 +221,17 @@ export default async function CampaignDetailPage({
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-fg/70">
               <span>👀 Views tracked {campaign.views_tracked_days} days</span>
               <span>📹 Up to 15 approved clips per platform</span>
+              {stats && (
+                <span>
+                  👥 {stats.members} creator{stats.members === 1 ? "" : "s"}
+                </span>
+              )}
               <span className="font-bold text-lime">
-                {timeLeft
-                  ? `⏳ ${timeLeft}`
-                  : "Runs until the budget ends"}
+                {settling
+                  ? "Settling — payouts in progress"
+                  : timeLeft
+                    ? `⏳ ${timeLeft}`
+                    : "Runs until the budget ends"}
               </span>
             </div>
           </div>
@@ -255,12 +303,26 @@ export default async function CampaignDetailPage({
             </div>
 
             <div id="submit" className="scroll-mt-28">
-              <SubmitBundleForm
-                campaign={campaign}
-                lastByPlatform={lastByPlatform}
-                isLoggedIn={Boolean(user)}
-                approvedByPlatform={approvedByPlatform}
-              />
+              {settling ? (
+                <div className="rounded-3xl border border-amber-400/40 bg-card p-6">
+                  <h2 className="text-lg font-extrabold text-fg">
+                    Submissions are closed
+                  </h2>
+                  <p className="mt-3 text-sm leading-relaxed text-fg/70">
+                    This campaign has ended and is now settling. No new
+                    clips can be submitted. Payouts finish about 1 week
+                    after the campaign ends — a 3-day re-check window,
+                    then the 72-hour payment hold, then payout.
+                  </p>
+                </div>
+              ) : (
+                <SubmitBundleForm
+                  campaign={campaign}
+                  lastByPlatform={lastByPlatform}
+                  isLoggedIn={Boolean(user)}
+                  approvedByPlatform={approvedByPlatform}
+                />
+              )}
             </div>
           </div>
         }
@@ -278,9 +340,21 @@ export default async function CampaignDetailPage({
                 ["Rate", `${formatUSD(campaign.rate_per_1m)} per 1M views`],
                 ["View bonus", `${formatUSD(campaign.view_bonus_per_1k)} per 1K views`],
                 ["Earn up to", `${formatUSD(campaign.max_payout_per_post)} per post`],
+                ["Creators", stats ? `${stats.members}` : "—"],
+                ["Deadline", live || !campaign.ends_at ? deadline : "Ended"],
+                ["Budget time left", budgetTimeLeft ?? "—"],
                 ["Views tracked", `${campaign.views_tracked_days} days`],
                 ["Clip limit", "Up to 15 approved clips per platform"],
-                ["Status", campaign.is_funded ? "Funded & live" : "Not funded"],
+                [
+                  "Status",
+                  !campaign.is_funded
+                    ? "Not funded"
+                    : live
+                      ? "Funded & live"
+                      : settling
+                        ? "Settling — payouts in progress"
+                        : "Funded",
+                ],
               ].map(([label, value]) => (
                 <div
                   key={label}

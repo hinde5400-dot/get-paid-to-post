@@ -7,6 +7,7 @@ import {
 } from "@/lib/constants";
 import { platformFeeFor } from "@/lib/money";
 import type { Platform } from "@/lib/types";
+import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 
 const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
 
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
     brandName?: string;
     logoUrl?: string | null;
     title?: string;
+    category?: string;
     platform?: string;
     platforms?: string[];
     ratePer1k?: number;
@@ -76,6 +78,19 @@ export async function POST(request: Request) {
   if (!requirements) {
     return NextResponse.json(
       { error: "This field is required: Video requirements." },
+      { status: 400 }
+    );
+  }
+  // Category (P1-a): exactly one of the six — UGC, Clipping,
+  // Lifestyle, Entertainment, Gaming, Technology. Missing means the
+  // old form, so default to UGC; anything else is rejected.
+  const categoryRaw = String(body.category ?? "").trim();
+  const category = categoryRaw === "" ? "UGC" : categoryRaw;
+  if (!isCampaignCategory(category)) {
+    return NextResponse.json(
+      {
+        error: `Error: Category must be one of ${CAMPAIGN_CATEGORIES.join(", ")}.`,
+      },
       { status: 400 }
     );
   }
@@ -184,7 +199,7 @@ export async function POST(request: Request) {
     platform_fee: platformFee,
     spots_left: 0,
     spots_total: 0,
-    category: "General",
+    category,
     // Legacy column: "all" when all three platforms are chosen,
     // otherwise the first chosen platform. The platforms array is
     // the source of truth (migration 0012).
