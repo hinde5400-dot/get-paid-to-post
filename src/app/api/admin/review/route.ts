@@ -310,37 +310,11 @@ export async function POST(request: Request) {
     let earnings = Math.min(cappedEarnings, budgetLeft);
     earnings = Math.max(0, Math.round(earnings * 100) / 100);
 
-    // Per-creator $ cap (P1-b, migration 0025): when the brand set
-    // one (max_payout_per_creator), approving is blocked when the
-    // creator's APPROVED earnings on this campaign plus this clip's
-    // earnings would exceed the cap. On top of the 15-approved-clips
-    // count cap — this is the money cap.
-    const creatorCap =
-      campaign.max_payout_per_creator == null
-        ? null
-        : Number(campaign.max_payout_per_creator);
-    if (creatorCap !== null && Number.isFinite(creatorCap)) {
-      const { data: approvedRows } = await supabase
-        .from("submissions")
-        .select("earnings")
-        .eq("campaign_id", campaign.id)
-        .eq("user_id", submission.user_id)
-        .eq("status", "approved");
-      const creatorTotal = Math.round(
-        ((approvedRows ?? []) as { earnings?: number }[]).reduce(
-          (sum, r) => sum + Number(r.earnings ?? 0),
-          0
-        ) * 100
-      ) / 100;
-      if (creatorTotal + earnings > creatorCap) {
-        return NextResponse.json(
-          {
-            error: `This creator has already earned $${creatorTotal.toFixed(2)} on this campaign, and approving this clip ($${earnings.toFixed(2)}) would exceed the campaign's maximum payout of $${creatorCap.toFixed(2)} per creator.`,
-          },
-          { status: 400 }
-        );
-      }
-    }
+    // No per-creator $ cap (item 4, Turn's decision): a creator's
+    // earnings across their clips depend on their views — the
+    // `max_payout_per_creator` column is never enforced. The only
+    // limits are the per-post cap above and the 15-approved-clips
+    // per-platform count cap.
 
     const hold = holdUntil(new Date());
     await supabase

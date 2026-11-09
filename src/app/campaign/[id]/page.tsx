@@ -279,12 +279,6 @@ export default async function CampaignDetailPage({
                 {Math.max(campaign.min_views, 1000).toLocaleString()} views
                 per clip to earn
               </span>
-              {campaign.max_payout_per_creator !== null && (
-                <span>
-                  💰 Max {formatUSD(campaign.max_payout_per_creator)} per
-                  creator
-                </span>
-              )}
               {stats && (
                 <span>
                   👥 {stats.members} creator{stats.members === 1 ? "" : "s"}
@@ -392,15 +386,7 @@ export default async function CampaignDetailPage({
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   A creator never earns more than{" "}
                   {formatUSD(campaign.max_payout_per_post)} on one post,
-                  even if the views would pay more.
-                  {campaign.max_payout_per_creator !== null && (
-                    <>
-                      {" "}And never more than{" "}
-                      {formatUSD(campaign.max_payout_per_creator)} in total
-                      from this campaign.
-                    </>
-                  )}
-                  {" "}Your clip needs at least{" "}
+                  even if the views would pay more.{" "}Your clip needs at least{" "}
                   {Math.max(campaign.min_views, 1000).toLocaleString()}{" "}
                   views before it can earn — a clip below the
                   campaign&apos;s minimum cannot be approved.{" "}
@@ -464,12 +450,6 @@ export default async function CampaignDetailPage({
                 [
                   "Minimum views per clip",
                   `${Math.max(campaign.min_views, 1000).toLocaleString()} views`,
-                ],
-                [
-                  "Max payout per creator",
-                  campaign.max_payout_per_creator !== null
-                    ? `${formatUSD(campaign.max_payout_per_creator)} in total`
-                    : "No cap",
                 ],
                 ["Earn up to", `${formatUSD(campaign.max_payout_per_post)} per post`],
                 ["Creators", stats ? `${stats.members}` : "—"],

@@ -8,7 +8,7 @@ import {
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
 } from "@/lib/constants";
-import { platformFeeFor, totalToSend } from "@/lib/money";
+import { platformFeeFor, payoutForViews, totalToSend } from "@/lib/money";
 import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -23,20 +23,25 @@ import {
  * Brand campaign form — Brand Name, Brand Logo (optional), Campaign
  * Title, Category (UGC / Clipping / Lifestyle / Entertainment /
  * Gaming / Technology, required, defaults to UGC), Platforms (pick
- * any of TikTok / Instagram / YouTube, at least one), Rate per 1k
- * views PER selected platform (any rate above $0 — your choice),
- * Total Budget (any amount above $0 — your choice, no minimum),
- * Max Payout Per Post (default $100, $10–$200), Minimum views per
- * clip (floor 1,000 — pre-filled with 1,000, blank = 1,000, values
- * below 1,000 are rejected) and Maximum payout per creator
- * (optional, blank = no cap), Campaign Description, Video
- * Requirements. Saves with status "pending" — nothing goes live
- * until the brand pays the budget in USDT on the payment page and
- * the admin approves it.
+ * any of TikTok / Instagram / YouTube, at least one), ONE Rate per
+ * 1k views for ALL selected platforms (any rate above $0 — your
+ * choice; the same rate applies to TikTok, Instagram and YouTube
+ * equally), Total Budget (any amount above $0 — your choice, no
+ * minimum), Max Payout Per Post (default $100, $10–$200), Minimum
+ * views per clip (floor 1,000 — blank by default, blank = 1,000,
+ * values below 1,000 are rejected), Campaign Brief (required,
+ * content instructions), Video Requirements (required), Google
+ * Drive Link (required — the content lives in Drive), Thumbnail
+ * Image Link (optional). There is NO per-creator payout cap: a
+ * creator's earnings depend on their views across their clips.
+ * Saves with status "pending" — nothing goes live until the brand
+ * pays the budget in USDT on the payment page and the admin
+ * approves it.
  *
- * Every validation failure shows the red error popup + shake + buzz
- * and blocks submit; a saved campaign redirects to the payment page.
- * The API re-validates everything server-side too.
+ * Every validation failure names the field, shows the red error
+ * popup + shake + buzz, scrolls to the first invalid field and
+ * focuses it, and blocks submit; a saved campaign redirects to the
+ * payment page. The API re-validates everything server-side too.
  */
 export default function BrandForm({
   isLoggedIn,
@@ -54,19 +59,25 @@ export default function BrandForm({
   // categories; required, defaults to UGC.
   const [category, setCategory] = useState<string>("UGC");
   const [platforms, setPlatforms] = useState<Platform[]>(["tiktok"]);
-  // Per-platform rates (P1-b): one rate per selected platform —
-  // e.g. TikTok $1.50/1k, YouTube $2.00/1k. Values persist when a
-  // platform is toggled off and back on.
-  const [rates, setRates] = useState<Partial<Record<Platform, string>>>({
-    tiktok: "",
-  });
-  const [minViews, setMinViews] = useState("1000");
-  const [maxPayoutPerCreator, setMaxPayoutPerCreator] = useState("");
+  // Single rate (item 2): ONE rate per 1k views for the whole
+  // campaign — the same rate applies to TikTok, Instagram and
+  // YouTube equally. On submit every selected platform's rate is
+  // set to this value.
+  const [rate, setRate] = useState("");
+  // Minimum views per clip (item 3): BLANK by default (placeholder
+  // "e.g. 1000") — blank means the 1,000 floor applies.
+  const [minViews, setMinViews] = useState("");
   const [budget, setBudget] = useState("");
   const [maxPayout, setMaxPayout] = useState(String(MAX_PAYOUT_DEFAULT));
-  const [description, setDescription] = useState("");
+  // Campaign Brief (item 5): the textarea that was "Campaign
+  // Description" — same DB column (`description`), relabelled and
+  // moved above Video Requirements. Required: creators need these
+  // content instructions (what to show, who to tag, hook, CTA).
+  const [brief, setBrief] = useState("");
   const [requirements, setRequirements] = useState("");
-  const [briefUrl, setBriefUrl] = useState("");
+  // Google Drive Link (item 6): REQUIRED — the content lives in
+  // Drive. Sent as `briefUrl` (the `brief_url` DB column).
+  const [driveUrl, setDriveUrl] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [durationDays, setDurationDays] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -81,6 +92,18 @@ export default function BrandForm({
   function fail(field: string, message: string) {
     setFieldErrors((prev) => ({ ...prev, [field]: message }));
     showError(message);
+    // Item 8: scroll the first invalid field into view and focus
+    // it, so the brand sees exactly where the error is (the toast
+    // alone is not enough). The field element exists already — the
+    // error text renders under it on the next paint.
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`field-${field}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const focusable = el?.querySelector(
+        "input, select, textarea"
+      ) as HTMLElement | null;
+      focusable?.focus({ preventScroll: true });
+    });
     return false;
   }
 
@@ -97,43 +120,40 @@ export default function BrandForm({
       showError("Please log in or sign up first to submit a campaign.");
       return;
     }
-    // Required fields first.
-    if (!brandName.trim()) return fail("brandName", "This field is required");
-    if (!title.trim()) return fail("title", "This field is required");
+    // Required fields first. Every message names its field
+    // (item 8) — a bare "This field is required" never says where.
+    if (!brandName.trim())
+      return fail("brandName", "Brand Name is required");
+    if (!title.trim())
+      return fail("title", "Campaign Title is required");
     if (!isCampaignCategory(category)) {
       return fail(
         "category",
-        "Error: Category must be one of UGC, Clipping, Lifestyle, Entertainment, Gaming, Technology."
+        `Category must be one of ${CAMPAIGN_CATEGORIES.join(", ")}.`
       );
     }
-    if (!description.trim())
-      return fail("description", "This field is required");
+    if (!brief.trim())
+      return fail("brief", "Campaign Brief is required");
     if (!requirements.trim())
-      return fail("requirements", "This field is required");
+      return fail("requirements", "Video Requirements is required");
     // Platforms — at least one is required.
     if (platforms.length === 0) {
-      return fail("platforms", "Select at least one platform");
+      return fail("platforms", "Platforms: select at least one platform");
     }
     // Money rules — any budget above $0 and any rate above $0.
     // There is no minimum budget and no minimum rate: your choice.
     const budgetNum = Number(budget);
     if (!Number.isFinite(budgetNum) || budgetNum <= 0) {
-      return fail("budget", "Error: Budget must be more than $0");
+      return fail("budget", "Budget must be more than $0");
     }
-    // Per-platform rates (P1-b): every selected platform needs its
-    // own rate above $0.
-    const platformLabel = (p: Platform) =>
-      p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube";
-    const ratesNum: Partial<Record<Platform, number>> = {};
-    for (const p of platforms) {
-      const v = Number(rates[p] ?? "");
-      if (!Number.isFinite(v) || v <= 0) {
-        return fail(
-          `rate-${p}`,
-          `Error: Rate for ${platformLabel(p)} must be more than $0 per 1k views`
-        );
-      }
-      ratesNum[p] = v;
+    // Single rate (item 2): ONE rate for all platforms — it must
+    // be more than $0 per 1k views.
+    const rateNum = Number(rate);
+    if (!Number.isFinite(rateNum) || rateNum <= 0) {
+      return fail(
+        "rate",
+        "Rate Per 1000 Views must be more than $0 per 1k views"
+      );
     }
     // Minimum views per clip: floor 1,000. Blank = 1,000 (the
     // floor default); anything below 1,000 is rejected.
@@ -145,20 +165,6 @@ export default function BrandForm({
         "Minimum views per clip must be at least 1,000"
       );
     }
-    // Max payout per creator (P1-b, optional): blank = no cap.
-    const maxPerCreatorNum =
-      maxPayoutPerCreator.trim() === ""
-        ? null
-        : Number(maxPayoutPerCreator);
-    if (
-      maxPerCreatorNum !== null &&
-      (!Number.isFinite(maxPerCreatorNum) || maxPerCreatorNum <= 0)
-    ) {
-      return fail(
-        "maxPayoutPerCreator",
-        "Error: Maximum payout per creator must be more than $0"
-      );
-    }
     const capNum = Number(maxPayout);
     if (
       !Number.isFinite(capNum) ||
@@ -167,20 +173,25 @@ export default function BrandForm({
     ) {
       return fail(
         "maxPayout",
-        `Error: Max payout per post must be between $${MAX_PAYOUT_MIN} and $${MAX_PAYOUT_MAX}`
+        `Max Payout Per Post must be between $${MAX_PAYOUT_MIN} and $${MAX_PAYOUT_MAX}`
       );
     }
     if (logoUrl.trim() && !/^https?:\/\//i.test(logoUrl.trim())) {
       return fail(
         "logoUrl",
-        "Brand logo must be a full URL starting with http:// or https://."
+        "Brand Logo must be a full URL starting with http:// or https://."
       );
     }
-    // Optional links — if given, they must be full URLs.
-    if (briefUrl.trim() && !/^https?:\/\//i.test(briefUrl.trim())) {
+    // Google Drive Link (item 6): REQUIRED, and a valid URL. Any
+    // valid URL is accepted — Drive links come in several forms,
+    // so the domain is NOT restricted to drive.google.com.
+    if (!driveUrl.trim()) {
+      return fail("driveUrl", "Google Drive Link is required");
+    }
+    if (!/^https?:\/\/.+\..+/.test(driveUrl.trim())) {
       return fail(
-        "briefUrl",
-        "Campaign Brief link must be a full URL starting with http:// or https://."
+        "driveUrl",
+        "Google Drive Link must be a valid URL starting with http:// or https://."
       );
     }
     if (thumbnailUrl.trim() && !/^https?:\/\//i.test(thumbnailUrl.trim())) {
@@ -204,9 +215,7 @@ export default function BrandForm({
     // backstop in case submit is triggered another way).
     const hasUnsetOptional =
       !logoUrl.trim() ||
-      !maxPayoutPerCreator.trim() ||
       durationDays === "" ||
-      !briefUrl.trim() ||
       !thumbnailUrl.trim() ||
       minViews.trim() === "";
     if (hasUnsetOptional && !ackUnset) {
@@ -227,17 +236,19 @@ export default function BrandForm({
           // Legacy single-platform column: "all" when all three are
           // chosen, otherwise the first chosen platform.
           platform: platforms.length === 3 ? "all" : platforms[0],
-          // Per-platform rates (P1-b); the legacy single rate is the
-          // first selected platform's rate.
-          rates: ratesNum,
-          ratePer1k: ratesNum[platforms[0]],
+          // Single rate (item 2): every selected platform's rate
+          // is this one value, and the legacy single rate is the
+          // same value — rates JSONB + legacy fields stay in sync.
+          rates: Object.fromEntries(platforms.map((p) => [p, rateNum])),
+          ratePer1k: rateNum,
           minViews: minViewsNum,
-          maxPayoutPerCreator: maxPerCreatorNum,
           budgetTotal: budgetNum,
           maxPayoutPerPost: capNum,
-          description: description.trim(),
+          // Campaign Brief (item 5) is stored in the `description`
+          // column; the Drive link (item 6, required) in `brief_url`.
+          description: brief.trim(),
           requirements: requirements.trim(),
-          briefUrl: briefUrl.trim() || null,
+          briefUrl: driveUrl.trim(),
           thumbnailUrl: thumbnailUrl.trim() || null,
           durationDays: durationDays === "" ? null : Number(durationDays),
         }),
@@ -287,18 +298,14 @@ export default function BrandForm({
     );
   }
 
-  // Live calculation example, updating as the brand types the rates
+  // Live calculation example, updating as the brand types the rate
   // and budget. Defaults ($1 per 1k, $200 budget) show the exact
-  // example while the fields are empty. With different rates per
-  // platform, the estimate uses the AVERAGE of the entered rates
-  // across the selected platforms — it is an estimate, labelled so.
-  const enteredRates = platforms
-    .map((p) => Number(rates[p] ?? ""))
-    .filter((v) => Number.isFinite(v) && v > 0);
+  // example while the fields are empty. One rate applies to every
+  // platform, so the estimate uses that single rate — it is an
+  // estimate, labelled so.
+  const enteredRate = Number(rate);
   const exampleRate =
-    enteredRates.length > 0
-      ? enteredRates.reduce((a, b) => a + b, 0) / enteredRates.length
-      : 1;
+    Number.isFinite(enteredRate) && enteredRate > 0 ? enteredRate : 1;
   const exampleBudget =
     Number.isFinite(Number(budget)) && Number(budget) > 0
       ? Number(budget)
@@ -319,21 +326,32 @@ export default function BrandForm({
   const fmtChoice = (n: number) =>
     `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
+  // Item 9: the Max Payout Per Post help example uses the brand's
+  // ENTERED rate + cap — at 100k views the clip earns
+  // min(100 × rate, cap). Fallbacks ($2 rate, $100 cap) keep the
+  // old example while the fields are still empty.
+  const capExampleRate =
+    Number.isFinite(Number(rate)) && Number(rate) > 0 ? Number(rate) : 2;
+  const capExampleCap =
+    Number.isFinite(Number(maxPayout)) && Number(maxPayout) > 0
+      ? Number(maxPayout)
+      : MAX_PAYOUT_DEFAULT;
+  const capExample = payoutForViews(100000, capExampleRate, capExampleCap);
+
   // Values shown on the pre-submit review panel (only reached
-  // after validation passes, so budget / rates / min views are
+  // after validation passes, so budget / rate / min views are
   // all valid numbers here).
   const reviewBudget = Number(budget);
   const reviewFee = platformFeeFor(reviewBudget);
   const reviewTotal = totalToSend(reviewBudget);
+  const reviewRate = Number(rate);
   const reviewMinViewsBlank = minViews.trim() === "";
   const reviewMinViews = reviewMinViewsBlank
     ? 1000
     : Math.floor(Number(minViews));
   const reviewUnset = {
     logo: !logoUrl.trim(),
-    maxPerCreator: !maxPayoutPerCreator.trim(),
     duration: durationDays === "",
-    brief: !briefUrl.trim(),
     thumbnail: !thumbnailUrl.trim(),
     minViews: reviewMinViewsBlank,
   };
@@ -409,12 +427,8 @@ export default function BrandForm({
                 {platforms.map(reviewPlatformName).join(", ")}
               </p>
               <p className="mt-1 text-sm text-fg/70">
-                {platforms
-                  .map(
-                    (p) =>
-                      `${reviewPlatformName(p)}: $${Number(rates[p] ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} per 1k views`
-                  )
-                  .join(" · ")}
+                One rate for all platforms:{" "}
+                {fmtChoice(reviewRate)} per 1k views
               </p>
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
@@ -459,26 +473,6 @@ export default function BrandForm({
             </div>
             <div
               className={`rounded-xl border px-4 py-3 ${
-                reviewUnset.maxPerCreator
-                  ? "border-amber-400/50 bg-amber-500/10"
-                  : "border-fg/10 bg-ink"
-              }`}
-            >
-              <p className="text-xs font-bold text-fg/50">
-                Maximum payout per creator
-              </p>
-              {reviewUnset.maxPerCreator ? (
-                <p className="mt-0.5 text-sm font-semibold text-amber-200">
-                  Not set — no cap
-                </p>
-              ) : (
-                <p className="mt-0.5 text-sm font-semibold text-fg">
-                  {fmtChoice(Number(maxPayoutPerCreator))}
-                </p>
-              )}
-            </div>
-            <div
-              className={`rounded-xl border px-4 py-3 ${
                 reviewUnset.duration
                   ? "border-amber-400/50 bg-amber-500/10"
                   : "border-fg/10 bg-ink"
@@ -495,23 +489,13 @@ export default function BrandForm({
                 </p>
               )}
             </div>
-            <div
-              className={`rounded-xl border px-4 py-3 ${
-                reviewUnset.brief
-                  ? "border-amber-400/50 bg-amber-500/10"
-                  : "border-fg/10 bg-ink"
-              }`}
-            >
-              <p className="text-xs font-bold text-fg/50">Brief link</p>
-              {reviewUnset.brief ? (
-                <p className="mt-0.5 text-sm font-semibold text-amber-200">
-                  Not set — optional
-                </p>
-              ) : (
-                <p className="mt-0.5 break-all text-sm font-semibold text-fg">
-                  {briefUrl.trim()}
-                </p>
-              )}
+            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">
+                Google Drive Link
+              </p>
+              <p className="mt-0.5 break-all text-sm font-semibold text-fg">
+                {driveUrl.trim()}
+              </p>
             </div>
             <div
               className={`rounded-xl border px-4 py-3 ${
@@ -532,13 +516,13 @@ export default function BrandForm({
               )}
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
-              <p className="text-xs font-bold text-fg/50">Description</p>
+              <p className="text-xs font-bold text-fg/50">Campaign Brief</p>
               <p className="mt-0.5 whitespace-pre-wrap text-sm text-fg/80">
-                {reviewTrunc(description.trim())}
+                {reviewTrunc(brief.trim())}
               </p>
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
-              <p className="text-xs font-bold text-fg/50">Requirements</p>
+              <p className="text-xs font-bold text-fg/50">Video Requirements</p>
               <p className="mt-0.5 whitespace-pre-wrap text-sm text-fg/80">
                 {reviewTrunc(requirements.trim())}
               </p>
@@ -559,7 +543,7 @@ export default function BrandForm({
       ) : (
         <>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <label className="block text-sm font-bold text-fg">
+        <label id="field-brandName" className="block text-sm font-bold text-fg">
           Brand Name
           <input
             value={brandName}
@@ -571,7 +555,7 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.brandName}</span>
           )}
         </label>
-        <label className="block text-sm font-bold text-fg">
+        <label id="field-logoUrl" className="block text-sm font-bold text-fg">
           Brand Logo <span className="font-medium text-fg/50">(optional)</span>
           <input
             value={logoUrl}
@@ -584,7 +568,7 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.logoUrl}</span>
           )}
         </label>
-        <label className="block text-sm font-bold text-fg">
+        <label id="field-title" className="block text-sm font-bold text-fg">
           Campaign Title
           <input
             value={title}
@@ -596,7 +580,7 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.title}</span>
           )}
         </label>
-        <label className="block text-sm font-bold text-fg">
+        <label id="field-category" className="block text-sm font-bold text-fg">
           Category
           <select
             value={category}
@@ -617,7 +601,10 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.category}</span>
           )}
         </label>
-        <div className="block text-sm font-bold text-fg md:col-span-2">
+        <div
+          id="field-platforms"
+          className="block text-sm font-bold text-fg md:col-span-2"
+        >
           Platforms
           <span className="mt-1 block text-xs font-medium text-fg/50">
             Pick at least one — creators post on the platforms you choose.
@@ -656,51 +643,30 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.platforms}</span>
           )}
         </div>
-        {/* Per-platform rates (P1-b): one rate input per selected
-            platform — different platforms can pay different rates,
-            e.g. TikTok $1.50/1k, YouTube $2.00/1k. */}
-        <div className="block text-sm font-bold text-fg">
+        {/* Single rate (item 2): ONE rate for the whole campaign —
+            the same rate applies to TikTok, Instagram and YouTube
+            equally. */}
+        <label id="field-rate" className="block text-sm font-bold text-fg">
           Rate Per 1000 Views (Your Choice)
           <span className="mt-1 block text-xs font-medium text-fg/50">
-            One rate per platform — each must be more than $0. Higher
-            rate = More creators will join fast.
+            One rate for all platforms — the same rate applies to
+            TikTok, Instagram and YouTube. Must be more than $0.
+            Higher rate = more creators will join fast.
           </span>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {platforms.map((p) => {
-              const label =
-                p === "tiktok"
-                  ? "TikTok"
-                  : p === "instagram"
-                    ? "Instagram"
-                    : "YouTube";
-              return (
-                <label
-                  key={p}
-                  className="block text-xs font-bold text-fg/80"
-                >
-                  {label} rate / 1k views ($)
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={rates[p] ?? ""}
-                    onChange={(e) =>
-                      setRates((prev) => ({ ...prev, [p]: e.target.value }))
-                    }
-                    placeholder="e.g. 1"
-                    className={inputCls}
-                  />
-                  {fieldErrors[`rate-${p}`] && (
-                    <span className={errCls}>
-                      {fieldErrors[`rate-${p}`]}
-                    </span>
-                  )}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-        <label className="block text-sm font-bold text-fg">
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            placeholder="e.g. 2"
+            className={inputCls}
+          />
+          {fieldErrors.rate && (
+            <span className={errCls}>{fieldErrors.rate}</span>
+          )}
+        </label>
+        <label id="field-budget" className="block text-sm font-bold text-fg">
           Budget (Your Choice)
           <input
             type="number"
@@ -726,7 +692,7 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.budget}</span>
           )}
         </label>
-        <label className="block text-sm font-bold text-fg md:col-span-2">
+        <label id="field-maxPayout" className="block text-sm font-bold text-fg md:col-span-2">
           Max Payout Per Post (USD)
           <input
             type="number"
@@ -740,56 +706,44 @@ export default function BrandForm({
           />
           <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
             Creator will never earn more than this on one post, even if
-            views are higher. Example: rate $2 per 1k views, cap $100 — a
-            video with 100k views earns $100, not $200. Range $
-            {MAX_PAYOUT_MIN}–${MAX_PAYOUT_MAX}.
+            views are higher. Example: at {fmtChoice(capExampleRate)} per
+            1k views, a video with 100k views would earn{" "}
+            {fmtChoice(capExample.uncapped)}
+            {capExample.capped ? (
+              <>
+                {" "}— capped at {fmtChoice(capExampleCap)}, so it earns{" "}
+                {fmtChoice(capExample.earnings)}.
+              </>
+            ) : (
+              <>.</>
+            )}{" "}
+            Range ${MAX_PAYOUT_MIN}–${MAX_PAYOUT_MAX}.
           </span>
           {fieldErrors.maxPayout && (
             <span className={errCls}>{fieldErrors.maxPayout}</span>
           )}
         </label>
-        <label className="block text-sm font-bold text-fg">
-          Minimum views per clip
+        <label id="field-minViews" className="block text-sm font-bold text-fg">
+          Minimum views per clip{" "}
+          <span className="font-medium text-fg/50">(optional)</span>
           <input
             type="number"
             min={1000}
             step="1"
             value={minViews}
             onChange={(e) => setMinViews(e.target.value)}
-            placeholder="1000"
+            placeholder="e.g. 1000"
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
-            Every clip needs at least 1,000 views to earn. Creators earn
-            only from clips that reach 1,000 views. You can set a higher
-            minimum if you want.
+            Optional — leave blank for the 1,000 minimum. Every clip
+            needs at least 1,000 views to earn.
           </span>
           {fieldErrors.minViews && (
             <span className={errCls}>{fieldErrors.minViews}</span>
           )}
         </label>
-        <label className="block text-sm font-bold text-fg">
-          Maximum payout per creator ($){" "}
-          <span className="font-medium text-fg/50">(optional)</span>
-          <input
-            type="number"
-            min={0}
-            step="1"
-            value={maxPayoutPerCreator}
-            onChange={(e) => setMaxPayoutPerCreator(e.target.value)}
-            placeholder="e.g. 500"
-            className={inputCls}
-          />
-          <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
-            The most one creator can earn from this campaign in total,
-            across all their approved clips. Leave blank for no cap.
-            This is on top of the 15-approved-clips-per-platform limit.
-          </span>
-          {fieldErrors.maxPayoutPerCreator && (
-            <span className={errCls}>{fieldErrors.maxPayoutPerCreator}</span>
-          )}
-        </label>
-        <label className="block text-sm font-bold text-fg md:col-span-2">
+        <label id="field-duration" className="block text-sm font-bold text-fg md:col-span-2">
           Campaign Duration
           <select
             value={durationDays}
@@ -806,50 +760,14 @@ export default function BrandForm({
             runs out — whichever comes first.
           </span>
         </label>
-        <label className="block text-sm font-bold text-fg md:col-span-2">
-          Campaign Brief / Google Drive Link{" "}
-          <span className="font-medium text-fg/50">(optional)</span>
-          <input
-            value={briefUrl}
-            onChange={(e) => setBriefUrl(e.target.value)}
-            placeholder="https://drive.google.com/..."
-            inputMode="url"
-            className={inputCls}
-          />
-          <span className="mt-1 block text-xs font-medium text-fg/50">
-            Paste your Drive link with videos, logos, assets for creators.
-          </span>
-          {fieldErrors.briefUrl && (
-            <span className={errCls}>{fieldErrors.briefUrl}</span>
-          )}
-        </label>
-        <label className="block text-sm font-bold text-fg md:col-span-2">
-          Thumbnail Image Link{" "}
-          <span className="font-medium text-fg/50">(optional)</span>
-          <input
-            value={thumbnailUrl}
-            onChange={(e) => setThumbnailUrl(e.target.value)}
-            placeholder="https://yourbrand.com/campaign-thumbnail.jpg"
-            inputMode="url"
-            className={inputCls}
-          />
-          <span className="mt-1 block text-xs font-medium text-fg/50">
-            Paste an image link — it will be used as the campaign banner
-            image. There is no file upload; link only.
-          </span>
-          {fieldErrors.thumbnailUrl && (
-            <span className={errCls}>{fieldErrors.thumbnailUrl}</span>
-          )}
-        </label>
       </div>
       {/* Live calculation example — updates as the brand types. The
-          views figure is an estimate from the average rate across
-          the selected platforms (exact views depend on which
-          platform each clip is posted on). */}
+          views figure is an estimate from the single rate (the same
+          rate applies on every platform). */}
       <div className="mt-4 rounded-2xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
-        Example (estimate, at the average rate of{" "}
-        {fmtChoice(Math.round(exampleRate * 100) / 100)} per 1k across
-        your selected platforms): If you set a budget of{" "}
+        Example (estimate, at{" "}
+        {fmtChoice(Math.round(exampleRate * 100) / 100)} per 1k on all
+        platforms): If you set a budget of{" "}
         {fmtChoice(exampleBudget)}, you will get approx{" "}
         {exampleViews.toLocaleString("en-US")} views. Budget{" "}
         {fmtChoice(exampleBudget)} + Platform fee (15%):{" "}
@@ -857,16 +775,20 @@ export default function BrandForm({
         {fmtChoice(exampleTotal)} · Creators pool (full budget):{" "}
         {fmtChoice(exampleBudget)}.
       </div>
-      <label className="mt-4 block text-sm font-bold text-fg">
-        Campaign Description
+      {/* Bottom of the form, in order (item 5): Campaign Brief →
+          Video Requirements → Google Drive Link → Thumbnail. */}
+      <label id="field-brief" className="mt-4 block text-sm font-bold text-fg">
+        Campaign Brief
         <span className="mt-1 block text-xs font-medium text-fg/50">
-          Write it in four short parts: What to show · What NOT to show ·
-          Hook · CTA. Creators read this before they film.
+          The content instructions for creators: what the content
+          should be for, who to tag, the hook, and the CTA. Write it in
+          four short parts: What to show · What NOT to show · Hook ·
+          CTA. Creators read this before they film.
         </span>
         <textarea
           rows={7}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
           placeholder={`Example — write your brief in four short parts:
 
 What to show: [Brand] is a [one-line product intro]. Show the product in real use, the result it gives, and your honest reaction.
@@ -878,11 +800,11 @@ Hook: Open with the problem in the first 3 seconds — e.g. "Stop wasting money 
 CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 for 10% off.`}
           className={`${inputCls} resize-none`}
         />
-        {fieldErrors.description && (
-          <span className={errCls}>{fieldErrors.description}</span>
+        {fieldErrors.brief && (
+          <span className={errCls}>{fieldErrors.brief}</span>
         )}
       </label>
-      <label className="mt-4 block text-sm font-bold text-fg">
+      <label id="field-requirements" className="mt-4 block text-sm font-bold text-fg">
         Video Requirements
         <span className="mt-1 block text-xs font-medium text-fg/50">
           The hard rules for every clip: format, hook, what must appear,
@@ -897,6 +819,42 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
         />
         {fieldErrors.requirements && (
           <span className={errCls}>{fieldErrors.requirements}</span>
+        )}
+      </label>
+      <label id="field-driveUrl" className="mt-4 block text-sm font-bold text-fg">
+        Google Drive Link
+        <span className="mt-1 block text-xs font-medium text-fg/50">
+          Required — paste the Drive link with your videos, logos and
+          assets for creators. The content lives in Drive, so creators
+          need this link to make their clips.
+        </span>
+        <input
+          value={driveUrl}
+          onChange={(e) => setDriveUrl(e.target.value)}
+          placeholder="https://drive.google.com/..."
+          inputMode="url"
+          className={inputCls}
+        />
+        {fieldErrors.driveUrl && (
+          <span className={errCls}>{fieldErrors.driveUrl}</span>
+        )}
+      </label>
+      <label id="field-thumbnailUrl" className="mt-4 block text-sm font-bold text-fg">
+        Thumbnail Image Link{" "}
+        <span className="font-medium text-fg/50">(optional)</span>
+        <input
+          value={thumbnailUrl}
+          onChange={(e) => setThumbnailUrl(e.target.value)}
+          placeholder="https://yourbrand.com/campaign-thumbnail.jpg"
+          inputMode="url"
+          className={inputCls}
+        />
+        <span className="mt-1 block text-xs font-medium text-fg/50">
+          Paste an image link — it will be used as the campaign banner
+          image. There is no file upload; link only.
+        </span>
+        {fieldErrors.thumbnailUrl && (
+          <span className={errCls}>{fieldErrors.thumbnailUrl}</span>
         )}
       </label>
         </>

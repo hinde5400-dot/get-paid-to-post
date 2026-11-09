@@ -14,17 +14,21 @@ const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
 /**
  * Brand campaign submission. Saves with status "pending" and
  * is_funded = false — nothing goes live until the owner approves it
- * in /admin (after the budget is funded). Per-platform rates (P1-b)
- * map to `rates` (rate per 1k views per platform); the legacy
- * `rate_per_1m` / `view_bonus_per_1k` carry the first selected
- * platform's rate as the fallback. There is no minimum budget and no
- * minimum rate — any budget above $0 and any rate above $0 are
- * accepted. Platforms are stored in campaigns.platforms
- * (migration 0012) with the legacy platform column kept in sync:
- * "all" when all three are chosen, otherwise the first chosen.
- * `min_views` (site-wide floor of 1,000 views per clip — missing
- * means 1,000, below 1,000 is rejected) and `max_payout_per_creator`
- * (null = no cap) are brand-set limits.
+ * in /admin (after the budget is funded). ONE rate per 1k views for
+ * the whole campaign (item 2): the single `ratePer1k` applies to
+ * every selected platform and is written into `rates` for all of
+ * them; the legacy `rate_per_1m` / `view_bonus_per_1k` carry the
+ * same rate as the fallback. A per-platform `rates` map is still
+ * accepted from older clients, but the single rate wins when both
+ * are sent. There is no minimum budget and no minimum rate — any
+ * budget above $0 and any rate above $0 are accepted. Platforms are
+ * stored in campaigns.platforms (migration 0012) with the legacy
+ * platform column kept in sync: "all" when all three are chosen,
+ * otherwise the first chosen. `min_views` (site-wide floor of 1,000
+ * views per clip — missing means 1,000, below 1,000 is rejected)
+ * and the REQUIRED Google Drive link (`brief_url`, item 6) are
+ * brand-set. There is NO per-creator payout cap (item 4): the
+ * `max_payout_per_creator` column is left unused, never written.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -46,14 +50,13 @@ export async function POST(request: Request) {
     platform?: string;
     platforms?: string[];
     ratePer1k?: number;
-    /** Per-platform rates (P1-b): { tiktok: 1.5, youtube: 2 } — rate
-     *  per 1,000 views for each selected platform. */
+    /** Per-platform rates (legacy): { tiktok: 1.5, youtube: 2 }.
+     *  Only used when no single `ratePer1k` is sent — the form
+     *  always sends one rate for all platforms (item 2). */
     rates?: Record<string, number>;
     /** Minimum views per clip, optional (P1-b). Missing = 1,000
      *  (the site-wide floor, migration 0028); below 1,000 is rejected. */
     minViews?: number | string;
-    /** Max payout per creator in $, optional (P1-b). Missing/null = no cap. */
-    maxPayoutPerCreator?: number | string | null;
     budgetTotal?: number;
     maxPayoutPerPost?: number;
     description?: string;
@@ -83,7 +86,7 @@ export async function POST(request: Request) {
   }
   if (!description) {
     return NextResponse.json(
-      { error: "This field is required: Campaign description." },
+      { error: "This field is required: Campaign Brief." },
       { status: 400 }
     );
   }
@@ -114,18 +117,21 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Any rate above $0 — there is no minimum rate. Per-platform
-  // rates (P1-b): every selected platform must have its own rate
-  // above $0. The form sends `rates`; the legacy single `ratePer1k`
-  // is still accepted and applies to every selected platform.
-  // (Platforms are parsed below, so the per-platform check runs
-  // after that block — see the `rates` validation there.)
+  // Any rate above $0 — there is no minimum rate. Single rate
+  // (item 2): ONE rate for the whole campaign. The form sends
+  // `ratePer1k` and it applies to every selected platform. A
+  // per-platform `rates` map is still accepted from older clients,
+  // but only when no single rate is sent. (Platforms are parsed
+  // below, so the rate check runs after that block.)
   const legacyRatePer1k = Number(body.ratePer1k ?? 0);
   const ratesInput =
     body.rates && typeof body.rates === "object" && !Array.isArray(body.rates)
       ? (body.rates as Record<string, unknown>)
       : null;
-  if (!ratesInput && (!Number.isFinite(legacyRatePer1k) || legacyRatePer1k <= 0)) {
+  if (
+    !ratesInput &&
+    (!Number.isFinite(legacyRatePer1k) || legacyRatePer1k <= 0)
+  ) {
     return NextResponse.json(
       { error: "Error: Rate must be more than $0 per 1k views" },
       { status: 400 }
@@ -166,15 +172,17 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Per-platform rates (P1-b): every selected platform needs a rate
-  // above $0. With `rates`, each selected platform must carry its
-  // own; without it, the legacy single rate applies to all of them.
+  // Single rate (item 2): the single `ratePer1k` — when sent —
+  // applies to EVERY selected platform. Without it, a legacy
+  // per-platform `rates` map is honoured per platform.
   const rates: Record<string, number> = {};
   for (const p of platforms) {
     const v =
-      ratesInput && ratesInput[p] !== undefined
-        ? Number(ratesInput[p])
-        : legacyRatePer1k;
+      Number.isFinite(legacyRatePer1k) && legacyRatePer1k > 0
+        ? legacyRatePer1k
+        : ratesInput && ratesInput[p] !== undefined
+          ? Number(ratesInput[p])
+          : NaN;
     if (!Number.isFinite(v) || v <= 0) {
       return NextResponse.json(
         {
@@ -185,8 +193,8 @@ export async function POST(request: Request) {
     }
     rates[p] = Math.round(v * 100) / 100;
   }
-  // The legacy single rate is the FIRST selected platform's rate,
-  // so old code paths (rate_per_1m, view_bonus_per_1k) keep working.
+  // The legacy single rate is the campaign's one rate, so old code
+  // paths (rate_per_1m, view_bonus_per_1k) keep working.
   const ratePer1k = rates[platforms[0]];
   // Minimum views per clip (P1-b, migration 0028): site-wide floor
   // of 1,000 — missing means 1,000, and anything below 1,000 is
@@ -202,37 +210,29 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Per-creator $ cap (P1-b): optional, null = no cap (the default).
-  const maxPayoutPerCreatorRaw = body.maxPayoutPerCreator;
-  const maxPayoutPerCreator =
-    maxPayoutPerCreatorRaw === null ||
-    maxPayoutPerCreatorRaw === undefined ||
-    maxPayoutPerCreatorRaw === ""
-      ? null
-      : Number(maxPayoutPerCreatorRaw);
-  if (
-    maxPayoutPerCreator !== null &&
-    (!Number.isFinite(maxPayoutPerCreator) || maxPayoutPerCreator <= 0)
-  ) {
-    return NextResponse.json(
-      { error: "Error: Maximum payout per creator must be more than $0" },
-      { status: 400 }
-    );
-  }
-  // Optional new fields (migration 0009): a Drive brief link, a
-  // thumbnail image link, and the campaign duration in days (null =
-  // runs until the budget ends).
+  // Optional new fields (migration 0009): a thumbnail image link
+  // and the campaign duration in days (null = runs until the
+  // budget ends). The Google Drive link (item 6) is REQUIRED —
+  // the content lives in Drive. Any valid URL is accepted (Drive
+  // links come in several forms — the domain is NOT restricted
+  // to drive.google.com).
   const briefUrl = String(body.briefUrl ?? "").trim();
   const thumbnailUrl = String(body.thumbnailUrl ?? "").trim();
   const durationDays =
     body.durationDays === null || body.durationDays === undefined
       ? null
       : Number(body.durationDays);
-  if (briefUrl && !/^https?:\/\/.+\..+/.test(briefUrl)) {
+  if (!briefUrl) {
+    return NextResponse.json(
+      { error: "This field is required: Google Drive Link." },
+      { status: 400 }
+    );
+  }
+  if (!/^https?:\/\/.+\..+/.test(briefUrl)) {
     return NextResponse.json(
       {
         error:
-          "Error: Campaign Brief link must be a valid URL (starts with http:// or https://).",
+          "Error: Google Drive Link must be a valid URL (starts with http:// or https://).",
       },
       { status: 400 }
     );
@@ -282,16 +282,16 @@ export async function POST(request: Request) {
     description,
     rules: requirements || null,
     view_bonus_per_1k: ratePer1k,
-    // Per-platform rates (P1-b, migration 0025) — the source of
-    // truth for review/earnings; the legacy fields above carry the
-    // first platform's rate as the fallback.
+    // Single rate (item 2, migration 0025) — the same rate for
+    // every selected platform; the legacy fields above carry the
+    // same rate as the fallback.
     rates,
     // Minimum views per clip (site-wide floor of 1,000, migration
-    // 0028 — a brand may set a higher threshold, never a lower one)
-    // and per-creator $ cap (null = no cap) — the cap is brand-set
-    // and optional.
+    // 0028 — a brand may set a higher threshold, never a lower
+    // one). There is NO per-creator payout cap (item 4): the
+    // `max_payout_per_creator` column is left unused and never
+    // written here.
     min_views: minViews,
-    max_payout_per_creator: maxPayoutPerCreator,
     // The per-post cap IS the "earn up to" figure shown on cards.
     max_payout_per_post: cap,
     views_tracked_days: 14,
@@ -331,7 +331,6 @@ export async function POST(request: Request) {
       "user_id",
       "rates",
       "min_views",
-      "max_payout_per_creator",
     ] as const) {
       if (new RegExp(col, "i").test(msg)) {
         delete retryRow[col];
