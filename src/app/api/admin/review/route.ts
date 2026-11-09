@@ -269,10 +269,10 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-    // Minimum views per clip (P1-b, migration 0025): when the brand
-    // set a threshold (min_views > 0), a clip below it cannot be
-    // approved — the owner must reject it instead.
-    const minViews = Number(campaign.min_views ?? 0);
+    // Minimum views per clip (site-wide floor 1,000, migration 0028):
+    // a clip below the campaign's minimum cannot be approved — the
+    // owner must reject it instead.
+    const minViews = Number(campaign.min_views ?? 1000);
     if (minViews > 0 && views < minViews) {
       return NextResponse.json(
         {
