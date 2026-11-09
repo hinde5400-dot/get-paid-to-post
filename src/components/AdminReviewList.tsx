@@ -336,7 +336,6 @@ export default function AdminReviewList({
               {s.rate_per_1k !== undefined
                 ? `${formatUSD(s.rate_per_1k)}/1k`
                 : "—"}
-              {" · "}Min 1,000 views per clip · No per-creator cap
             </p>
           )}
 

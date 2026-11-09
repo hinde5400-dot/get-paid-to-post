@@ -192,10 +192,8 @@ export default function RulesPage() {
           Every clip needs at least{" "}
           <strong className="text-fg">1,000 views to earn</strong> — a clip
           below 1,000 views cannot be approved. A brand may set a higher
-          minimum views per clip and/or a maximum payout per creator. When
-          set, both are shown on the campaign: a clip below the
-          campaign&apos;s minimum cannot be approved, and a creator cannot
-          earn more than the per-creator maximum in total on that campaign.
+          minimum views per clip. When set, it is shown on the campaign:
+          a clip below the campaign&apos;s minimum cannot be approved.
         </Rule>
         <Rule>
           Approved earnings move to your wallet after a 72-hour hold.
