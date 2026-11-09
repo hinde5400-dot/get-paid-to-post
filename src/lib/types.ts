@@ -15,6 +15,7 @@ export const CAMPAIGN_CATEGORIES = [
   "Clipping",
   "Lifestyle",
   "Entertainment",
+  "Music",
   "Gaming",
   "Technology",
 ] as const;
