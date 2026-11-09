@@ -10,6 +10,7 @@ import {
   PLATFORM_LABELS,
 } from "@/lib/constants";
 import { countWords, validatePostUrl } from "@/lib/validate";
+import { canonicalizePostUrl } from "@/lib/canonical-url";
 import type { Platform } from "@/lib/types";
 import { platformsFromRow, platformNamesText } from "@/lib/types";
 import { fetchYouTubeVideoDetails } from "@/lib/views/youtube";
@@ -122,6 +123,17 @@ export async function POST(request: Request) {
     if (!check.ok) {
       return NextResponse.json({ error: check.error }, { status: 400 });
     }
+  }
+
+  // Canonicalize BEFORE the duplicate check (and before the
+  // YouTube ownership gate): youtu.be / /shorts/ links become the
+  // watch URL, vm/vt.tiktok.com and ig.me short links resolve to
+  // their final URL. The canonical form is what gets stored, so
+  // the same video pasted under a different spelling is caught as
+  // a duplicate. Resolution never blocks a submit — on any failure
+  // the submitted URL is kept (see canonicalizePostUrl).
+  for (const l of links) {
+    l.url = await canonicalizePostUrl(l.url, l.platform);
   }
 
   // YouTube ownership gate (2026-11-09): a YouTube link only

@@ -31,15 +31,18 @@ export function extractTikTokVideoId(rawUrl: string): string | null {
   return match ? match[1] : null;
 }
 
-/** Resolve a vm.tiktok.com short link to its full URL (best effort). */
+import { resolveRedirectUrl } from "../canonical-url";
+
+/** Resolve a vm.tiktok.com short link to its full URL (best effort).
+ *  Shared logic lives in @/lib/canonical-url — any failure keeps
+ *  the submitted URL (5s timeout, never blocks the caller). */
 async function resolveShortLink(rawUrl: string): Promise<string> {
   try {
     const host = new URL(
       /^https?:\/\//i.test(rawUrl.trim()) ? rawUrl.trim() : `https://${rawUrl.trim()}`
     ).hostname.toLowerCase();
     if (host !== "vm.tiktok.com") return rawUrl;
-    const res = await fetch(rawUrl, { redirect: "follow" });
-    return res.url || rawUrl;
+    return resolveRedirectUrl(rawUrl);
   } catch {
     return rawUrl;
   }
