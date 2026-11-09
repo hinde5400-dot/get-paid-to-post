@@ -205,15 +205,13 @@ export async function getBrandCampaigns(userId: string): Promise<Campaign[]> {
  * 0003, same as getCampaignStats) plus total views across all
  * submissions on the campaign.
  *
- * Views are NOT in campaign_stats, and submissions are RLS-locked
- * to their creator (plus the owner), so a brand cannot read them
- * directly — a direct views read returns no rows for a brand. The
- * count from campaign_stats tells the two cases apart: when the
- * campaign genuinely has no submissions, views are 0; when it has
+ * Views come from campaign_stats.total_views (migration 0029).
+ * Until 0029 is run, the function returns no total_views column
+ * and the direct read below keeps it honest: when the campaign
+ * genuinely has no submissions, views are 0; when it has
  * submissions but the views read came back empty, the views are
  * RLS-blocked and total_views is null (shown as "—", never a fake
- * 0). A one-line migration adding sum(views) to campaign_stats
- * would light the column up for brands; until then it stays honest.
+ * 0).
  */
 export interface BrandCampaignStats extends CampaignStats {
   total_views: number | null;
@@ -224,6 +222,10 @@ export async function getBrandCampaignStats(
 ): Promise<BrandCampaignStats | null> {
   const stats = await getCampaignStats(campaignId);
   if (!stats) return null;
+  // Migration 0029: the RPC already summed the views for us.
+  if (stats.total_views !== null) {
+    return { ...stats, total_views: stats.total_views };
+  }
   const supabase = getServerClient();
   if (!supabase) return { ...stats, total_views: null };
   let total_views: number | null = null;
@@ -265,6 +267,12 @@ export interface CampaignStats {
   approved: number;
   members: number;
   active30d: number;
+  /**
+   * Sum of views across all submissions. Present once migration
+   * 0029 is run (or from the owner fallback below); null when the
+   * function predates 0029 and the views cannot be read.
+   */
+  total_views: number | null;
 }
 
 export async function getCampaignStats(
@@ -283,6 +291,12 @@ export async function getCampaignStats(
       approved: Number(row.approved ?? 0),
       members: Number(row.members ?? 0),
       active30d: Number(row.active_30d ?? 0),
+      // total_views exists once migration 0029 is run; before that
+      // the column is absent and this is null (never a fake 0).
+      total_views:
+        row.total_views !== undefined && row.total_views !== null
+          ? Number(row.total_views)
+          : null,
     };
   }
   // 2) Fallback: the owner can read every submission via RLS.
@@ -290,7 +304,7 @@ export async function getCampaignStats(
   if (isAdmin !== true) return null;
   const { data: rows, error: qError } = await supabase
     .from("submissions")
-    .select("user_id, status, created_at")
+    .select("user_id, status, created_at, views")
     .eq("campaign_id", campaignId);
   if (qError || !rows) return null;
   const list = rows as Record<string, unknown>[];
@@ -302,6 +316,7 @@ export async function getCampaignStats(
     active30d: list.filter(
       (r) => new Date(String(r.created_at)).getTime() >= cutoff
     ).length,
+    total_views: list.reduce((s, r) => s + Number(r.views ?? 0), 0),
   };
 }
 
