@@ -203,8 +203,10 @@ export interface Campaign {
   rates: PlatformRates;
   /**
    * Minimum views a clip needs before it can be approved (P1-b,
-   * migration 0025). 0 = no threshold (the default — Turn never
-   * chose a site-wide number, so the brand sets one or leaves 0).
+   * migration 0025; floor raised to 1,000 by migration 0028).
+   * Site-wide floor of 1,000 views per clip (Turn's 2026-11-10
+   * decision): the default is 1000 and the minimum is 1000 — a
+   * brand may set a higher threshold, never a lower one.
    */
   min_views: number;
   /**

@@ -22,8 +22,9 @@ const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
  * accepted. Platforms are stored in campaigns.platforms
  * (migration 0012) with the legacy platform column kept in sync:
  * "all" when all three are chosen, otherwise the first chosen.
- * `min_views` (0 = no threshold) and `max_payout_per_creator`
- * (null = no cap) are optional brand-set limits.
+ * `min_views` (site-wide floor of 1,000 views per clip — missing
+ * means 1,000, below 1,000 is rejected) and `max_payout_per_creator`
+ * (null = no cap) are brand-set limits.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -48,7 +49,8 @@ export async function POST(request: Request) {
     /** Per-platform rates (P1-b): { tiktok: 1.5, youtube: 2 } — rate
      *  per 1,000 views for each selected platform. */
     rates?: Record<string, number>;
-    /** Minimum views per clip, optional (P1-b). 0 / missing = no threshold. */
+    /** Minimum views per clip, optional (P1-b). Missing = 1,000
+     *  (the site-wide floor, migration 0028); below 1,000 is rejected. */
     minViews?: number | string;
     /** Max payout per creator in $, optional (P1-b). Missing/null = no cap. */
     maxPayoutPerCreator?: number | string | null;
@@ -186,16 +188,17 @@ export async function POST(request: Request) {
   // The legacy single rate is the FIRST selected platform's rate,
   // so old code paths (rate_per_1m, view_bonus_per_1k) keep working.
   const ratePer1k = rates[platforms[0]];
-  // Minimum views per clip (P1-b): optional, 0 = no threshold
-  // (the default — no site-wide number is imposed).
+  // Minimum views per clip (P1-b, migration 0028): site-wide floor
+  // of 1,000 — missing means 1,000, and anything below 1,000 is
+  // rejected. A brand may set a higher threshold, never a lower one.
   const minViewsRaw = body.minViews;
   const minViews =
     minViewsRaw === null || minViewsRaw === undefined || minViewsRaw === ""
-      ? 0
+      ? 1000
       : Math.floor(Number(minViewsRaw));
-  if (!Number.isFinite(minViews) || minViews < 0) {
+  if (!Number.isFinite(minViews) || minViews < 1000) {
     return NextResponse.json(
-      { error: "Error: Minimum views per clip must be 0 or more" },
+      { error: "Minimum views per clip must be at least 1,000" },
       { status: 400 }
     );
   }
@@ -283,8 +286,10 @@ export async function POST(request: Request) {
     // truth for review/earnings; the legacy fields above carry the
     // first platform's rate as the fallback.
     rates,
-    // Minimum views per clip (0 = no threshold) and per-creator $
-    // cap (null = no cap) — both brand-set, both optional.
+    // Minimum views per clip (site-wide floor of 1,000, migration
+    // 0028 — a brand may set a higher threshold, never a lower one)
+    // and per-creator $ cap (null = no cap) — the cap is brand-set
+    // and optional.
     min_views: minViews,
     max_payout_per_creator: maxPayoutPerCreator,
     // The per-post cap IS the "earn up to" figure shown on cards.

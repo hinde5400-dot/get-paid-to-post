@@ -38,8 +38,10 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     // Per-platform rates (P1-b, migration 0025): {} on old rows —
     // rateForPlatform() falls back to view_bonus_per_1k.
     rates: ratesFromRow(row),
-    // Minimum views per clip (P1-b): 0 = no threshold (default).
-    min_views: Number(row.min_views ?? 0),
+    // Minimum views per clip (P1-b; floor 1,000, migration 0028):
+    // default 1000, minimum 1000 — a brand may set a higher
+    // threshold, never a lower one.
+    min_views: Number(row.min_views ?? 1000),
     // Per-creator $ cap (P1-b): null = no cap (default).
     max_payout_per_creator:
       row.max_payout_per_creator == null
