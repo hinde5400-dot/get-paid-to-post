@@ -320,17 +320,10 @@ export default function AdminReviewList({
               : "Not auto-checked yet"}
           </p>
 
-          {(s.campaign_min_views != null && s.campaign_min_views > 0) ||
-          (s.campaign_max_payout_per_creator != null &&
-            s.campaign_max_payout_per_creator > 0) ? (
+          {s.campaign_min_views != null && s.campaign_min_views > 0 ? (
             <p className="mt-2 text-xs font-bold text-fg/70">
               Campaign limits:{" "}
               {`min ${Math.max(s.campaign_min_views ?? 0, 1000).toLocaleString()} views per clip — below this, approve is blocked`}
-              {" · "}
-              {s.campaign_max_payout_per_creator != null &&
-              s.campaign_max_payout_per_creator > 0
-                ? `max ${formatUSD(s.campaign_max_payout_per_creator)} per creator in total`
-                : "no per-creator cap"}
               {" · "}
               Rate for this clip ({PLATFORM_LABELS[s.platform]}):{" "}
               {s.rate_per_1k !== undefined
