@@ -20,7 +20,14 @@ export default function AdminSettingsForm({
   const { showError, showSuccess } = useToast();
   const router = useRouter();
   const [wallet, setWallet] = useState(currentWallet ?? "");
+  // The value that is actually saved on the server. The button is
+  // "Saved ✓" and disabled while the input still equals it — it
+  // only becomes "Save wallet address" again when the text changes
+  // (friend's brand test, 2026-11-11: every tap re-saved and
+  // looked like nothing stuck).
+  const [savedWallet, setSavedWallet] = useState(currentWallet ?? "");
   const [busy, setBusy] = useState(false);
+  const isSaved = savedWallet !== "" && wallet.trim() === savedWallet;
 
   async function save() {
     const address = wallet.trim();
@@ -39,6 +46,7 @@ export default function AdminSettingsForm({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the wallet.");
+      setSavedWallet(address);
       showSuccess("Admin wallet address saved.");
       router.refresh();
     } catch (err) {
@@ -55,11 +63,11 @@ export default function AdminSettingsForm({
         address. It is shown on the brand payment page after a campaign
         is submitted.
       </p>
-      {currentWallet && (
+      {savedWallet && (
         <p className="mt-3 rounded-xl bg-fg/5 px-4 py-3 text-xs leading-relaxed text-fg/60">
           Currently saved:{" "}
           <span className="break-all font-mono font-bold text-fg">
-            {currentWallet}
+            {savedWallet}
           </span>
         </p>
       )}
@@ -81,13 +89,15 @@ export default function AdminSettingsForm({
       <button
         type="button"
         onClick={() => void save()}
-        disabled={busy}
+        disabled={busy || isSaved}
         className="mt-4 flex items-center justify-center gap-2 rounded-full bg-red-500 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy ? (
           <>
             <Spinner /> Loading...
           </>
+        ) : isSaved ? (
+          "Saved ✓"
         ) : (
           "Save wallet address"
         )}
