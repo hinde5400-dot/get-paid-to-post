@@ -109,6 +109,33 @@ export { isCampaignLive, isCampaignSettling, campaignStatus } from "./campaigns"
 import { isCampaignLive } from "./campaigns";
 
 /**
+ * 7-day expiry for unpaid pending campaigns — the SAME rule as
+ * migration 0030's campaign_expired_unpaid_pending() predicate,
+ * so the API routes and the daily cron can never drift apart:
+ * status = 'pending' AND no payment_tx_id (null or empty — chat
+ * messages and screenshots do NOT count as payment) AND
+ * created_at is 7 or more days old. "Unpaid" means NO TxID, not
+ * "not is_funded": is_funded only becomes true at approve time,
+ * so a campaign with a submitted TxID is paid for expiry
+ * purposes even while it is still pending approval.
+ */
+export const UNPAID_PENDING_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function isExpiredUnpaidPending(campaign: {
+  status?: string | null;
+  payment_tx_id?: string | null;
+  created_at?: string | null;
+}): boolean {
+  if (campaign.status !== "pending") return false;
+  if (String(campaign.payment_tx_id ?? "").trim()) return false;
+  const created = campaign.created_at
+    ? new Date(campaign.created_at).getTime()
+    : NaN;
+  if (!Number.isFinite(created)) return false;
+  return Date.now() - created >= UNPAID_PENDING_EXPIRY_MS;
+}
+
+/**
  * Live funded campaigns from Supabase only. There are no sample or
  * fallback campaigns: a campaign appears here only after a brand has
  * funded its budget and it is live. When none exist, this returns []
