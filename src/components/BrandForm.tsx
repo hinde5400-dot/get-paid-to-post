@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
+import ImageUploadField from "@/components/ImageUploadField";
 import {
   TikTokIcon,
   InstagramIcon,
@@ -20,23 +21,27 @@ import {
 } from "@/components/PlatformIcons";
 
 /**
- * Brand campaign form — Brand Name, Brand Logo (optional), Campaign
- * Title, Category (UGC / Clipping / Lifestyle / Entertainment /
- * Gaming / Technology, required, defaults to UGC), Platforms (pick
- * any of TikTok / Instagram / YouTube, at least one), ONE Rate per
- * 1k views for ALL selected platforms (any rate above $0 — your
- * choice; the same rate applies to TikTok, Instagram and YouTube
- * equally), Total Budget (any amount above $0 — your choice, no
- * minimum), Max Payout Per Post (default $100, $10–$200), Minimum
- * views per clip (floor 1,000 — blank by default, blank = 1,000,
- * values below 1,000 are rejected), Campaign Brief (required,
- * content instructions), Video Requirements (required), Google
- * Drive Link (required — the content lives in Drive), Thumbnail
- * Image Link (optional). There is NO per-creator payout cap: a
- * creator's earnings depend on their views across their clips.
- * Saves with status "pending" — nothing goes live until the brand
- * pays the budget in USDT on the payment page and the admin
- * approves it.
+ * Brand campaign form — Brand Name, Brand Logo (REQUIRED file
+ * upload), Campaign Title, Category (UGC / Clipping / Lifestyle /
+ * Entertainment / Gaming / Technology, required, defaults to UGC),
+ * Platforms (pick any of TikTok / Instagram / YouTube, at least
+ * one), ONE Rate per 1k views for ALL selected platforms (any rate
+ * above $0 — your choice; the same rate applies to TikTok,
+ * Instagram and YouTube equally), Total Budget (any amount above
+ * $0 — your choice, no minimum), Max Payout Per Post (default
+ * $100, $10–$200), Minimum views per clip (floor 1,000 — blank by
+ * default, blank = 1,000, values below 1,000 are rejected),
+ * Campaign Brief (required, content instructions), Video
+ * Requirements (required), Google Drive Link (required — the
+ * content lives in Drive), Thumbnail (REQUIRED file upload).
+ * Brand Logo and Thumbnail are file uploads with an upload button
+ * (Turn's decision 2026-11-10) — NOT link fields: PNG, JPG or
+ * WebP, max 2 MB each, uploaded to the public 'campaign-images'
+ * bucket at confirmed submit (migration 0032). There is NO
+ * per-creator payout cap: a creator's earnings depend on their
+ * views across their clips. Saves with status "pending" — nothing
+ * goes live until the brand pays the budget in USDT on the payment
+ * page and the admin approves it.
  *
  * Every validation failure names the field, shows the red error
  * popup + shake + buzz, scrolls to the first invalid field and
@@ -53,7 +58,41 @@ export default function BrandForm({
   const { showError, showSuccess } = useToast();
   const router = useRouter();
   const [brandName, setBrandName] = useState(initialBrandName ?? "");
-  const [logoUrl, setLogoUrl] = useState("");
+  // Brand Logo + Thumbnail (Turn's decision 2026-11-10): REQUIRED
+  // file uploads, NOT link fields. The files are picked here (local
+  // preview only) and uploaded at confirmed submit — the returned
+  // storage URLs are what the campaign POST sends.
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
+    null
+  );
+
+  function pickLogo(f: File | null) {
+    if (logoPreview) URL.revokeObjectURL(logoPreview);
+    setLogoFile(f);
+    setLogoPreview(f ? URL.createObjectURL(f) : null);
+  }
+
+  function pickThumbnail(f: File | null) {
+    if (thumbnailPreview) URL.revokeObjectURL(thumbnailPreview);
+    setThumbnailFile(f);
+    setThumbnailPreview(f ? URL.createObjectURL(f) : null);
+  }
+
+  // Free the local preview URLs when the form unmounts.
+  useEffect(
+    () => () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+      if (thumbnailPreview) URL.revokeObjectURL(thumbnailPreview);
+    },
+    // Previews are only ever replaced through pickLogo /
+    // pickThumbnail (which revoke the old one); the cleanup only
+    // needs to run once, on unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
   const [title, setTitle] = useState("");
   // Category (P1-a): one of the six Content Rewards-style
   // categories; required, defaults to UGC.
@@ -78,7 +117,6 @@ export default function BrandForm({
   // Google Drive Link (item 6): REQUIRED — the content lives in
   // Drive. Sent as `briefUrl` (the `brief_url` DB column).
   const [driveUrl, setDriveUrl] = useState("");
-  const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [durationDays, setDurationDays] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
@@ -99,8 +137,10 @@ export default function BrandForm({
     requestAnimationFrame(() => {
       const el = document.getElementById(`field-${field}`);
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Hidden file inputs are skipped (the upload fields focus
+      // their Upload button instead).
       const focusable = el?.querySelector(
-        "input, select, textarea"
+        "input:not([type='file']), select, textarea, button"
       ) as HTMLElement | null;
       focusable?.focus({ preventScroll: true });
     });
@@ -111,6 +151,23 @@ export default function BrandForm({
     setPlatforms((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
+  }
+
+  // Upload one campaign image (logo or thumbnail) to the public
+  // 'campaign-images' bucket (migration 0032). Returns the public
+  // URL the campaign POST stores in logo_url / thumbnail_url.
+  async function uploadImage(file: File, kind: "logo" | "thumbnail") {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("kind", kind);
+    const res = await fetch("/api/campaigns/upload-image", {
+      method: "POST",
+      body: form,
+    });
+    const data = await res.json();
+    if (!res.ok)
+      throw new Error(data.error || "Could not upload the image.");
+    return String(data.url ?? "");
   }
 
   async function submit(e: React.FormEvent) {
@@ -124,6 +181,13 @@ export default function BrandForm({
     // (item 8) — a bare "This field is required" never says where.
     if (!brandName.trim())
       return fail("brandName", "Brand Name is required");
+    // Brand Logo (Turn's decision 2026-11-10): REQUIRED file
+    // upload — no link field any more.
+    if (!logoFile)
+      return fail(
+        "logoUrl",
+        "Brand Logo is required — upload your logo image."
+      );
     if (!title.trim())
       return fail("title", "Campaign Title is required");
     if (!isCampaignCategory(category)) {
@@ -176,12 +240,6 @@ export default function BrandForm({
         `Max Payout Per Post must be between $${MAX_PAYOUT_MIN} and $${MAX_PAYOUT_MAX}`
       );
     }
-    if (logoUrl.trim() && !/^https?:\/\//i.test(logoUrl.trim())) {
-      return fail(
-        "logoUrl",
-        "Brand Logo must be a full URL starting with http:// or https://."
-      );
-    }
     // Google Drive Link (item 6): REQUIRED, and a valid URL. Any
     // valid URL is accepted — Drive links come in several forms,
     // so the domain is NOT restricted to drive.google.com.
@@ -194,12 +252,13 @@ export default function BrandForm({
         "Google Drive Link must be a valid URL starting with http:// or https://."
       );
     }
-    if (thumbnailUrl.trim() && !/^https?:\/\//i.test(thumbnailUrl.trim())) {
+    // Thumbnail (Turn's decision 2026-11-10): REQUIRED file
+    // upload — no link field any more.
+    if (!thumbnailFile)
       return fail(
         "thumbnailUrl",
-        "Thumbnail Image Link must be a full URL starting with http:// or https://."
+        "Thumbnail is required — upload a banner image."
       );
-    }
     // Pre-submit review step: all required validation passed, so
     // show the review panel first. The second submit (from the
     // review panel, with reviewing already true) runs the POST
@@ -212,24 +271,36 @@ export default function BrandForm({
     // Confirmed submit from the review panel: if any optional
     // setting is unset, the brand must tick "I understand — submit
     // anyway" first (the button is disabled until then; this is a
-    // backstop in case submit is triggered another way).
+    // backstop in case submit is triggered another way). Logo and
+    // thumbnail are REQUIRED uploads, so they are never "unset
+    // optional" any more — only duration and min views are.
     const hasUnsetOptional =
-      !logoUrl.trim() ||
-      durationDays === "" ||
-      !thumbnailUrl.trim() ||
-      minViews.trim() === "";
+      durationDays === "" || minViews.trim() === "";
     if (hasUnsetOptional && !ackUnset) {
       showError("Please tick “I understand — submit anyway” to continue.");
       return;
     }
+    // Both images passed validation above, so they are set here —
+    // narrow them once for the upload step below.
+    const logo = logoFile;
+    const thumbnail = thumbnailFile;
+    if (!logo || !thumbnail) {
+      showError("Brand Logo and Thumbnail are both required.");
+      return;
+    }
     setBusy(true);
     try {
+      // Upload the images first (at confirmed submit only — a
+      // brand that goes "Back to edit" never uploads anything),
+      // then create the campaign with the returned storage URLs.
+      const logoUrl = await uploadImage(logo, "logo");
+      const thumbnailUrl = await uploadImage(thumbnail, "thumbnail");
       const res = await fetch("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandName: brandName.trim(),
-          logoUrl: logoUrl.trim() || null,
+          logoUrl,
           title: title.trim(),
           category,
           platforms,
@@ -249,7 +320,7 @@ export default function BrandForm({
           description: brief.trim(),
           requirements: requirements.trim(),
           briefUrl: driveUrl.trim(),
-          thumbnailUrl: thumbnailUrl.trim() || null,
+          thumbnailUrl,
           durationDays: durationDays === "" ? null : Number(durationDays),
         }),
       });
@@ -350,9 +421,7 @@ export default function BrandForm({
     ? 1000
     : Math.floor(Number(minViews));
   const reviewUnset = {
-    logo: !logoUrl.trim(),
     duration: durationDays === "",
-    thumbnail: !thumbnailUrl.trim(),
     minViews: reviewMinViewsBlank,
   };
   const reviewHasUnset = Object.values(reviewUnset).some(Boolean);
@@ -395,23 +464,19 @@ export default function BrandForm({
               <p className="text-xs font-bold text-fg/50">Brand Name</p>
               <p className="mt-0.5 text-sm font-semibold text-fg">{brandName.trim()}</p>
             </div>
-            <div
-              className={`rounded-xl border px-4 py-3 ${
-                reviewUnset.logo
-                  ? "border-amber-400/50 bg-amber-500/10"
-                  : "border-fg/10 bg-ink"
-              }`}
-            >
+            <div className="flex items-center gap-3 rounded-xl border border-fg/10 bg-ink px-4 py-3">
               <p className="text-xs font-bold text-fg/50">Brand Logo</p>
-              {reviewUnset.logo ? (
-                <p className="mt-0.5 text-sm font-semibold text-amber-200">
-                  Not set — no logo will be shown
-                </p>
-              ) : (
-                <p className="mt-0.5 break-all text-sm font-semibold text-fg">
-                  Set — {logoUrl.trim()}
-                </p>
+              {logoPreview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={logoPreview}
+                  alt="Brand logo preview"
+                  className="h-12 w-12 rounded-lg object-cover"
+                />
               )}
+              <p className="mt-0.5 min-w-0 truncate text-sm font-semibold text-fg">
+                {logoFile?.name ?? "Logo selected"}
+              </p>
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
               <p className="text-xs font-bold text-fg/50">Campaign Title</p>
@@ -497,23 +562,19 @@ export default function BrandForm({
                 {driveUrl.trim()}
               </p>
             </div>
-            <div
-              className={`rounded-xl border px-4 py-3 ${
-                reviewUnset.thumbnail
-                  ? "border-amber-400/50 bg-amber-500/10"
-                  : "border-fg/10 bg-ink"
-              }`}
-            >
-              <p className="text-xs font-bold text-fg/50">Thumbnail link</p>
-              {reviewUnset.thumbnail ? (
-                <p className="mt-0.5 text-sm font-semibold text-amber-200">
-                  Not set — default banner will be used
-                </p>
-              ) : (
-                <p className="mt-0.5 break-all text-sm font-semibold text-fg">
-                  {thumbnailUrl.trim()}
-                </p>
+            <div className="flex items-center gap-3 rounded-xl border border-fg/10 bg-ink px-4 py-3">
+              <p className="text-xs font-bold text-fg/50">Thumbnail</p>
+              {thumbnailPreview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={thumbnailPreview}
+                  alt="Thumbnail preview"
+                  className="h-12 w-20 rounded-lg object-cover"
+                />
               )}
+              <p className="mt-0.5 min-w-0 truncate text-sm font-semibold text-fg">
+                {thumbnailFile?.name ?? "Thumbnail selected"}
+              </p>
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
               <p className="text-xs font-bold text-fg/50">Campaign Brief</p>
@@ -555,19 +616,17 @@ export default function BrandForm({
             <span className={errCls}>{fieldErrors.brandName}</span>
           )}
         </label>
-        <label id="field-logoUrl" className="block text-sm font-bold text-fg">
-          Brand Logo <span className="font-medium text-fg/50">(optional)</span>
-          <input
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-            placeholder="https://yourbrand.com/logo.png"
-            inputMode="url"
-            className={inputCls}
-          />
-          {fieldErrors.logoUrl && (
-            <span className={errCls}>{fieldErrors.logoUrl}</span>
-          )}
-        </label>
+        <ImageUploadField
+          fieldId="field-logoUrl"
+          label="Brand Logo"
+          help="Required — upload your logo. It shows on your campaign card. PNG, JPG or WebP — max 2 MB."
+          buttonLabel="Upload logo (PNG, JPG or WebP — max 2 MB)"
+          file={logoFile}
+          previewUrl={logoPreview}
+          error={fieldErrors.logoUrl}
+          disabled={busy}
+          onPick={pickLogo}
+        />
         <label id="field-title" className="block text-sm font-bold text-fg">
           Campaign Title
           <input
@@ -839,24 +898,19 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
           <span className={errCls}>{fieldErrors.driveUrl}</span>
         )}
       </label>
-      <label id="field-thumbnailUrl" className="mt-4 block text-sm font-bold text-fg">
-        Thumbnail Image Link{" "}
-        <span className="font-medium text-fg/50">(optional)</span>
-        <input
-          value={thumbnailUrl}
-          onChange={(e) => setThumbnailUrl(e.target.value)}
-          placeholder="https://yourbrand.com/campaign-thumbnail.jpg"
-          inputMode="url"
-          className={inputCls}
+      <div className="mt-4">
+        <ImageUploadField
+          fieldId="field-thumbnailUrl"
+          label="Thumbnail"
+          help="Required — upload a banner image for your campaign. PNG, JPG or WebP — max 2 MB."
+          buttonLabel="Upload thumbnail (PNG, JPG or WebP — max 2 MB)"
+          file={thumbnailFile}
+          previewUrl={thumbnailPreview}
+          error={fieldErrors.thumbnailUrl}
+          disabled={busy}
+          onPick={pickThumbnail}
         />
-        <span className="mt-1 block text-xs font-medium text-fg/50">
-          Paste an image link — it will be used as the campaign banner
-          image. There is no file upload; link only.
-        </span>
-        {fieldErrors.thumbnailUrl && (
-          <span className={errCls}>{fieldErrors.thumbnailUrl}</span>
-        )}
-      </label>
+      </div>
         </>
       )}
       {reviewing ? (
