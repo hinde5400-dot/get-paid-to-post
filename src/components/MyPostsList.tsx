@@ -150,22 +150,21 @@ export default function MyPostsList({
                   Rejected: {s.rejection_reason}
                 </p>
               )}
-              {/* Appeals (P1-c, Content Rewards model: one appeal per
-                  flag, aim 10 business days; Terms §8). One appeal
-                  per rejection, via Discord — a person reviews it.
-                  No in-app appeals system: the appeal itself happens
-                  on Discord. */}
+              {/* Appeals: no in-app appeals system — the appeal
+                  itself happens on Discord, where a person reviews
+                  it. No count is promised: appeals are not tracked
+                  in-app, so the copy must not claim "one appeal". */}
               {s.status === "rejected" && (
                 <p className="mt-3 rounded-xl bg-fg/5 px-4 py-2.5 text-sm leading-relaxed text-fg/70">
-                  Think this was a mistake? You get one appeal for this
-                  rejection — open a ticket on our{" "}
+                  Think this was a mistake? If you think this rejection
+                  was wrong, appeal through{" "}
                   <a
                     href={DISCORD_URL}
                     target="_blank"
                     rel="noreferrer"
                     className="font-bold text-lime underline"
                   >
-                    Discord server
+                    Discord support
                   </a>{" "}
                   and a person will review it. We aim to reply within 10
                   business days.
@@ -185,7 +184,7 @@ export default function MyPostsList({
                 <p className="mt-3 rounded-xl bg-amber-500/15 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">
                   ⚠ Flagged — payout paused: {s.flag_reason}. The admin
                   is reviewing it. If you believe it is a mistake, you
-                  can appeal once via Discord support.
+                  can appeal through Discord support.
                 </p>
               )}
               <div className="mt-4 grid grid-cols-4 gap-3 text-center">
@@ -215,27 +214,40 @@ export default function MyPostsList({
                 </div>
               </div>
               {/* Engagement self-check vs the 1% gate (likes +
-                  comments only). */}
-              {(() => {
-                const rate = engagementRate(s.likes, s.comments, s.views);
-                if (rate === null) return null;
-                const ok = rate >= MIN_ENGAGEMENT_RATE;
-                return (
-                  <p
-                    className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold leading-relaxed ${
-                      ok
-                        ? "bg-lime/10 text-lime"
-                        : "bg-red-500/15 text-red-300"
-                    }`}
-                  >
-                    Engagement {formatEngagementRate(rate)} (likes +
-                    comments / views) —{" "}
-                    {ok
-                      ? "above the 1% minimum ✓"
-                      : "below the 1% minimum — this clip cannot be approved"}
-                  </p>
-                );
-              })()}
+                  comments only). Shown ONLY for clips under review
+                  (pending) or approved — never on rejected rows
+                  (a green check on a dead clip, or a "cannot be
+                  approved" verdict on a clip whose views are still
+                  tracking, both mislead). Pending clips are still
+                  tracking: views update every 3 hours for 14 days,
+                  so the verdict is phrased as "currently … — still
+                  tracking", not final. */}
+              {s.status !== "rejected" &&
+                (() => {
+                  const rate = engagementRate(s.likes, s.comments, s.views);
+                  if (rate === null) return null;
+                  const ok = rate >= MIN_ENGAGEMENT_RATE;
+                  const pending = s.status === "pending";
+                  return (
+                    <p
+                      className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold leading-relaxed ${
+                        ok
+                          ? "bg-lime/10 text-lime"
+                          : "bg-red-500/15 text-red-300"
+                      }`}
+                    >
+                      Engagement {formatEngagementRate(rate)} (likes +
+                      comments / views) —{" "}
+                      {ok
+                        ? pending
+                          ? "currently above the 1% minimum — still tracking (views update every 3 hours for 14 days)"
+                          : "above the 1% minimum ✓"
+                        : pending
+                          ? "currently below the 1% minimum — still tracking (views update every 3 hours for 14 days)"
+                          : "below the 1% minimum — this clip cannot be approved"}
+                    </p>
+                  );
+                })()}
               {/* Earnings breakdown — locked at approval: the views
                   above are the latest count and may have grown
                   since, so the math is never restated from them. */}
