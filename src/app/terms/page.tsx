@@ -4,7 +4,7 @@ export default function TermsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Terms of Service</h1>
-      <p className="text-sm text-fg/50">Last updated: 7 November 2026</p>
+      <p className="text-sm text-fg/50">Last updated: 10 November 2026</p>
 
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">1. What {BRAND_NAME} is</h2>
@@ -54,9 +54,9 @@ export default function TermsPage() {
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">3. Accounts</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
-          You sign up with email and password only. You are responsible for
-          keeping your password safe and for everything posted from your
-          account. One account per person.
+          You sign up with email and password, or continue with Google.
+          You are responsible for keeping your password safe and for
+          everything posted from your account. One account per person.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           Payouts are for creators aged 18 or older. You must be at least
@@ -71,10 +71,15 @@ export default function TermsPage() {
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Clips must be vertical 9:16, with captions and a hook in the first 3 seconds.</li>
           <li>• Only TikTok, Instagram and YouTube links are accepted.</li>
-          <li>• You are paid per verified view only — there is no base pay per post. Earnings are the smaller of (views / 1,000 × the campaign&apos;s rate per 1,000 views), the campaign maximum per post, and the remaining campaign budget. Views are tracked for 14 days.</li>
+          <li>• Submit your link within 30 minutes of posting the video — a link posted more than 30 minutes earlier is not accepted. Instagram links are hand-checked by the admin (no automatic check yet).</li>
+          <li>• You are paid per verified view only — there is no base pay per post. Earnings are the smaller of (views / 1,000 × the campaign&apos;s rate per 1,000 views), the campaign maximum per post, and the remaining campaign budget. Views are tracked for 14 days. The campaign sets one rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube.</li>
+          <li>• A clip needs at least 1,000 views to earn — a clip below 1,000 views cannot be approved. A brand may set a higher minimum for its campaign.</li>
+          <li>• Maximum payout per post: set by the brand between $10 and $200; $100 when the brand does not set one.</li>
+          <li>• Every clip needs at least 1% engagement — (likes + comments) / views. Shares and saves never count. A clip below 1% cannot be approved.</li>
           <li>• Submissions stay Pending at $0 until approved.</li>
-          <li>• Approved earnings move to your wallet after a 72-hour hold.</li>
-          <li>• Up to 15 approved clips per platform per campaign (TikTok 15, Instagram 15, YouTube 15), and one clip per platform every 2 hours. Rejected clips do not count toward the limit.</li>
+          <li>• Approved earnings move to your wallet after a 72-hour hold, starting at approval.</li>
+          <li>• Up to 15 approved clips per platform per campaign (TikTok 15, Instagram 15, YouTube 15), and one clip per platform every 2 hours, across all campaigns on that platform. A rejected or duplicate submission does not start the cooldown. Rejected clips do not count toward the limit.</li>
+          <li>• A rejected clip is done — there is no resubmit. Post a new clip instead. Every rejection shows its reason.</li>
         </ul>
       </section>
 
@@ -82,9 +87,9 @@ export default function TermsPage() {
         <h2 className="text-lg font-extrabold text-fg">5. Withdrawals</h2>
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Minimum withdrawal is $15.</li>
-          <li>• A 5% fee applies at withdrawal — you receive amount × 0.95.</li>
+          <li>• A 5% fee applies at withdrawal — the fee is rounded to the nearest cent, and you receive the amount after the fee, shown before you confirm.</li>
           <li>• Payout methods: USDT (TRC20) and USDT (BEP20) only.</li>
-          <li>• Payouts are processed by the platform owner from the funded campaign budget.</li>
+          <li>• Payouts are processed by hand by the platform owner from the funded campaign budget. The site never sends money automatically.</li>
         </ul>
       </section>
 
@@ -92,9 +97,16 @@ export default function TermsPage() {
         <h2 className="text-lg font-extrabold text-fg">6. Brands and funding</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           A brand campaign only goes live after its budget is funded. The
-          brand sets its own budget — any amount above $0. Brands pay
-          only for verified views. Unspent budget stays the brand&apos;s:
-          it is refunded within 5–7 business days of the request.
+          brand sets its own budget — any amount above $0 — and its own
+          single rate per 1,000 views for the whole campaign. A 15%
+          platform fee is charged on top of the budget: the brand sends
+          budget + 15%, and the campaign runs on the full budget. Brands
+          pay only for verified views. Unspent budget stays the
+          brand&apos;s: it is refunded within 5–7 business days of the
+          request. A campaign that stays pending without payment expires
+          after 7 days. One day after payout finishes, the campaign, its
+          proofs and its chat are deleted automatically; money records
+          (wallets, withdrawals) are never deleted.
         </p>
         <h3 className="mt-4 text-sm font-extrabold text-fg">
           How brand funds are protected
@@ -116,7 +128,10 @@ export default function TermsPage() {
           Only real views from real people count. Fake engagement will lead
           to your account being strictly blocked or banned. Submitting someone
           else&apos;s content, or the same clip twice, will lead to the
-          submission being rejected.
+          submission being rejected. Bot-view rejections add up: 6 is a
+          concern, 10 flags the account, and one more bot-view rejection
+          after the flag bans the account automatically. Every rejection
+          shows its reason.
         </p>
       </section>
 

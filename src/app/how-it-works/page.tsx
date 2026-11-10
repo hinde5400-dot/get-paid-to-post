@@ -3,12 +3,12 @@ import { BRAND_NAME } from "@/lib/constants";
 import { getCurrentUser } from "@/lib/auth";
 
 const STEPS = [
-  { n: "1", t: "Sign up free", d: "Create your account with email and password only. No phone, no address, no extra details." },
+  { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. No phone, no address, no extra details." },
   { n: "2", t: "Connect your profiles", d: "Add your TikTok, Instagram and YouTube profile links so your clips can be matched to you." },
   { n: "3", t: "Pick a funded campaign", d: "Browse live campaigns, read the brief and the rate, and choose one that fits your style." },
   { n: "4", t: "Make your clip", d: "Film vertical 9:16, add captions, and hook viewers in the first 3 seconds. Keep it original and on-brief." },
-  { n: "5", t: "Post and submit", d: "Post on the campaign's platforms and submit the links as one bundle, with proof and a short note on how you made it." },
-  { n: "6", t: "Wait for approval", d: "Submissions stay Pending at $0 until approved. Approved earnings move into a 72-hour hold, then to your available balance." },
+  { n: "5", t: "Post and submit", d: "Post on the campaign's platforms and submit the links as one bundle, with proof and a short note on how you made it. Submit your link within 30 minutes of posting — Instagram links are hand-checked by the admin." },
+  { n: "6", t: "Wait for approval", d: "Submissions stay Pending at $0 until approved. Approved earnings move into a 72-hour hold starting at approval, then to your available balance." },
   { n: "7", t: "Withdraw your earnings", d: "Withdraw from $15 in USDT (TRC20 or BEP20). A 5% fee applies at withdrawal." },
 ];
 
@@ -43,13 +43,19 @@ export default async function HowItWorksPage() {
         <h2 className="text-lg font-extrabold text-fg">The money rules</h2>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Earnings are views only — you are paid the campaign&apos;s rate per 1,000 verified views, up to the per-post cap. There is no base pay per post.</li>
+          <li>• One rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube.</li>
+          <li>• Maximum payout per post: set by the brand, $10–$200; $100 when the brand does not set one.</li>
           <li>• View bonus: the campaign&apos;s rate per 1,000 views, tracked for 14 days.</li>
           <li>• Every clip needs at least 1,000 views to earn — a clip below 1,000 views cannot be approved. A brand may set a higher minimum for its campaign.</li>
-          <li>• Approved earnings sit in a 72-hour hold, then become available.</li>
+          <li>• Every clip needs at least 1% engagement — (likes + comments) / views. Shares and saves never count.</li>
+          <li>• Submit your link within 30 minutes of posting — Instagram links are hand-checked by the admin (no automatic check yet).</li>
+          <li>• Approved earnings sit in a 72-hour hold starting at approval, then become available.</li>
           <li>• Minimum withdrawal: $15. Withdrawal fee: 5%.</li>
           <li>• Payouts: USDT (TRC20 or BEP20) only.</li>
           <li>• Brands fund every campaign upfront — any budget, set by the brand.</li>
-          <li>• One clip per platform every 2 hours, up to 15 approved clips per platform.</li>
+          <li>• One clip per platform every 2 hours, across all campaigns on that platform — a rejected or duplicate submission does not start the cooldown. Up to 15 approved clips per platform. A rejected clip cannot be resubmitted — post a new clip.</li>
+          <li>• Bot-view rejections add up: 6 = concern, 10 = flagged, one more bot-view rejection after the flag = the account is banned automatically. Every rejection shows its reason.</li>
+          <li>• One day after payout finishes, the campaign, its proofs and its chat are deleted. Your earnings history stays in your account.</li>
         </ul>
       </div>
 

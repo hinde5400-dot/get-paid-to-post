@@ -2,7 +2,7 @@ export default function RefundPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Refund Policy</h1>
-      <p className="text-sm text-fg/50">Last updated: 7 November 2026</p>
+      <p className="text-sm text-fg/50">Last updated: 10 November 2026</p>
 
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">1. Brand budgets</h2>
@@ -30,9 +30,10 @@ export default function RefundPage() {
         <h2 className="text-lg font-extrabold text-fg">2. Creator withdrawals</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           Withdrawals that have already been settled — paid to your USDT
-          wallet — are never reversed. Only unsettled amounts, earnings
-          still in your Pending Balance, can be returned to the campaign
-          budget.
+          wallet — are never reversed. Earnings can be reversed from
+          your Pending Balance first, then from your Withdrawable
+          Balance, and returned to the campaign budget — only amounts
+          already withdrawn (paid out) cannot be taken back.
         </p>
       </section>
 

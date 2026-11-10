@@ -59,7 +59,7 @@ export default function RulesPage() {
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">
         Rules
       </h1>
-      <p className="text-sm text-fg/50">Last updated: 9 November 2026</p>
+      <p className="text-sm text-fg/50">Last updated: 10 November 2026</p>
       <p className="text-sm leading-relaxed text-fg/70">
         Every rule on {BRAND_NAME} in one place — for creators and for
         brands. Nothing here is new: it is the same rules already in the{" "}
@@ -98,7 +98,7 @@ export default function RulesPage() {
       <Section id="who-can-join" n="1" title="Who can join">
         <Rule>
           Anyone can sign up and browse campaigns — you sign up with email
-          and password only. No phone, no address. One account per person.
+          and password, or continue with Google. No phone, no address. One account per person.
         </Rule>
         <Rule>
           There is no follower minimum. You are paid per view, so a small
@@ -142,14 +142,18 @@ export default function RulesPage() {
           without proof is not accepted.
         </Rule>
         <Rule>
-          One clip per platform every 2 hours — after you submit on
-          TikTok, your next TikTok submit for that campaign is 2 hours
-          later, and the same for Instagram and YouTube.
+          One clip per platform every 2 hours — across all campaigns
+          on that platform, not per campaign. After you submit on
+          TikTok, your next TikTok submit on any campaign is 2 hours
+          later, and the same for Instagram and YouTube. A rejected or
+          duplicate submission does not start the cooldown.
         </Rule>
         <Rule>
           Submit your link within 30 minutes of posting the video — a link
           submitted more than 30 minutes after the video was posted is not
-          accepted.
+          accepted. Instagram links are hand-checked by the admin (no
+          automatic check yet), so the 30-minute rule is checked by hand
+          for Instagram.
         </Rule>
         <Rule>
           Up to <strong className="text-fg">15 approved clips per platform per campaign</strong>{" "}
@@ -231,7 +235,7 @@ export default function RulesPage() {
       <Section id="budget" n="6" title="Budget display">
         <Rule>
           Campaign cards show the budget as{" "}
-          <strong className="text-fg">% remaining only — never a $ amount</strong>.
+          <strong className="text-fg">% used only — never a $ amount</strong>.
           The bar goes green → yellow → red → dark red as the budget is
           used up, and at 100% used the campaign ends.
         </Rule>
@@ -257,6 +261,11 @@ export default function RulesPage() {
           <strong className="text-fg">Then payout.</strong> Withdraw in
           USDT (TRC20 or BEP20) from $15. From campaign end to payout:{" "}
           <strong className="text-fg">about 1 week in total</strong>.
+        </Rule>
+        <Rule>
+          One day after payout finishes, the campaign, its proofs and
+          its chat are deleted automatically. Your earnings history
+          stays in your account.
         </Rule>
       </Section>
 
@@ -322,10 +331,11 @@ export default function RulesPage() {
           to you.
         </Rule>
         <Rule>
-          Clips are rejected only against the requirements you stated in
-          the campaign — for example brief mismatch or wrong content. A
-          clip that follows your brief and the video rules is not rejected
-          for anything else.
+          Clips are rejected against the requirements you stated in
+          the campaign — for example brief mismatch or wrong content.
+          A clip can still be rejected for fake or bot views, below-1%
+          engagement, or duplicates, even if it follows the brief and
+          the video rules.
         </Rule>
         <Rule>
           Unspent budget stays yours: it is refunded within{" "}
