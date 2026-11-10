@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import type { BrandMessage, Campaign } from "@/lib/types";
-import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, getSubmissionStatusCounts, getBrandMessagesCount, getUnreadBrandMessagesCount, getBotRejectionRowCount, isCampaignSettling, campaignStatus } from "@/lib/data";
+import { getAllSubmissions, getAllSubmissionsUnpaged, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getBrandMessagesUnpaged, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, getSubmissionStatusCounts, getBrandMessagesCount, getUnreadBrandMessagesCount, getBotRejectionRowCount, isCampaignSettling, campaignStatus } from "@/lib/data";
 import { fraudStatus } from "@/lib/fraud";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -63,12 +63,17 @@ export default async function AdminPage({
   // Forms #26: a failed load renders an honest error state, never
   // an empty admin view. The list getters THROW on DB error.
   let submissions: Awaited<ReturnType<typeof getAllSubmissions>> = [];
+  let allSubmissions: Awaited<ReturnType<typeof getAllSubmissionsUnpaged>> =
+    [];
   let statusCounts = { pending: 0, approved: 0, rejected: 0, total: 0 };
   let pendingCampaigns: Awaited<ReturnType<typeof getPendingCampaigns>> =
     [];
   let withdrawals: Awaited<ReturnType<typeof getAllWithdrawals>> = [];
   let adminWallet: string | null = null;
   let brandMessages: Awaited<ReturnType<typeof getBrandMessages>> = [];
+  let allBrandMessages: Awaited<
+    ReturnType<typeof getBrandMessagesUnpaged>
+  > = [];
   let messagesTotal = 0;
   let unreadMessages = 0;
   let botRows: Awaited<ReturnType<typeof getCreatorBotRejections>> = [];
@@ -83,6 +88,10 @@ export default async function AdminPage({
       limit: REVIEW_PAGE_SIZE,
       offset: (reviewPage - 1) * REVIEW_PAGE_SIZE,
     });
+    // Derived sections (Payouts / Creators / re-check) and the
+    // Proof/Chat flags need EVERY row, not just the current page —
+    // see allItems / hasProof below.
+    allSubmissions = await getAllSubmissionsUnpaged();
     statusCounts = await getSubmissionStatusCounts();
     pendingCampaigns = await getPendingCampaigns();
     withdrawals = await getAllWithdrawals();
@@ -91,6 +100,7 @@ export default async function AdminPage({
       limit: INBOX_PAGE_SIZE,
       offset: (inboxPage - 1) * INBOX_PAGE_SIZE,
     });
+    allBrandMessages = await getBrandMessagesUnpaged();
     messagesTotal = await getBrandMessagesCount();
     unreadMessages = await getUnreadBrandMessagesCount();
     botRows = await getCreatorBotRejections();
@@ -130,6 +140,15 @@ export default async function AdminPage({
   }
 
   const items: AdminSubmission[] = submissions.map((s) => ({
+    ...s,
+    creator_email: emailById.get(s.user_id) ?? s.user_id.slice(0, 8),
+  }));
+
+  // Derived sections (Payouts / Creators / post-end re-check) are
+  // built from EVERY submission, not the current review page —
+  // otherwise approved earnings past page 1 would vanish from
+  // Payouts. The review list itself stays paged (items above).
+  const allItems: AdminSubmission[] = allSubmissions.map((s) => ({
     ...s,
     creator_email: emailById.get(s.user_id) ?? s.user_id.slice(0, 8),
   }));
@@ -207,8 +226,9 @@ export default async function AdminPage({
   // containing a Transaction ID (exactly 64 hex chars, bounded —
   // the same definition as isValidTronTxId). A plain "hello" text
   // used to light up the "Proof ↗" button; now it shows "Chat".
-  // Computed from the current inbox page only (see the note on
-  // page-scoped sections below).
+  // Proof/Chat flags are computed from EVERY brand message, not
+  // the current inbox page — otherwise a proof on an older inbox
+  // page would show "Proof — none yet" for its campaign.
   function isProofMessage(m: BrandMessage): boolean {
     if (m.message_type === "image" || m.image_path || m.proof_url)
       return true;
@@ -218,7 +238,7 @@ export default async function AdminPage({
   }
   const hasProof: Record<string, boolean> = {};
   const hasMessages: Record<string, boolean> = {};
-  for (const m of brandMessages) {
+  for (const m of allBrandMessages) {
     hasMessages[m.campaign_id] = true;
     if (isProofMessage(m)) hasProof[m.campaign_id] = true;
   }
@@ -247,7 +267,7 @@ export default async function AdminPage({
   // withdrawal request, as one list. Display + flag only — the
   // money flow (manual USDT payouts) does not change.
   const payoutRows: PayoutRow[] = [];
-  for (const s of items) {
+  for (const s of allItems) {
     if (s.status === "approved") {
       const holdUntil = s.hold_until ? new Date(s.hold_until) : null;
       const inHold = holdUntil !== null && holdUntil.getTime() > Date.now();
@@ -328,7 +348,7 @@ export default async function AdminPage({
   // with clip count, total views and total earnings (approved
   // earnings only — rejected clips pay $0).
   const creatorMap = new Map<string, CreatorRow>();
-  for (const s of items) {
+  for (const s of allItems) {
     let row = creatorMap.get(s.user_id);
     if (!row) {
       row = {
@@ -405,7 +425,7 @@ export default async function AdminPage({
       .filter((c) => isCampaignSettling(c))
       .map((c) => c.id)
   );
-  const recheckItems = items.filter(
+  const recheckItems = allItems.filter(
     (s) => settlingIds.has(s.campaign_id) && s.status === "approved"
   );
 
@@ -561,7 +581,7 @@ export default async function AdminPage({
           Discord. Open a thread to read it — opening a thread marks its messages as read.
         </p>
         <div className="mt-4">
-          <AdminMessagesList messages={brandMessages} total={messagesTotal} page={inboxPage} pageSize={INBOX_PAGE_SIZE} />
+          <AdminMessagesList messages={brandMessages} total={messagesTotal} page={inboxPage} pageSize={INBOX_PAGE_SIZE} otherPage={reviewPage} />
         </div>
       </section>
 
@@ -684,6 +704,7 @@ export default async function AdminPage({
             total={statusCounts.total}
             page={reviewPage}
             pageSize={REVIEW_PAGE_SIZE}
+            otherPage={inboxPage}
             instagramUrls={Object.fromEntries(instagramById)}
           />
         </div>

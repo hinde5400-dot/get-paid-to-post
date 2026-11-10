@@ -26,17 +26,25 @@ export default async function Navbar() {
   }
 
   // Campaigns the signed-in user has joined (for the JOINED section
-  // of the sidebar drawer). Empty for guests.
+  // of the sidebar drawer). Empty for guests. Forms #26: the data
+  // getters THROW on DB error — a failed lookup must not 500 the
+  // whole navbar (it renders on every page), so fall back to an
+  // empty joined list; the pages themselves show their own honest
+  // error states when their data fails to load.
   let joined: { id: string; title: string }[] = [];
   if (user) {
-    const [subs, campaigns] = await Promise.all([
-      getUserSubmissions(user.id),
-      getCampaigns(),
-    ]);
-    const ids = new Set(subs.map((s) => s.campaign_id));
-    joined = campaigns
-      .filter((c) => ids.has(c.id))
-      .map((c) => ({ id: c.id, title: c.title }));
+    try {
+      const [subs, campaigns] = await Promise.all([
+        getUserSubmissions(user.id),
+        getCampaigns(),
+      ]);
+      const ids = new Set(subs.map((s) => s.campaign_id));
+      joined = campaigns
+        .filter((c) => ids.has(c.id))
+        .map((c) => ({ id: c.id, title: c.title }));
+    } catch {
+      joined = [];
+    }
   }
 
   return (

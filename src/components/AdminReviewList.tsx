@@ -51,6 +51,9 @@ export default function AdminReviewList({
   total = null,
   page = 1,
   pageSize = 100,
+  /** The inbox's current page, so Prev/Next links keep it instead
+   *  of resetting the inbox to page 1. */
+  otherPage = 1,
   /** Creators' linked Instagram profile URLs (users.instagram_url,
    *  pasted at onboarding) — for the Instagram hand-check below. */
   instagramUrls = {},
@@ -61,6 +64,7 @@ export default function AdminReviewList({
   total?: number | null;
   page?: number;
   pageSize?: number;
+  otherPage?: number;
   instagramUrls?: Record<string, string>;
 }) {
   const router = useRouter();
@@ -647,8 +651,9 @@ export default function AdminReviewList({
           )}
 
           {/* Flag action (admin batch 2): a flagged payout is paused
-              — not a rejection, nothing reverses. One appeal per
-              flag via Discord; Approve / Reject / Unflag decides it. */}
+              — not a rejection, nothing reverses. Appeal through
+              Discord support if you think this flag was wrong;
+              Approve / Reject / Unflag decides it. */}
           {s.status !== "rejected" &&
             (flags[s.id] ? (
               <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
@@ -801,7 +806,7 @@ export default function AdminReviewList({
         <div className="flex gap-2">
           {page > 1 ? (
             <a
-              href={`?reviewPage=${page - 1}`}
+              href={`?reviewPage=${page - 1}${otherPage > 1 ? `&inboxPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               ← Prev
@@ -813,7 +818,7 @@ export default function AdminReviewList({
           )}
           {page < totalPages ? (
             <a
-              href={`?reviewPage=${page + 1}`}
+              href={`?reviewPage=${page + 1}${otherPage > 1 ? `&inboxPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               Next →

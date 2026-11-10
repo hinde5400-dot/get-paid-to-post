@@ -17,7 +17,37 @@ export default async function EarningsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const wallet = await getWallet(user.id);
-  const withdrawals = await getWithdrawals(user.id);
+  // Forms #26: getWithdrawals THROWS on DB error — a failed load
+  // renders an honest error state, never an empty "no withdrawals"
+  // view.
+  let withdrawals: Awaited<ReturnType<typeof getWithdrawals>>;
+  try {
+    withdrawals = await getWithdrawals(user.id);
+  } catch {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Earnings</h1>
+        </div>
+        <div className="rounded-3xl border border-red-500/40 bg-card p-8 text-center">
+          <p className="text-lg font-black text-fg">
+            Couldn&apos;t load your earnings
+          </p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+            Your earnings could not be loaded — please try again. Your
+            money is safe; this is a loading problem, not an empty
+            balance.
+          </p>
+          <a
+            href="/earnings"
+            className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+          >
+            Try again
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   const available = wallet?.available_balance ?? 0;
   const pending = wallet?.pending_balance ?? 0;

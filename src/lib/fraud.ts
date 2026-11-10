@@ -1,6 +1,6 @@
 // Bot-view rejection ladder (P1-c, Turn's decisions 2026-11-09,
 // Content Rewards model: a flag pauses things for a human to
-// decide, botting = permanent ban with one appeal).
+// decide, botting = permanent ban (appeal through Discord support)).
 //
 // Counted per creator (user_id) across ALL campaigns, from
 // submissions with rejection_reason exactly 'bot views' (the fixed

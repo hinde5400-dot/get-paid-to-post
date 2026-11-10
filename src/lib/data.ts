@@ -483,37 +483,63 @@ export async function getAllSubmissions(
   // getCampaigns).
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Could not load submissions.");
-  return (data as Record<string, unknown>[]).map((row) => {
-    const s = mapSubmission(row);
-    const camp = row.campaigns as {
-      title?: string;
-      view_bonus_per_1k?: number;
-      max_payout_per_post?: number;
-      rates?: Record<string, unknown> | null;
-      min_views?: number | null;
-      max_payout_per_creator?: number | null;
-      budget_left?: number | null;
-    } | null;
-    s.campaign_title = camp?.title;
-    // Single rate (P1-b): ONE rate per 1,000 views for the whole
-    // campaign — rateForPlatform() returns the campaign's one
-    // rate (view_bonus_per_1k) for every platform and ignores the
-    // legacy per-platform `rates` map entirely. The old comment
-    // here said "platform-specific rate", which was stale.
-    const legacyRate = Number(camp?.view_bonus_per_1k ?? 0);
-    s.rate_per_1k =
-      rateForPlatform(
-        { rates: ratesFromRow((camp ?? {}) as Record<string, unknown>), view_bonus_per_1k: legacyRate },
-        s.platform
-      ) || undefined;
-    s.max_payout_per_post =
-      Number(camp?.max_payout_per_post ?? 0) || undefined;
-    s.campaign_min_views = camp?.min_views ?? null;
-    s.campaign_max_payout_per_creator = camp?.max_payout_per_creator ?? null;
-    s.campaign_budget_left =
-      camp?.budget_left == null ? undefined : Number(camp.budget_left);
-    return s;
-  });
+  return (data as Record<string, unknown>[]).map(mapSubmissionWithCampaign);
+}
+
+/** Shared row mapping for getAllSubmissions + getAllSubmissionsUnpaged:
+ *  a submission row joined with its campaign's title, single rate,
+ *  cap, min views and remaining budget. */
+function mapSubmissionWithCampaign(row: Record<string, unknown>): Submission {
+  const s = mapSubmission(row);
+  const camp = row.campaigns as {
+    title?: string;
+    view_bonus_per_1k?: number;
+    max_payout_per_post?: number;
+    rates?: Record<string, unknown> | null;
+    min_views?: number | null;
+    max_payout_per_creator?: number | null;
+    budget_left?: number | null;
+  } | null;
+  s.campaign_title = camp?.title;
+  // Single rate (P1-b): ONE rate per 1,000 views for the whole
+  // campaign — rateForPlatform() returns the campaign's one
+  // rate (view_bonus_per_1k) for every platform and ignores the
+  // legacy per-platform `rates` map entirely. The old comment
+  // here said "platform-specific rate", which was stale.
+  const legacyRate = Number(camp?.view_bonus_per_1k ?? 0);
+  s.rate_per_1k =
+    rateForPlatform(
+      { rates: ratesFromRow((camp ?? {}) as Record<string, unknown>), view_bonus_per_1k: legacyRate },
+      s.platform
+    ) || undefined;
+  s.max_payout_per_post =
+    Number(camp?.max_payout_per_post ?? 0) || undefined;
+  s.campaign_min_views = camp?.min_views ?? null;
+  s.campaign_max_payout_per_creator = camp?.max_payout_per_creator ?? null;
+  s.campaign_budget_left =
+    camp?.budget_left == null ? undefined : Number(camp.budget_left);
+  return s;
+}
+
+/**
+ * All submissions, newest first — owner only, NO pagination. For
+ * the /admin derived sections (Payouts, Creators, post-end
+ * re-check) only: those sections must see every submission, not
+ * just the current review page, or approved earnings past page 1
+ * would vanish from Payouts. The review list itself stays paged
+ * (getAllSubmissions). Admin-only page, submissions grow slowly.
+ * Throws on DB error, per the Forms #26 contract.
+ */
+export async function getAllSubmissionsUnpaged(): Promise<Submission[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("submissions")
+    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load submissions.");
+  return (data as Record<string, unknown>[]).map(mapSubmissionWithCampaign);
 }
 
 export async function getWallet(userId: string): Promise<Wallet | null> {
@@ -608,7 +634,11 @@ export async function getAllWithdrawals(): Promise<Withdrawal[]> {
     .from("withdrawals")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(200);
+    // Same truncation class as the old review limit (P1-7): past
+    // 2,000 the oldest requests would vanish from /admin. The
+    // admin Withdrawals section shows the whole list, so keep the
+    // cap high; withdrawals grow slowly (one row per request).
+    .limit(2000);
   // Forms #26 contract: throw on DB error, never [] (see
   // getCampaigns).
   if (error) throw new Error(error.message);
@@ -843,6 +873,28 @@ export async function getBrandMessages(
     .range(offset, offset + limit - 1);
   // Forms #26 contract: throw on DB error, never [] (see
   // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load brand messages.");
+  return (data as Record<string, unknown>[]).map(mapBrandMessage);
+}
+
+/**
+ * Every brand message, newest first — owner only, NO pagination.
+ * For the /admin Proof/Chat flags only: those flags must see every
+ * message, not just the current inbox page, or a proof sitting on
+ * an older inbox page would show "Proof — none yet". The inbox
+ * list itself stays paged (getBrandMessages). Throws on DB error,
+ * per the Forms #26 contract.
+ */
+export async function getBrandMessagesUnpaged(): Promise<BrandMessage[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("brand_messages")
+    .select(
+      "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read, campaigns(title, brand_name, payment_tx_id)"
+    )
+    .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Could not load brand messages.");
   return (data as Record<string, unknown>[]).map(mapBrandMessage);

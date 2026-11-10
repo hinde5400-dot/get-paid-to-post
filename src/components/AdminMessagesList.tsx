@@ -31,11 +31,15 @@ export default function AdminMessagesList({
   total = null,
   page = 1,
   pageSize = 100,
+  /** The review list's current page, so Prev/Next links keep it
+   *  instead of resetting the review list to page 1. */
+  otherPage = 1,
 }: {
   messages: BrandMessage[];
   total?: number | null;
   page?: number;
   pageSize?: number;
+  otherPage?: number;
 }) {
   const { showError, showSuccess } = useToast();
   const [messages, setMessages] = useState<BrandMessage[]>(initial);
@@ -303,7 +307,7 @@ export default function AdminMessagesList({
         <div className="flex gap-2">
           {page > 1 ? (
             <a
-              href={`?inboxPage=${page - 1}`}
+              href={`?inboxPage=${page - 1}${otherPage > 1 ? `&reviewPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               ← Prev
@@ -315,7 +319,7 @@ export default function AdminMessagesList({
           )}
           {page < totalPages ? (
             <a
-              href={`?inboxPage=${page + 1}`}
+              href={`?inboxPage=${page + 1}${otherPage > 1 ? `&reviewPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               Next →

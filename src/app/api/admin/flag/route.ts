@@ -18,8 +18,8 @@ const MAX_REASON = 200;
  * submission's 72h hold cannot release while flagged (see
  * release_matured_holds). From flagged state the admin Approves,
  * Rejects (full reversal as today) or Unflags — deciding resolves
- * the flag automatically (see /api/admin/review). One appeal per
- * flag via Discord (process, not a column).
+ * the flag automatically (see /api/admin/review). Appeals go
+ * through Discord support (process, not a column).
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       message:
-        "Flagged — payout paused until you decide. One appeal per flag via Discord.",
+        "Flagged — payout paused until you decide. Appeal through Discord support if you think this flag was wrong.",
     });
   }
 

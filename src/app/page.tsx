@@ -93,7 +93,35 @@ async function BrandHome({
   user: User;
   profile: UserProfile;
 }) {
-  const campaigns = await getBrandCampaigns(user.id);
+  // Forms #26: getBrandCampaigns THROWS on DB error — a failed load
+  // renders an honest error state, never an empty "no campaigns" view.
+  let campaigns: Awaited<ReturnType<typeof getBrandCampaigns>>;
+  try {
+    campaigns = await getBrandCampaigns(user.id);
+  } catch {
+    return (
+      <div className="space-y-10">
+        <section className="pt-6 text-center md:pt-10">
+          <div className="rounded-3xl border border-red-500/40 bg-card p-10 text-center">
+            <p className="font-display text-2xl font-black uppercase tracking-tight text-fg">
+              Couldn&apos;t load your campaigns
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+              Your campaigns could not be loaded — please try again.
+              Your data is safe; this is a loading problem, not an
+              empty list.
+            </p>
+            <a
+              href="/"
+              className="mt-6 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+            >
+              Try again
+            </a>
+          </div>
+        </section>
+      </div>
+    );
+  }
   const displayName =
     profile.brand_name ?? profile.full_name ?? user.email ?? "Brand";
   const liveCount = campaigns.filter(
@@ -288,7 +316,34 @@ export default async function HomePage() {
   if (user && profile?.role === "brand") {
     return <BrandHome user={user} profile={profile} />;
   }
-  const campaigns = await getCampaigns();
+  // Forms #26: getCampaigns THROWS on DB error — a failed load
+  // renders an honest error state, never the "No Live Campaigns
+  // Yet" empty state.
+  let campaigns: Awaited<ReturnType<typeof getCampaigns>>;
+  try {
+    campaigns = await getCampaigns();
+  } catch {
+    return (
+      <div className="space-y-14">
+        <section className="pt-6 text-center md:pt-10">
+          <div className="rounded-3xl border border-red-500/40 bg-card p-10 text-center">
+            <p className="font-display text-2xl font-black uppercase tracking-tight text-fg">
+              Couldn&apos;t load campaigns
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+              Campaigns could not be loaded — please try again.
+            </p>
+            <a
+              href="/"
+              className="mt-6 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+            >
+              Try again
+            </a>
+          </div>
+        </section>
+      </div>
+    );
+  }
   const featured = campaigns[0];
   const rest = campaigns.slice(1, 7);
   const stats = await getCampaignStatsMap(rest.map((c) => c.id));

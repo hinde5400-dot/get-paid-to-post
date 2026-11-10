@@ -61,7 +61,16 @@ export default async function SubmitPage({
   // NOT count toward the 15-per-platform limit.
   let approvedByPlatform: Partial<Record<Platform, number>> = {};
   if (user) {
-    const subs = await getUserSubmissions(user.id);
+    // Forms #26: getUserSubmissions THROWS on DB error. These rows
+    // only drive the cooldown hint and the approved-count display —
+    // a failed lookup reads as "no submissions" and the page still
+    // renders; the API enforces the real limits at submit time.
+    let subs: Awaited<ReturnType<typeof getUserSubmissions>> = [];
+    try {
+      subs = await getUserSubmissions(user.id);
+    } catch {
+      subs = [];
+    }
     for (const s of subs) {
       if (s.campaign_id === campaign.id && s.status === "approved") {
         approvedByPlatform[s.platform] =

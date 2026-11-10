@@ -106,7 +106,9 @@ function LoginForm() {
         ? "This account is blocked. Please contact support."
         : noticeMessage === "google-cancelled"
           ? "Google sign-in was cancelled. Try again or log in with email."
-          : "";
+          : noticeMessage === "google-error"
+            ? "Google sign-in failed. Please try again or log in with email."
+            : "";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
