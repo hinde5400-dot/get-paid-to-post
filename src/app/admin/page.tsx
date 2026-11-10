@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getDiscoverCampaigns, isCampaignSettling } from "@/lib/data";
+import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, isCampaignSettling } from "@/lib/data";
 import { fraudStatus } from "@/lib/fraud";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -46,6 +46,7 @@ export default async function AdminPage() {
   const brandMessages = await getBrandMessages();
   const botRows = await getCreatorBotRejections();
   const creatorFlags = await getCreatorFlags();
+  const submissionFlags = await getSubmissionFlags();
   const discoverCampaigns = await getDiscoverCampaigns();
 
   // Creator emails + blocked state for the review and fraud lists
@@ -301,7 +302,7 @@ export default async function AdminPage() {
           Submission review
         </h2>
         <div className="mt-4">
-          <AdminReviewList submissions={items} botCounts={botCounts} />
+          <AdminReviewList submissions={items} botCounts={botCounts} flags={submissionFlags} />
         </div>
       </section>
 

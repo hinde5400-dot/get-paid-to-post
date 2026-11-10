@@ -761,3 +761,37 @@ export async function getCreatorFlags(): Promise<
     return {};
   }
 }
+
+/** One active flag per submission (admin batch 2, migration 0031):
+ *  reason + when it was flagged. Best-effort — returns {} when the
+ *  table does not exist yet (migration not applied) so /admin still
+ *  renders. */
+export type SubmissionFlag = { reason: string; flagged_at: string };
+
+export async function getSubmissionFlags(): Promise<
+  Record<string, SubmissionFlag>
+> {
+  const supabase = getServerClient();
+  if (!supabase) return {};
+  try {
+    const { data, error } = await supabase
+      .from("submission_flags")
+      .select("submission_id, reason, created_at")
+      .is("resolved_at", null);
+    if (error || !data) return {};
+    const out: Record<string, SubmissionFlag> = {};
+    for (const row of data as {
+      submission_id: string;
+      reason: string;
+      created_at: string;
+    }[]) {
+      out[row.submission_id] = {
+        reason: row.reason,
+        flagged_at: row.created_at,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}

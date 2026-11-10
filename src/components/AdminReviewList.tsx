@@ -40,9 +40,14 @@ export default function AdminReviewList({
    *  data) — the only bot signal we actually have. There is NO
    *  third-party 0–100 bot score, so none is shown or invented. */
   botCounts = {},
+  /** Active per-submission flags (migration 0031): a flagged
+   *  payout is paused until the admin Approves, Rejects or
+   *  Unflags it. */
+  flags = {},
 }: {
   submissions: AdminSubmission[];
   botCounts?: Record<string, number>;
+  flags?: Record<string, { reason: string; flagged_at: string }>;
 }) {
   const router = useRouter();
   const [views, setViews] = useState<Record<string, string>>({});
@@ -53,6 +58,8 @@ export default function AdminReviewList({
   const [busy, setBusy] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [flagReasons, setFlagReasons] = useState<Record<string, string>>({});
+  const [flagBusy, setFlagBusy] = useState<string | null>(null);
   const { showError, showSuccess } = useToast();
   // Sort (admin batch 2): newest first by default, or by views,
   // or by bot signal (most bot rejections first) for fraud triage.
@@ -122,6 +129,47 @@ export default function AdminReviewList({
     } finally {
       setBusy(null);
       setBusyAction(null);
+    }
+  }
+
+  /** Flag action (admin batch 2): pause this payout with a typed
+   *  reason, or unflag it. NOT a rejection — nothing reverses.
+   *  Approving / Rejecting a flagged submission from the card
+   *  below resolves its flag automatically. */
+  async function flagSubmission(s: AdminSubmission, action: "flag" | "unflag") {
+    if (action === "flag" && !(flagReasons[s.id] ?? "").trim()) {
+      showError("Give a reason for the flag.");
+      return;
+    }
+    setFlagBusy(s.id);
+    try {
+      const res = await fetch("/api/admin/flag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: s.id,
+          action,
+          reason: (flagReasons[s.id] ?? "").trim(),
+        }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        showError(data.error ?? "Could not flag this submission.");
+        return;
+      }
+      showSuccess(data.message ?? "Done.");
+      if (action === "flag") {
+        setFlagReasons((prev) => ({ ...prev, [s.id]: "" }));
+      }
+      router.refresh();
+    } catch {
+      showError("Could not flag this submission.");
+    } finally {
+      setFlagBusy(null);
     }
   }
 
@@ -493,6 +541,67 @@ export default function AdminReviewList({
               Rejected: {s.rejection_reason}
             </p>
           )}
+
+          {/* Flag action (admin batch 2): a flagged payout is paused
+              — not a rejection, nothing reverses. One appeal per
+              flag via Discord; Approve / Reject / Unflag decides it. */}
+          {s.status !== "rejected" &&
+            (flags[s.id] ? (
+              <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
+                <p className="font-bold">
+                  ⚑ Flagged — payout paused · {timeAgo(flags[s.id].flagged_at)}
+                </p>
+                <p className="mt-0.5">{flags[s.id].reason}</p>
+                <p className="mt-0.5 text-xs text-amber-200/70">
+                  One appeal per flag via Discord. Approve, Reject or
+                  Unflag to decide.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void flagSubmission(s, "unflag")}
+                  disabled={flagBusy === s.id}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-500/50 px-4 py-2 text-sm font-bold text-amber-200 transition hover:bg-amber-500/10 disabled:opacity-40"
+                >
+                  {flagBusy === s.id ? (
+                    <>
+                      <Spinner /> Working...
+                    </>
+                  ) : (
+                    "Unflag"
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  type="text"
+                  maxLength={200}
+                  value={flagReasons[s.id] ?? ""}
+                  onChange={(e) =>
+                    setFlagReasons((prev) => ({
+                      ...prev,
+                      [s.id]: e.target.value,
+                    }))
+                  }
+                  placeholder="Flag reason — e.g. views look bought, checking"
+                  className="min-w-0 flex-1 rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => void flagSubmission(s, "flag")}
+                  disabled={flagBusy === s.id}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/50 px-4 py-2 text-sm font-bold text-amber-200 transition hover:bg-amber-500/10 disabled:opacity-40"
+                >
+                  {flagBusy === s.id ? (
+                    <>
+                      <Spinner /> Working...
+                    </>
+                  ) : (
+                    "⚑ Flag"
+                  )}
+                </button>
+              </div>
+            ))}
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="block text-xs font-bold text-fg">

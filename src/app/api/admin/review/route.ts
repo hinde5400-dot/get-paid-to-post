@@ -56,6 +56,34 @@ async function runBotRejectionCheck(
   return "";
 }
 
+/**
+ * Flag action (admin batch 2): deciding a flagged submission —
+ * Approve or Reject — resolves its active flag, so the payout is
+ * no longer paused. Best-effort and never throws: the table only
+ * exists after migration 0031, and the review itself already
+ * succeeded by the time this runs.
+ */
+async function resolveFlag(
+  supabase: SupabaseClient,
+  submissionId: string,
+  action: "approved" | "rejected"
+): Promise<void> {
+  try {
+    await supabase
+      .from("submission_flags")
+      .update({
+        resolved_at: new Date().toISOString(),
+        resolved_action: action,
+      })
+      .eq("submission_id", submissionId)
+      .is("resolved_at", null);
+  } catch {
+    // Pre-migration 0031 or a transient DB error — the review
+    // already succeeded; the flag just stays open for the admin
+    // to unflag by hand.
+  }
+}
+
 export async function POST(request: Request) {
   const supabase = getServerClient();
   if (!supabase) {
@@ -193,6 +221,8 @@ export async function POST(request: Request) {
       // P1-c: a 'bot views' rejection feeds the fraud ladder
       // (6 = concern, 10 = flag, 11 = auto-ban + owner alert).
       const fraud = await runBotRejectionCheck(supabase, submission.user_id, reason);
+      // Flag action: the decision resolves any active flag.
+      await resolveFlag(supabase, submission.id, "rejected");
       return NextResponse.json({
         ok: true,
         message:
@@ -215,6 +245,8 @@ export async function POST(request: Request) {
     // P1-c: a 'bot views' rejection feeds the fraud ladder
     // (6 = concern, 10 = flag, 11 = auto-ban + owner alert).
     const fraud = await runBotRejectionCheck(supabase, submission.user_id, reason);
+    // Flag action: the decision resolves any active flag.
+    await resolveFlag(supabase, submission.id, "rejected");
     return NextResponse.json({
       ok: true,
       message: "Submission rejected." + fraud,
@@ -350,6 +382,10 @@ export async function POST(request: Request) {
         paid_out: Number(campaign.paid_out ?? 0) + earnings,
       })
       .eq("id", campaign.id);
+
+    // Flag action: approving a flagged submission decides it —
+    // the flag resolves and the payout proceeds.
+    await resolveFlag(supabase, submission.id, "approved");
 
     return NextResponse.json({
       ok: true,
