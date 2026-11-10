@@ -147,6 +147,11 @@ export default function RulesPage() {
           later, and the same for Instagram and YouTube.
         </Rule>
         <Rule>
+          Submit your link within 30 minutes of posting the video — a link
+          submitted more than 30 minutes after the video was posted is not
+          accepted.
+        </Rule>
+        <Rule>
           Up to <strong className="text-fg">15 approved clips per platform per campaign</strong>{" "}
           (TikTok 15, Instagram 15, YouTube 15). Rejected clips do not
           count toward the 15.
@@ -172,11 +177,9 @@ export default function RulesPage() {
           <strong className="text-fg">There is no base pay per post.</strong>
         </Rule>
         <Rule>
-          The brand sets the rate per 1,000 views — and it can set a
-          different rate per platform (for example TikTok $1.50 per 1,000
-          views, YouTube $2.00 per 1,000 views). The rate for your clip is
-          the rate for the platform you posted it on, shown on the
-          campaign.
+          The brand sets one rate per 1,000 views for the whole campaign —
+          the same rate applies on TikTok, Instagram and YouTube, shown on
+          the campaign.
         </Rule>
         <Rule>
           Earnings per clip = views / 1,000 × the rate — capped by the
@@ -308,8 +311,8 @@ export default function RulesPage() {
         </Rule>
         <Rule>
           You set your own budget — any amount above $0 — and your own
-          rate per 1,000 views per platform, any rate above $0. You pay
-          only for verified views.
+          single rate per 1,000 views for the whole campaign, any rate
+          above $0. You pay only for verified views.
         </Rule>
         <Rule>
           Your budget is funded before your campaign goes live. We never
