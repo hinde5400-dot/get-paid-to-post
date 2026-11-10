@@ -53,14 +53,24 @@ export default function AdminWithdrawalList({
 
   if (withdrawals.length === 0) {
     return (
-      <p className="rounded-2xl border border-fg/10 bg-card p-5 text-sm text-fg/60">
-        No withdrawal requests yet.
-      </p>
+      <div className="space-y-3">
+        <p className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
+          ⏱ Your commitment: withdrawals are usually completed within 24
+          hours, and never take more than 3 days.
+        </p>
+        <p className="rounded-2xl border border-fg/10 bg-card p-5 text-sm text-fg/60">
+          No withdrawal requests yet.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <p className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
+        ⏱ Your commitment: withdrawals are usually completed within 24
+        hours, and never take more than 3 days.
+      </p>
       {withdrawals.map((w) => (
         <div
           key={w.id}

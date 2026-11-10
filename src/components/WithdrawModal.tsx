@@ -150,7 +150,7 @@ export default function WithdrawModal({
               </span>
             </label>
             <label className="mt-4 block text-sm font-bold text-fg">
-              USDT Wallet Address (TRC20 only)
+              Enter your USDT (TRC20) wallet address
               <input
                 type="text"
                 value={details}
@@ -167,6 +167,16 @@ export default function WithdrawModal({
                 {addressInvalid ? ADDRESS_ERROR : METHOD_HINT}
               </span>
             </label>
+            {/* Prominent address warning (Turn's decision
+                2026-11-11): the creator's own address is where the
+                money goes — a wrong address loses it forever. */}
+            <div className="mt-3 rounded-xl border-2 border-amber-500 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm font-black leading-relaxed text-amber-200">
+                ⚠️ Enter your correct address — if you enter a wrong
+                address, your money will be sent to the wrong place
+                and cannot be recovered.
+              </p>
+            </div>
 
             {/* Fee preview — only for an amount that can actually be
                 submitted ($15 minimum, within the balance). Showing
@@ -206,10 +216,13 @@ export default function WithdrawModal({
                 "Confirm withdrawal"
               )}
             </button>
-            <p className="mt-3 text-center text-xs text-fg/40">
+            <p className="mt-3 text-center text-sm font-semibold leading-relaxed text-fg/60">
+              ⏱ Withdrawals are usually completed within 24 hours, and
+              never take more than 3 days.
+            </p>
+            <p className="mt-2 text-center text-xs text-fg/40">
               Payouts are processed by the platform owner from the funded
-              campaign budget. Double-check your wallet address — USDT sent
-              to the wrong address cannot be recovered.
+              campaign budget.
             </p>
           </>
         )}

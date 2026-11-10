@@ -109,6 +109,7 @@ export default async function EarningsPage() {
           <li>• Minimum withdrawal: {formatUSD(WITHDRAW_MIN)}.</li>
           <li>• Withdrawal fee: 5% — the fee is rounded to the nearest cent, and you receive the amount after the fee.</li>
           <li>• Method: USDT (TRC20) only.</li>
+          <li>• Payout time: usually completed within 24 hours, and never more than 3 days.</li>
           <li>• Approved earnings are held for {HOLD_HOURS} hours before they become available.</li>
           <li>• Payouts are processed manually by the platform owner from the funded campaign budget.</li>
         </ul>
