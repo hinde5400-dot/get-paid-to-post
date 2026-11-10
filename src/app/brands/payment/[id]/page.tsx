@@ -193,6 +193,22 @@ export default async function BrandPaymentPage({
               </p>
             )}
           </div>
+          {/* TRC20-only warning (Turn's decision 2026-11-11): the
+              brand must send USDT on the TRON network only, to this
+              exact address. Any other coin or network loses the
+              funds forever — this is unmissable on purpose. */}
+          <div className="rounded-2xl border-2 border-red-500 bg-red-500/15 px-4 py-3">
+            <p className="text-sm font-black leading-relaxed text-red-200">
+              ⚠️ Send ONLY USDT on the TRON network (TRC20) to this exact
+              address.
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-relaxed text-red-200/90">
+              Do NOT send any other coin, and do NOT use any other
+              network — for example ERC20 or any other chain. Funds
+              sent the wrong way are lost forever and cannot be
+              recovered.
+            </p>
+          </div>
         </div>
 
         <div className="mt-6">
