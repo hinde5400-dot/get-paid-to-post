@@ -23,15 +23,29 @@ export default function AdminCampaignList({
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<"approve" | "reject" | null>(
+    null
+  );
   const { showError, showSuccess } = useToast();
 
   async function act(campaign: Campaign, action: "approve" | "reject") {
     setBusyId(campaign.id);
+    setBusyAction(action);
+    // The Approve button was once seen stuck on "Loading..." (admin
+    // screenshot 2026-11-10 12:19 PKT). The handler already cleared
+    // its loading state in `finally`, so a stuck spinner could only
+    // come from a fetch that never settles (stalled mobile
+    // connection) — fetch() has no timeout of its own. Abort after
+    // 30s so a stalled request errors out with a toast instead of
+    // spinning forever.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
     try {
       const res = await fetch("/api/admin/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ campaignId: campaign.id, action }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Action failed.");
@@ -42,9 +56,17 @@ export default function AdminCampaignList({
       );
       router.refresh();
     } catch (err) {
-      showError(err instanceof Error ? err.message : "Action failed.");
+      if (err instanceof Error && err.name === "AbortError") {
+        showError(
+          "The request timed out — check your connection and try again."
+        );
+      } else {
+        showError(err instanceof Error ? err.message : "Action failed.");
+      }
     } finally {
+      clearTimeout(timer);
       setBusyId(null);
+      setBusyAction(null);
     }
   }
 
@@ -177,7 +199,7 @@ export default function AdminCampaignList({
               onClick={() => void act(c, "approve")}
               className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-500 py-2.5 text-sm font-black text-white transition hover:bg-red-600 disabled:opacity-40"
             >
-              {busyId === c.id ? (
+              {busyId === c.id && busyAction === "approve" ? (
                 <>
                   <Spinner /> Loading...
                 </>
@@ -189,9 +211,15 @@ export default function AdminCampaignList({
               type="button"
               disabled={busyId === c.id}
               onClick={() => void act(c, "reject")}
-              className="flex-1 rounded-full border border-red-400/40 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-red-400/40 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
             >
-              Reject
+              {busyId === c.id && busyAction === "reject" ? (
+                <>
+                  <Spinner /> Loading...
+                </>
+              ) : (
+                "Reject"
+              )}
             </button>
           </div>
         </div>
