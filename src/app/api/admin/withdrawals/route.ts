@@ -7,6 +7,19 @@ import { getProfile, isOwner } from "@/lib/auth";
  * api/admin/review. Approve → "approved", Mark paid → "paid",
  * Reject → "rejected" and the deducted amount is refunded to the
  * creator's available balance.
+ *
+ * P0-1 design (withdrawn_total moves at REQUEST time): the
+ * creator's withdrawal request already moved withdrawn_total
+ * (available -= amount AND withdrawn_total += amount — the
+ * wallet-update trigger in migration 0010 only allows a
+ * non-owner debit in that shape). So "mark paid" here only flips
+ * the status and must NOT move withdrawn_total again (the old
+ * code incremented it here, which both contradicted the trigger
+ * and double-counted nothing — it just never ran for the request
+ * debit, which the trigger rejected). A reject reverses BOTH
+ * fields (available += amount, withdrawn_total -= amount,
+ * floored at 0 so a legacy row that never moved withdrawn_total
+ * is not driven negative).
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -31,10 +44,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as {
-    withdrawalId?: string;
-    action?: "approve" | "paid" | "reject";
-  };
+  let body: { withdrawalId?: string; action?: "approve" | "paid" | "reject" };
+  try {
+    body = (await request.json()) as {
+      withdrawalId?: string;
+      action?: "approve" | "paid" | "reject";
+    };
+  } catch {
+    return NextResponse.json(
+      { error: "Request body must be valid JSON." },
+      { status: 400 }
+    );
+  }
   const { data: w, error } = await supabase
     .from("withdrawals")
     .select("*")
@@ -68,7 +89,10 @@ export async function POST(request: Request) {
     // available balance when they requested it — an approved (not
     // yet paid) withdrawal gets it back too. The old code refunded
     // pending rows only, then told the owner the refund happened
-    // for every row.
+    // for every row. P0-1: reverse BOTH sides of the request-time
+    // debit — available += amount AND withdrawn_total -= amount
+    // (floored at 0: a legacy row created before the fix never
+    // moved withdrawn_total, so there is nothing to take back).
     let refunded = false;
     const { data: wallet } = await supabase
       .from("wallets")
@@ -82,6 +106,12 @@ export async function POST(request: Request) {
         .update({
           available_balance:
             Number(wRow.available_balance ?? 0) + amount,
+          withdrawn_total: Math.max(
+            0,
+            Math.round(
+              (Number(wRow.withdrawn_total ?? 0) - amount) * 100
+            ) / 100
+          ),
         })
         .eq("user_id", row.user_id as string);
       if (refundError) {
@@ -168,33 +198,11 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    // "Total withdrawn" counts money actually sent — it is
-    // incremented here, at payment, not at request time. (A
-    // pending or approved request is not money withdrawn.)
-    const { data: wallet } = await supabase
-      .from("wallets")
-      .select("withdrawn_total")
-      .eq("user_id", row.user_id as string)
-      .single();
-    if (wallet) {
-      const { error: totalError } = await supabase
-        .from("wallets")
-        .update({
-          withdrawn_total:
-            Number(
-              (wallet as Record<string, unknown>).withdrawn_total ?? 0
-            ) + amount,
-        })
-        .eq("user_id", row.user_id as string);
-      if (totalError) {
-        // The withdrawal IS marked paid; only the running total
-        // failed to update. Say so plainly instead of hiding it.
-        return NextResponse.json({
-          ok: true,
-          message: `Withdrawal marked as paid, but the creator's "total withdrawn" could not be updated (${totalError.message}) — fix it in /admin.`,
-        });
-      }
-    }
+    // P0-1: "Total withdrawn" was already moved at request time
+    // (available -= amount AND withdrawn_total += amount in
+    // POST /api/withdrawals — the wallet trigger's withdrawal
+    // shape). Marking paid only flips the status; incrementing
+    // withdrawn_total here again would double-count it.
     return NextResponse.json({
       ok: true,
       message: "Withdrawal marked as paid.",
