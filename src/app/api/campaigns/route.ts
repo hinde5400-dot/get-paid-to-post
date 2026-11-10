@@ -7,6 +7,7 @@ import {
   MAX_PAYOUT_MIN,
 } from "@/lib/constants";
 import { platformFeeFor } from "@/lib/money";
+import { DRIVE_FOLDER_ERROR, isDriveFolderUrl } from "@/lib/validate";
 import { notifyCampaignCreated } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
 import type { Platform } from "@/lib/types";
@@ -348,10 +349,9 @@ export async function POST(request: Request) {
   // Brand Logo and Thumbnail are file uploads — the form uploads
   // them to the public 'campaign-images' bucket and sends the
   // storage URLs here. External image links are no longer accepted.
-  // The Google Drive link (item 6) is REQUIRED — the content lives
-  // in Drive. Any valid URL is accepted (Drive links come in
-  // several forms — the domain is NOT restricted to
-  // drive.google.com).
+  // The Google Drive link (item 6) is REQUIRED — and it must be a
+  // Drive FOLDER link (drive.google.com/drive/folders/…): a single
+  // file or video link is rejected (friend's brand test, 2026-11-11).
   const briefUrl = String(body.briefUrl ?? "").trim();
   const logoUrl = String(body.logoUrl ?? "").trim();
   const thumbnailUrl = String(body.thumbnailUrl ?? "").trim();
@@ -365,12 +365,9 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (!/^https?:\/\/.+\..+/.test(briefUrl)) {
+  if (!isDriveFolderUrl(briefUrl)) {
     return NextResponse.json(
-      {
-        error:
-          "Error: Google Drive Link must be a valid URL (starts with http:// or https://).",
-      },
+      { error: `Error: ${DRIVE_FOLDER_ERROR}` },
       { status: 400 }
     );
   }

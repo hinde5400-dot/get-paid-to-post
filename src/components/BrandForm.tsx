@@ -9,6 +9,7 @@ import {
   MAX_PAYOUT_MIN,
 } from "@/lib/constants";
 import { platformFeeFor, payoutForViews, totalToSend } from "@/lib/money";
+import { DRIVE_FOLDER_ERROR, isDriveFolderUrl } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -32,8 +33,9 @@ import {
  * $100, $10–$200), Minimum views per clip (floor 1,000 — blank by
  * default, blank = 1,000, values below 1,000 are rejected),
  * Campaign Brief (required, content instructions), Video
- * Requirements (required), Google Drive Link (required — the
- * content lives in Drive), Thumbnail (REQUIRED file upload).
+ * Requirements (required), Google Drive Link (required — a Drive
+ * FOLDER link, drive.google.com/drive/folders/…; single file or
+ * video links are rejected), Thumbnail (REQUIRED file upload).
  * Brand Logo and Thumbnail are file uploads with an upload button
  * (Turn's decision 2026-11-10) — NOT link fields: PNG, JPG or
  * WebP, max 2 MB each, uploaded to the public 'campaign-images'
@@ -308,17 +310,16 @@ export default function BrandForm({
         `Max Payout Per Post must be between $${MAX_PAYOUT_MIN} and $${MAX_PAYOUT_MAX}`
       );
     }
-    // Google Drive Link (item 6): REQUIRED, and a valid URL. Any
-    // valid URL is accepted — Drive links come in several forms,
-    // so the domain is NOT restricted to drive.google.com.
+    // Google Drive Link (item 6): REQUIRED, and it must be a
+    // Drive FOLDER link (drive.google.com/drive/folders/…) — a
+    // single file or video link is rejected (friend's brand test,
+    // 2026-11-11: a file link was accepted and the folder's
+    // contents never reached the creators).
     if (!driveUrl.trim()) {
       return fail("driveUrl", "Google Drive Link is required");
     }
-    if (!/^https?:\/\/.+\..+/.test(driveUrl.trim())) {
-      return fail(
-        "driveUrl",
-        "Google Drive Link must be a valid URL starting with http:// or https://."
-      );
+    if (!isDriveFolderUrl(driveUrl)) {
+      return fail("driveUrl", DRIVE_FOLDER_ERROR);
     }
     // Thumbnail (Turn's decision 2026-11-10): REQUIRED file
     // upload — no link field any more.
@@ -983,14 +984,15 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
       <label id="field-driveUrl" className="mt-4 block text-sm font-bold text-fg">
         Google Drive Link
         <span className="mt-1 block text-xs font-medium text-fg/50">
-          Required — paste the Drive link with your videos, logos and
-          assets for creators. The content lives in Drive, so creators
-          need this link to make their clips.
+          Required — paste the link to your Google Drive FOLDER with
+          your videos, logos and assets
+          (drive.google.com/drive/folders/…). A single file or video
+          link will not be accepted.
         </span>
         <input
           value={driveUrl}
           onChange={(e) => setDriveUrl(e.target.value)}
-          placeholder="https://drive.google.com/..."
+          placeholder="https://drive.google.com/drive/folders/..."
           inputMode="url"
           className={inputCls}
         />

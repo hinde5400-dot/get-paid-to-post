@@ -217,8 +217,38 @@ export function validateProofUrl(
   };
 }
 
-/** Video rules every submission must follow. */
-export const VIDEO_RULES = [
+/**
+ * Google Drive FOLDER link only (friend's brand test, 2026-11-11):
+ * the brand must paste a link to its Drive FOLDER with the videos,
+ * logos and assets — drive.google.com/drive/folders/<id>. A single
+ * file link (/file/d/...), a Docs/Sheets/Slides link, a YouTube
+ * link, or any other URL is rejected. Accepts an optional /u/<n>/
+ * segment before /drive/ and query params (?usp=sharing). Shared
+ * by the brand form (client) and POST /api/campaigns (server).
+ */
+export const DRIVE_FOLDER_ERROR =
+  "Paste your Google Drive FOLDER link (drive.google.com/drive/folders/…) — not a single file or video link.";
+
+export function isDriveFolderUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  if (parsed.hostname.toLowerCase() !== "drive.google.com") return false;
+  // /drive/folders/<id> — or /u/<n>/drive/folders/<id>.
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  const driveAt = parts[0] === "u" && /^\d+$/.test(parts[1] ?? "") ? 2 : 0;
+  return (
+    parts[driveAt] === "drive" &&
+    parts[driveAt + 1] === "folders" &&
+    Boolean(parts[driveAt + 2])
+  );
+}
+
+/** Video rules every submission must follow. */export const VIDEO_RULES = [
   "Vertical video only — 9:16 format.",
   "Add captions to your clip.",
   "Hook viewers in the first 3 seconds.",
