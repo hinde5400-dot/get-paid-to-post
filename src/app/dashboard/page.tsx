@@ -40,7 +40,9 @@ export default async function DashboardPage() {
 
   // Brands never see the creator dashboard: they get their own
   // campaigns (with a Create button) and no earnings cards.
-  if ((profile?.role ?? "creator") === "brand") {
+  // Role fallback: Google OAuth users carry their role in auth
+  // metadata (see the auth callback) — same as the brands page.
+  if ((profile?.role ?? user.user_metadata?.role ?? "creator") === "brand") {
     return <BrandDashboard user={user} profile={profile} />;
   }
 
