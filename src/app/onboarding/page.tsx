@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/client";
+import { hostnameOf } from "@/lib/validate";
 import {
   TikTokIcon,
   InstagramIcon,
@@ -134,8 +135,15 @@ export default function OnboardingPage() {
       showError(message);
       return;
     }
-    if (!url.toLowerCase().includes(platform.domain)) {
-      const message = `That does not look like a ${platform.name} link — it should contain ${platform.domain}.`;
+    // Hostname check, not a substring match: "tiktok.com.evil.com"
+    // or "evil.com/?x=instagram.com" used to pass as a profile
+    // link because they CONTAIN the domain string.
+    const host = hostnameOf(url);
+    if (
+      !host ||
+      !(host === platform.domain || host.endsWith(`.${platform.domain}`))
+    ) {
+      const message = `That does not look like a ${platform.name} link — it should be a ${platform.domain} link.`;
       setError(message);
       showError(message);
       return;

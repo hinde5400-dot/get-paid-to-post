@@ -18,6 +18,11 @@ import { canonicalizePostUrl } from "@/lib/canonical-url";
 import type { Platform } from "@/lib/types";
 import { platformsFromRow, platformNamesText } from "@/lib/types";
 import { fetchYouTubeVideoDetails } from "@/lib/views/youtube";
+import {
+  fetchTikTokViews,
+  type TikTokTokens,
+} from "@/lib/views/tiktok";
+import { decryptToken, encryptToken } from "@/lib/views/crypto";
 
 interface BundleBody {
   campaignId?: string;
@@ -122,7 +127,7 @@ export async function POST(request: Request) {
         error:
           minLinks === 1
             ? `Submit your ${platformNames} link.`
-            : `Submit at least ${minLinks} links on the campaign's platforms (${platformNames}) together — they are reviewed and paid as one bundle.`,
+            : `Submit at least ${minLinks} links on the campaign's platforms (${platformNames}) together — each clip is then reviewed and paid on its own.`,
       },
       { status: 400 }
     );
@@ -156,8 +161,7 @@ export async function POST(request: Request) {
   // YouTube ownership gate (2026-11-09): a YouTube link only
   // counts when the video belongs to the creator's CONNECTED
   // channel. Without this, anyone could paste any viral video's
-  // link and claim its views. TikTok does not need this check —
-  // Login Kit only ever returns the connected creator's own videos.
+  // link and claim its views.
   const youtubeLink = links.find((l) => l.platform === "youtube");
   // When the YouTube video itself was posted (30-minute rule) —
   // captured here so the submit route reuses the gate's lookup.
@@ -183,23 +187,136 @@ export async function POST(request: Request) {
     }
     const details = await fetchYouTubeVideoDetails(youtubeLink.url);
     if ("error" in details) {
-      return NextResponse.json(
-        {
-          error: `Could not verify this YouTube video (${details.error}) — please check the link and try again.`,
-        },
-        { status: 400 }
-      );
+      // Link problems block the submit; API problems do not.
+      // "Video not found or not public" / "Could not read a video
+      // ID" mean the link is wrong. "Could not reach YouTube" /
+      // "YouTube API error" / missing API key mean YouTube itself
+      // failed — blocking every submit during an outage and
+      // blaming the creator's link would be the wrong error.
+      const apiFailed =
+        details.error.startsWith("Could not reach YouTube") ||
+        details.error.startsWith("YouTube API error") ||
+        details.error.startsWith("YouTube API key is not set up");
+      if (!apiFailed) {
+        return NextResponse.json(
+          {
+            error: `Could not verify this YouTube video (${details.error}) — please check the link and try again.`,
+          },
+          { status: 400 }
+        );
+      }
+      // API failure: the gate is skipped — youtubePublishedAt
+      // stays null, so the clip is flagged unverified for the
+      // admin's hand-check (ownership + post time).
+    } else {
+      if (details.channelId !== channelId) {
+        return NextResponse.json(
+          {
+            error:
+              "This YouTube video is not from your connected YouTube channel. Submit only videos from the channel you connected.",
+          },
+          { status: 400 }
+        );
+      }
+      youtubePublishedAt = details.publishedAt;
     }
-    if (details.channelId !== channelId) {
+  }
+
+  // TikTok ownership gate (same rule as YouTube): a TikTok link
+  // only counts when the video is in the creator's CONNECTED
+  // TikTok account. TikTok's video/query only ever returns the
+  // authorized user's own videos, so a successful lookup IS the
+  // ownership proof. Without this, anyone could paste any viral
+  // TikTok video and claim its views — the hole YouTube's gate
+  // was built to stop, silently absent for TikTok.
+  const tiktokLink = links.find((l) => l.platform === "tiktok");
+  // When the TikTok video itself was posted (30-minute rule) —
+  // captured here so the posted-time loop reuses the gate's
+  // lookup instead of calling TikTok a second time.
+  let tiktokPostedAt: string | null = null;
+  if (tiktokLink) {
+    const { data: tkConn } = await supabase
+      .from("tiktok_connections")
+      .select(
+        "user_id, open_id, access_token, refresh_token, token_expires_at, refresh_expires_at"
+      )
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!tkConn) {
       return NextResponse.json(
         {
           error:
-            "This YouTube video is not from your connected YouTube channel. Submit only videos from the channel you connected.",
+            "Connect your TikTok account first on the Connect page — only videos from your own connected TikTok account can be submitted.",
         },
         { status: 400 }
       );
     }
-    youtubePublishedAt = details.publishedAt;
+    const accessToken = decryptToken(tkConn.access_token as string);
+    const refreshToken = decryptToken(tkConn.refresh_token as string);
+    if (!accessToken) {
+      return NextResponse.json(
+        {
+          error:
+            "Your TikTok login could not be read — reconnect TikTok on the Connect page and try again.",
+        },
+        { status: 400 }
+      );
+    }
+    const tokens: TikTokTokens = {
+      accessToken,
+      refreshToken,
+      tokenExpiresAt: tkConn.token_expires_at as string | null,
+      refreshExpiresAt: tkConn.refresh_expires_at as string | null,
+    };
+    const result = await fetchTikTokViews(tiktokLink.url, tokens);
+    if ("error" in result) {
+      if (result.tokens) {
+        // Tokens were refreshed during the failed lookup — save
+        // them back encrypted (same as the 3-hour refresh does).
+        await supabase.rpc("save_tiktok_tokens", {
+          p_user_id: tkConn.user_id,
+          p_open_id: tkConn.open_id,
+          p_access_token: encryptToken(result.tokens.accessToken),
+          p_refresh_token: encryptToken(result.tokens.refreshToken),
+          p_token_expires_at: result.tokens.tokenExpiresAt,
+          p_refresh_expires_at: result.tokens.refreshExpiresAt,
+        });
+      }
+      if (result.error.startsWith("Video not found")) {
+        return NextResponse.json(
+          {
+            error:
+              "This TikTok video is not in your connected TikTok account. Submit only videos from the account you connected.",
+          },
+          { status: 400 }
+        );
+      }
+      if (result.error.startsWith("TikTok login expired")) {
+        return NextResponse.json(
+          {
+            error:
+              "Your TikTok login expired — reconnect TikTok on the Connect page and try again.",
+          },
+          { status: 400 }
+        );
+      }
+      // "TikTok could not be reached right now" / unreadable
+      // video ID: the API failed, not the creator — allow the
+      // submit flagged unverified for the admin's hand-check
+      // (tiktokPostedAt stays null, so the clip is unverified).
+    } else {
+      if (result.tokens) {
+        await supabase.rpc("save_tiktok_tokens", {
+          p_user_id: tkConn.user_id,
+          p_open_id: tkConn.open_id,
+          p_access_token: encryptToken(result.tokens.accessToken),
+          p_refresh_token: encryptToken(result.tokens.refreshToken),
+          p_token_expires_at: result.tokens.tokenExpiresAt,
+          p_refresh_expires_at: result.tokens.refreshExpiresAt,
+        });
+      }
+      tiktokPostedAt = result.postedAt;
+    }
   }
 
   // 30-minute submit rule (admin batch 2, Turn's decision
@@ -219,7 +336,13 @@ export async function POST(request: Request) {
         l.platform,
         l.url,
         user.id,
-        l.platform === "youtube" ? youtubePublishedAt : undefined
+        // YouTube: the gate already fetched publishedAt — null
+        // when the gate was skipped (API failure), which flags the
+        // clip unverified for the admin's hand-check.
+        l.platform === "youtube" ? youtubePublishedAt : undefined,
+        // TikTok: the ownership gate already fetched create_time —
+        // null when the gate was skipped (API failure).
+        l.platform === "tiktok" ? tiktokPostedAt : undefined
       );
       const ms = res.postedAt ? new Date(res.postedAt).getTime() : NaN;
       postedAt = Number.isFinite(ms) ? res.postedAt : null;
@@ -329,6 +452,27 @@ export async function POST(request: Request) {
   const codes: string[] = [];
   let duplicateWarning = false;
 
+  // Bundle atomicity: check ALL links against the unique
+  // (user_id, post_url) constraint BEFORE inserting any. The old
+  // code inserted link 1, then failed on link 2's duplicate — the
+  // creator saw only an error while link 1 was already live and
+  // its cooldown had started.
+  for (const l of links) {
+    const { data: own } = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("post_url", l.url)
+      .limit(1)
+      .maybeSingle();
+    if (own) {
+      return NextResponse.json(
+        { error: "This link has already been submitted." },
+        { status: 400 }
+      );
+    }
+  }
+
   for (let i = 0; i < links.length; i++) {
     const l = links[i];
     // Same link already submitted by someone else → duplicate, auto-rejected.
@@ -364,6 +508,10 @@ export async function POST(request: Request) {
       posted_time_unverified: postedInfo[i]?.unverified ?? true,
     });
     if (insError) {
+      // A concurrent submit slipped past the pre-check: roll back
+      // the links already inserted in this bundle instead of
+      // leaving half a bundle live behind an error.
+      await supabase.from("submissions").delete().eq("bundle_id", bundleId);
       return NextResponse.json(
         { error: "This link has already been submitted." },
         { status: 400 }

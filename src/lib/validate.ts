@@ -1,4 +1,5 @@
 import type { Platform } from "./types";
+import { extractYouTubeVideoId } from "./views/youtube";
 
 const PLATFORM_HOSTS: Record<Platform, string[]> = {
   // vm/vt.tiktok.com are TikTok's short-link hosts — accepted so
@@ -9,7 +10,7 @@ const PLATFORM_HOSTS: Record<Platform, string[]> = {
   youtube: ["youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com"],
 };
 
-function hostnameOf(raw: string): string | null {
+export function hostnameOf(raw: string): string | null {
   try {
     const withScheme = /^https?:\/\//i.test(raw.trim())
       ? raw.trim()
@@ -18,6 +19,31 @@ function hostnameOf(raw: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** A profile/channel link must be a real video link, not a profile
+ *  page: tiktok.com/@someone or instagram.com/someone passes a
+ *  host-only check but is not a clip. Short-link hosts (vm/vt,
+ *  ig.me, youtu.be) carry no readable path, so any path is allowed
+ *  there — the link resolves to the real video before the check. */
+function pathLooksLikeVideo(raw: string, platform: Platform): boolean {
+  let path = "";
+  try {
+    const withScheme = /^https?:\/\//i.test(raw.trim())
+      ? raw.trim()
+      : `https://${raw.trim()}`;
+    path = new URL(withScheme).pathname;
+  } catch {
+    return false;
+  }
+  if (platform === "tiktok") {
+    return /\/video\/\d+/.test(path);
+  }
+  if (platform === "instagram") {
+    return /^\/(reel|reels|p)\/[^/]+/.test(path);
+  }
+  // YouTube: any spelling with a readable video ID.
+  return extractYouTubeVideoId(raw) !== null;
 }
 
 /** Accept only tiktok.com / instagram.com / youtube.com links (plus
@@ -42,6 +68,26 @@ export function validatePostUrl(
     return {
       ok: false,
       error: `Please paste a real ${label} link (only ${allowed[0]} links are accepted).`,
+    };
+  }
+  // Short-link hosts resolve to the real video later, so their
+  // path cannot be checked here — everything else must already
+  // look like a video link, not a profile page.
+  const isShortHost =
+    host === "vm.tiktok.com" ||
+    host === "vt.tiktok.com" ||
+    host === "ig.me" ||
+    host === "youtu.be";
+  if (!isShortHost && !pathLooksLikeVideo(url, platform)) {
+    const label =
+      platform === "tiktok"
+        ? "TikTok video (/video/…)"
+        : platform === "instagram"
+          ? "Instagram Reel (/reel/…)"
+          : "YouTube video";
+    return {
+      ok: false,
+      error: `That is not a ${label} link — paste the link to the video itself, not a profile page.`,
     };
   }
   return { ok: true };

@@ -87,7 +87,10 @@ export async function resolveRedirectUrl(rawUrl: string): Promise<string> {
  *   exactly as resolved (tiktok.com/@user/video/ID) — the video ID
  *   is NOT parsed out of it.
  * - Anything else (plain tiktok.com / instagram.com links):
- *   returned unchanged.
+ *   tracking params, fragments and trailing slashes are stripped,
+ *   and a leading www. is dropped, so
+ *   tiktok.com/@u/video/123?lang=en and tiktok.com/@u/video/123
+ *   collapse to one URL for the duplicate check.
  */
 export async function canonicalizePostUrl(
   rawUrl: string,
@@ -117,7 +120,34 @@ export async function canonicalizePostUrl(
     } catch {
       return url;
     }
-    return resolved;
+    return stripTracking(resolved);
   }
-  return url;
+  return stripTracking(url);
+}
+
+/**
+ * Strip tracking query params, fragments and trailing slashes,
+ * and drop a leading www. — the same video pasted with
+ * ?is_from_webapp=1, ?igshid=…, or a trailing slash is the same
+ * video for the duplicate check. Never throws: on any parse
+ * failure the URL is returned unchanged.
+ */
+function stripTracking(rawUrl: string): string {
+  try {
+    const u = new URL(
+      /^https?:\/\//i.test(rawUrl.trim())
+        ? rawUrl.trim()
+        : `https://${rawUrl.trim()}`
+    );
+    u.search = "";
+    u.hash = "";
+    const path = u.pathname.replace(/\/+$/, "");
+    u.pathname = path === "" ? "/" : path;
+    if (u.hostname.startsWith("www.")) {
+      u.hostname = u.hostname.slice(4);
+    }
+    return u.toString();
+  } catch {
+    return rawUrl;
+  }
 }

@@ -118,10 +118,23 @@ function postedAtFrom(createTime: unknown): string | null {
   return new Date(ms).toISOString();
 }
 
+/**
+ * video/query outcome: the video's stats, "not found" (the video
+ * is not in the connected account), or "unavailable" (TikTok
+ * could not be reached — network error or non-2xx). The two
+ * failure modes must stay distinct: "not found" proves the video
+ * is not the creator's (ownership gate), while "unavailable" is
+ * a transient failure that must never be reported as "not yours".
+ */
+type QueryOutcome =
+  | { stats: TikTokVideoStats }
+  | { notFound: true }
+  | { unavailable: true };
+
 async function queryVideoViews(
   accessToken: string,
   videoId: string
-): Promise<TikTokVideoStats | null> {
+): Promise<QueryOutcome> {
   let res: Response;
   try {
     res = await fetch(VIDEO_QUERY_URL, {
@@ -133,11 +146,11 @@ async function queryVideoViews(
       body: JSON.stringify({ filters: { video_ids: [videoId] } }),
     });
   } catch {
-    return null;
+    return { unavailable: true };
   }
   if (!res.ok) {
     console.error("TikTok video/query failed:", res.status);
-    return null;
+    return { unavailable: true };
   }
   const data = (await res.json()) as {
     data?: {
@@ -151,20 +164,22 @@ async function queryVideoViews(
     };
   };
   const video = data?.data?.videos?.find((v) => v.id === videoId);
-  if (typeof video?.view_count !== "number") return null;
+  if (typeof video?.view_count !== "number") return { notFound: true };
   return {
-    views: video.view_count,
-    likes: typeof video.like_count === "number" ? video.like_count : null,
-    comments:
-      typeof video.comment_count === "number" ? video.comment_count : null,
-    postedAt: postedAtFrom(video.create_time),
+    stats: {
+      views: video.view_count,
+      likes: typeof video.like_count === "number" ? video.like_count : null,
+      comments:
+        typeof video.comment_count === "number" ? video.comment_count : null,
+      postedAt: postedAtFrom(video.create_time),
+    },
   };
 }
 
 async function listVideoViews(
   accessToken: string,
   videoId: string
-): Promise<TikTokVideoStats | null> {
+): Promise<QueryOutcome> {
   let cursor = 0;
   for (let page = 0; page < 5; page++) {
     let res: Response;
@@ -178,11 +193,11 @@ async function listVideoViews(
         body: JSON.stringify({ max_count: 20, cursor }),
       });
     } catch {
-      return null;
+      return { unavailable: true };
     }
     if (!res.ok) {
       console.error("TikTok video/list failed:", res.status);
-      return null;
+      return { unavailable: true };
     }
     const data = (await res.json()) as {
       data?: {
@@ -204,17 +219,19 @@ async function listVideoViews(
     );
     if (match && typeof match.view_count === "number") {
       return {
-        views: match.view_count,
-        likes: typeof match.like_count === "number" ? match.like_count : null,
-        comments:
-          typeof match.comment_count === "number" ? match.comment_count : null,
-        postedAt: postedAtFrom(match.create_time),
+        stats: {
+          views: match.view_count,
+          likes: typeof match.like_count === "number" ? match.like_count : null,
+          comments:
+            typeof match.comment_count === "number" ? match.comment_count : null,
+          postedAt: postedAtFrom(match.create_time),
+        },
       };
     }
-    if (!data?.data?.has_more) return null;
+    if (!data?.data?.has_more) return { notFound: true };
     cursor = data.data.cursor ?? 0;
   }
-  return null;
+  return { notFound: true };
 }
 
 export type TikTokViewResult =
@@ -263,20 +280,43 @@ export async function fetchTikTokViews(
     };
   }
 
-  const stats =
-    (await queryVideoViews(accessToken, videoId)) ??
-    (await listVideoViews(accessToken, videoId));
-  if (stats === null) {
+  // video/query first, video/list as fallback. "Unavailable" (TikTok
+  // down) is a different verdict from "not found" (not the
+  // creator's video) — never collapse them.
+  const queried = await queryVideoViews(accessToken, videoId);
+  if ("stats" in queried) {
     return {
-      error: "Video not found in the creator's TikTok account.",
+      views: queried.stats.views,
+      likes: queried.stats.likes,
+      comments: queried.stats.comments,
+      postedAt: queried.stats.postedAt,
+      tokens: freshTokens,
+    };
+  }
+  if ("unavailable" in queried) {
+    return {
+      error: "TikTok could not be reached right now.",
+      tokens: freshTokens,
+    };
+  }
+  const listed = await listVideoViews(accessToken, videoId);
+  if ("stats" in listed) {
+    return {
+      views: listed.stats.views,
+      likes: listed.stats.likes,
+      comments: listed.stats.comments,
+      postedAt: listed.stats.postedAt,
+      tokens: freshTokens,
+    };
+  }
+  if ("unavailable" in listed) {
+    return {
+      error: "TikTok could not be reached right now.",
       tokens: freshTokens,
     };
   }
   return {
-    views: stats.views,
-    likes: stats.likes,
-    comments: stats.comments,
-    postedAt: stats.postedAt,
+    error: "Video not found in the creator's TikTok account.",
     tokens: freshTokens,
   };
 }

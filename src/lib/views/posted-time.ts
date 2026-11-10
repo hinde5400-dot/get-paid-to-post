@@ -25,7 +25,13 @@ export async function fetchPostedTime(
   platform: Platform,
   postUrl: string,
   userId: string,
-  youtubePublishedAt?: string | null
+  youtubePublishedAt?: string | null,
+  /**
+   * Posted time the caller already fetched (the TikTok ownership
+   * gate in /api/submissions already called video/query). Passed
+   * to avoid a second TikTok API call for the same video.
+   */
+  preFetchedPostedAt?: string | null
 ): Promise<PostedTimeResult> {
   if (platform === "youtube") {
     // Prefer the details the submit route already fetched for the
@@ -39,6 +45,11 @@ export async function fetchPostedTime(
   }
 
   if (platform === "tiktok") {
+    // The ownership gate already fetched this video's create_time
+    // — reuse it instead of calling TikTok a second time.
+    if (preFetchedPostedAt !== undefined) {
+      return { postedAt: preFetchedPostedAt };
+    }
     const supabase = getServerClient();
     if (!supabase) return { postedAt: null };
     const { data: tokenRow } = await supabase
