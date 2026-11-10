@@ -211,9 +211,9 @@ export default function AdminFraudList({
 
         {(c.status === "flagged" || c.status === "banned") && (
           <p className="mt-3 rounded-xl bg-fg/5 px-4 py-2.5 text-sm text-fg/70">
-            Appeals arrive as Discord tickets (Terms §8 — one appeal
-            per flag, a person reviews it and replies within 10
-            business days). No appeal is tracked in-app.
+            If you think this flag was wrong, appeal through Discord
+            support — a person reviews it and replies within 10
+            business days. No appeal is tracked in-app.
           </p>
         )}
 
