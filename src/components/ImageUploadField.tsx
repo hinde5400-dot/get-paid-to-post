@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { useToast } from "@/components/Toast";
+import { compressCampaignImage } from "@/lib/image-compress";
 
 export const CAMPAIGN_IMAGE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -19,6 +20,9 @@ function formatSize(bytes: number) {
  * after choosing; the file itself is only uploaded at confirmed
  * submit (BrandForm uploads it, then sends the returned URL).
  * The server re-validates type + size on the upload endpoint.
+ * Large phone photos are compressed client-side at pick time
+ * (see lib/image-compress.ts) so the upload is small and fast
+ * even on a weak mobile connection.
  */
 export default function ImageUploadField({
   fieldId,
@@ -45,7 +49,13 @@ export default function ImageUploadField({
   const { showError } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function pickFile(f: File | null) {
+  // Pick time is compression time: the file is downscaled BEFORE
+  // the 2 MB check and before the preview, so the size the brand
+  // sees is the size that will actually upload — a 5 MB phone
+  // photo becomes ~100–300 KB instead of being rejected outright.
+  // Compression never blocks a pick: on failure the original file
+  // is used and the 2 MB cap still applies.
+  async function pickFile(f: File | null) {
     if (!f) {
       onPick(null);
       return;
@@ -54,11 +64,14 @@ export default function ImageUploadField({
       showError("Image must be PNG, JPG or WebP.");
       return;
     }
-    if (f.size > CAMPAIGN_IMAGE_MAX_BYTES) {
-      showError("Image must be 2 MB or smaller.");
+    const compressed = await compressCampaignImage(f);
+    if (compressed.size > CAMPAIGN_IMAGE_MAX_BYTES) {
+      showError(
+        "Image is still over 2 MB after compression — try a smaller photo."
+      );
       return;
     }
-    onPick(f);
+    onPick(compressed);
   }
 
   function clear() {
