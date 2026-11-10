@@ -24,6 +24,14 @@ interface ReviewBody {
   comments?: number;
   /** Optional reason for a rejection (bot views, brief mismatch, ...). */
   reason?: string;
+  /**
+   * Admin override for an unverified posted time: the clip's
+   * posted time could not be verified (API failure / no
+   * connection / Instagram hand-check pending). Approving such a
+   * clip without this flag is refused — the admin must confirm
+   * they checked the video's post time by hand first.
+   */
+  overrideUnverified?: boolean;
 }
 
 /**
@@ -149,6 +157,11 @@ export async function POST(request: Request) {
     // is the only way back from approved.)
     if (submission.status === "approved") {
       const prevEarnings = Number(submission.earnings ?? 0);
+      // Shortfall = money that could NOT be clawed back (already
+      // withdrawn, or no wallet row). It goes into the response
+      // message — the owner must never see a plain "reversed"
+      // when part of it provably was not.
+      let shortfall = 0;
       if (prevEarnings > 0) {
         // Release any matured 72h holds first, so the balances we
         // read are current (earnings may already have moved from
@@ -171,8 +184,8 @@ export async function POST(request: Request) {
           const fromPending = Math.min(pending, prevEarnings);
           const remaining = prevEarnings - fromPending;
           const fromAvailable = Math.min(available, remaining);
-          const shortfall = Math.round((remaining - fromAvailable) * 100) / 100;
-          await supabase
+          shortfall = Math.round((remaining - fromAvailable) * 100) / 100;
+          const { error: walletError } = await supabase
             .from("wallets")
             .update({
               pending_balance: Math.max(
@@ -185,15 +198,27 @@ export async function POST(request: Request) {
               ),
             })
             .eq("user_id", submission.user_id);
+          if (walletError) {
+            // The reversal did not happen — say so instead of
+            // claiming success below.
+            return NextResponse.json(
+              {
+                error: `Could not reverse the earnings from the creator's wallet (${walletError.message}). The clip was NOT rejected — try again or fix it in /admin.`,
+              },
+              { status: 500 }
+            );
+          }
           if (shortfall > 0) {
             // Part of the earnings was already withdrawn — it cannot
             // be clawed back. Reject anyway and restore what is
-            // possible; the shortfall is logged for the owner.
+            // possible; the shortfall is logged and reported.
             console.error(
               `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be fully reversed — $${shortfall.toFixed(2)} already withdrawn/unrecoverable.`
             );
           }
         } else {
+          // No wallet row at all — nothing could be clawed back.
+          shortfall = prevEarnings;
           console.error(
             `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be reversed — no wallet found for user ${submission.user_id}.`
           );
@@ -206,7 +231,7 @@ export async function POST(request: Request) {
           .eq("id", submission.campaign_id)
           .single();
         if (campaign) {
-          await supabase
+          const { error: budgetError } = await supabase
             .from("campaigns")
             .update({
               budget_left:
@@ -221,9 +246,17 @@ export async function POST(request: Request) {
               ),
             })
             .eq("id", submission.campaign_id);
+          if (budgetError) {
+            return NextResponse.json(
+              {
+                error: `Could not restore the campaign budget (${budgetError.message}). The clip was NOT rejected — try again.`,
+              },
+              { status: 500 }
+            );
+          }
         }
       }
-      await supabase
+      const { error: rejectError } = await supabase
         .from("submissions")
         .update({
           status: "rejected",
@@ -231,6 +264,14 @@ export async function POST(request: Request) {
           rejection_reason: reason,
         })
         .eq("id", submission.id);
+      if (rejectError) {
+        return NextResponse.json(
+          {
+            error: `Could not reject the clip (${rejectError.message}). Nothing was changed — try again.`,
+          },
+          { status: 500 }
+        );
+      }
       // P1-c: a 'bot views' rejection feeds the fraud ladder
       // (6 = concern, 10 = flag, 11 = auto-ban + owner alert).
       const fraud = await runBotRejectionCheck(supabase, submission.user_id, reason);
@@ -239,7 +280,9 @@ export async function POST(request: Request) {
       return NextResponse.json({
         ok: true,
         message:
-          "Submission rejected — its earnings were reversed." + fraud,
+          shortfall > 0
+            ? `Submission rejected — its earnings were reversed except $${shortfall.toFixed(2)} already withdrawn.` + fraud
+            : "Submission rejected — its earnings were reversed." + fraud,
       });
     }
 
@@ -251,10 +294,18 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    await supabase
+    const { error: pendingRejectError } = await supabase
       .from("submissions")
       .update({ status: "rejected", rejection_reason: reason })
       .eq("id", submission.id);
+    if (pendingRejectError) {
+      return NextResponse.json(
+        {
+          error: `Could not reject the clip (${pendingRejectError.message}). Nothing was changed — try again.`,
+        },
+        { status: 500 }
+      );
+    }
     // P1-c: a 'bot views' rejection feeds the fraud ladder
     // (6 = concern, 10 = flag, 11 = auto-ban + owner alert).
     const fraud = await runBotRejectionCheck(supabase, submission.user_id, reason);
@@ -281,9 +332,25 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const views = Math.max(0, Math.floor(Number(body.views ?? 0)));
-    const likes = Math.max(0, Math.floor(Number(body.likes ?? 0)));
-    const comments = Math.max(0, Math.floor(Number(body.comments ?? 0)));
+    const viewsRaw = Number(body.views ?? 0);
+    const likesRaw = Number(body.likes ?? 0);
+    const commentsRaw = Number(body.comments ?? 0);
+    // Non-finite numbers ("abc", Infinity) used to sail past the
+    // guards: Math.max(0, NaN) is NaN, and NaN < 0.01 is false, so
+    // a bogus likes count bypassed the 1% engagement gate.
+    if (
+      !Number.isFinite(viewsRaw) ||
+      !Number.isFinite(likesRaw) ||
+      !Number.isFinite(commentsRaw)
+    ) {
+      return NextResponse.json(
+        { error: "Views, likes and comments must be numbers." },
+        { status: 400 }
+      );
+    }
+    const views = Math.max(0, Math.floor(viewsRaw));
+    const likes = Math.max(0, Math.floor(likesRaw));
+    const comments = Math.max(0, Math.floor(commentsRaw));
     if (!views || views <= 0) {
       return NextResponse.json(
         { error: "Enter the verified views before approving." },
@@ -314,6 +381,36 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
+    // Campaign-state check: never approve (and pay) out of a
+    // campaign that never went live (pending = unfunded) or was
+    // rejected. "live" and "ended" are both fine — pending clips
+    // are still reviewed during the settlement window after a
+    // campaign ends.
+    if (campaign.status === "pending" || campaign.status === "rejected") {
+      return NextResponse.json(
+        {
+          error: `This campaign is ${campaign.status} — clips can only be approved on a live (or ended) campaign.`,
+        },
+        { status: 400 }
+      );
+    }
+    // Unverified posted time: the 30-minute rule could not be
+    // checked (API failure, no connection, or Instagram — which
+    // has no API yet). The admin must confirm they checked the
+    // video's post time by hand before approving.
+    if (
+      (submission as Record<string, unknown>).posted_time_unverified === true &&
+      body.overrideUnverified !== true
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This clip's posted time is unverified — check the video's post time by hand (30-minute rule) before approving, then confirm the override.",
+          needsUnverifiedOverride: true,
+        },
+        { status: 400 }
+      );
+    }
     // Minimum views per clip (site-wide floor 1,000, migration 0028):
     // a clip below the campaign's minimum cannot be approved — the
     // owner must reject it instead. Clamped to >= 1,000: legacy
@@ -339,6 +436,18 @@ export async function POST(request: Request) {
       submission.platform
     );
     const budgetLeft = Number(campaign.budget_left ?? 0);
+    // A drained budget used to approve a clip at $0.00 with a
+    // normal-looking "Approved — $0.00 credited" toast. Block it:
+    // there is nothing left to pay this clip with.
+    if (budgetLeft <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This campaign's budget is fully used — there is nothing left to pay this clip with. Reject it, or top the budget up first.",
+        },
+        { status: 400 }
+      );
+    }
     // The per-post cap (migration 0007) — a creator never earns more
     // than this on one post, even if the views would pay more. Older
     // campaigns fall back to the old per-video / earn-up-to value.
@@ -356,6 +465,18 @@ export async function POST(request: Request) {
     // Never pay beyond the per-post cap or the remaining campaign budget.
     let earnings = Math.min(cappedEarnings, budgetLeft);
     earnings = Math.max(0, Math.round(earnings * 100) / 100);
+    // When the budget truncates the payout, say so — the creator
+    // is paid less than the views earned, and that must be visible.
+    const budgetCapped = earnings < cappedEarnings;
+    if (earnings <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "The remaining budget is too small to pay this clip anything. Reject it, or top the budget up first.",
+        },
+        { status: 400 }
+      );
+    }
 
     // No per-creator $ cap (item 4, Turn's decision): a creator's
     // earnings across their clips depend on their views — the
@@ -364,7 +485,11 @@ export async function POST(request: Request) {
     // per-platform count cap.
 
     const hold = holdUntil(new Date());
-    await supabase
+    // Claim the submission FIRST, with a status guard: two
+    // concurrent approves both pass the in-memory check above,
+    // but only one update matches a still-pending row. Zero rows
+    // updated = someone already decided it.
+    const { data: claimed, error: claimError } = await supabase
       .from("submissions")
       .update({
         status: "approved",
@@ -374,7 +499,26 @@ export async function POST(request: Request) {
         earnings,
         hold_until: hold.toISOString(),
       })
-      .eq("id", submission.id);
+      .eq("id", submission.id)
+      .eq("status", "pending")
+      .select("id");
+    if (claimError) {
+      return NextResponse.json(
+        {
+          error: `Could not approve the clip (${claimError.message}). Nothing was changed — try again.`,
+        },
+        { status: 500 }
+      );
+    }
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This submission was already decided by another review — reload /admin to see its current status.",
+        },
+        { status: 409 }
+      );
+    }
 
     const { data: wallet } = await supabase
       .from("wallets")
@@ -382,14 +526,47 @@ export async function POST(request: Request) {
       .eq("user_id", submission.user_id)
       .single();
     if (wallet) {
-      await supabase
+      const { error: walletError } = await supabase
         .from("wallets")
         .update({
           pending_balance: Number(wallet.pending_balance ?? 0) + earnings,
         })
         .eq("user_id", submission.user_id);
+      if (walletError) {
+        // The clip is approved but the credit failed — the owner
+        // must know, because the toast below would otherwise claim
+        // money was credited. The approved row stays visible in
+        // /admin for a manual fix.
+        return NextResponse.json(
+          {
+            error: `Clip approved, but the $${earnings.toFixed(2)} credit to the creator's wallet FAILED (${walletError.message}). The clip shows as approved in /admin — credit the wallet by hand.`,
+          },
+          { status: 500 }
+        );
+      }
+    } else {
+      // No wallet row (signup trigger missed it, or it was
+      // deleted): create it instead of silently dropping the
+      // credit — the old code approved the clip and credited
+      // nobody.
+      const { error: walletInsertError } = await supabase
+        .from("wallets")
+        .insert({
+          user_id: submission.user_id,
+          pending_balance: earnings,
+          available_balance: 0,
+          withdrawn_total: 0,
+        });
+      if (walletInsertError) {
+        return NextResponse.json(
+          {
+            error: `Clip approved, but no wallet exists for this creator and one could not be created (${walletInsertError.message}). The clip shows as approved in /admin — create the wallet and credit $${earnings.toFixed(2)} by hand.`,
+          },
+          { status: 500 }
+        );
+      }
     }
-    await supabase
+    const { error: budgetError } = await supabase
       .from("campaigns")
       .update({
         budget_left: Math.max(0, budgetLeft - earnings),
@@ -397,16 +574,27 @@ export async function POST(request: Request) {
         paid_out: Number(campaign.paid_out ?? 0) + earnings,
       })
       .eq("id", campaign.id);
+    if (budgetError) {
+      return NextResponse.json(
+        {
+          error: `Clip approved and credited, but the campaign budget could not be updated (${budgetError.message}). Fix the budget in /admin — the clip paid $${earnings.toFixed(2)} from a budget that still shows $${budgetLeft.toFixed(2)} left.`,
+        },
+        { status: 500 }
+      );
+    }
 
     // Flag action: approving a flagged submission decides it —
     // the flag resolves and the payout proceeds.
     await resolveFlag(supabase, submission.id, "approved");
 
+    const budgetNote = budgetCapped
+      ? ` Capped by the remaining budget ($${budgetLeft.toFixed(2)} left) — the views earned $${cappedEarnings.toFixed(2)}.`
+      : "";
     return NextResponse.json({
       ok: true,
       message: capped
-        ? `Approved — $${earnings.toFixed(2)} credited to the creator's ${HOLD_HOURS}-hour hold. Cap of $${cap.toFixed(2)} applied: ${views.toLocaleString()} views at $${ratePer1k.toFixed(2)}/1k would have earned $${uncapped.toFixed(2)}.`
-        : `Approved — $${earnings.toFixed(2)} credited to the creator's ${HOLD_HOURS}-hour hold.`,
+        ? `Approved — $${earnings.toFixed(2)} credited to the creator's ${HOLD_HOURS}-hour hold. Cap of $${cap.toFixed(2)} applied: ${views.toLocaleString()} views at $${ratePer1k.toFixed(2)}/1k would have earned $${uncapped.toFixed(2)}.${budgetNote}`
+        : `Approved — $${earnings.toFixed(2)} credited to the creator's ${HOLD_HOURS}-hour hold.${budgetNote}`,
       earnings,
       uncappedEarnings: uncapped,
       cap,

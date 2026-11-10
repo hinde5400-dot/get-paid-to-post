@@ -285,7 +285,7 @@ export default async function HomePage() {
   const profile = user ? await getProfile(user.id) : null;
   // Brands get their own home: their campaigns and funding status —
   // never an earning pitch. A brand does not come here to earn.
-  if (profile?.role === "brand") {
+  if (user && profile?.role === "brand") {
     return <BrandHome user={user} profile={profile} />;
   }
   const campaigns = await getCampaigns();

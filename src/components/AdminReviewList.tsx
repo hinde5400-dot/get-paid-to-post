@@ -173,7 +173,7 @@ export default function AdminReviewList({
     }
   }
 
-  function review(
+  async function review(
     s: AdminSubmission,
     action: "approve" | "reject"
   ) {
@@ -196,20 +196,66 @@ export default function AdminReviewList({
       // that is what fraud tooling counts later.
       reason = picked === "other" && note ? `other: ${note}` : picked;
     }
+    const body: Record<string, unknown> = {
+      submissionId: s.id,
+      action,
+      views: v,
+      likes: l,
+      comments: c,
+      ...(reason ? { reason } : {}),
+    };
+    if (action === "approve") {
+      // Unverified posted time: the API refuses the approve until
+      // the admin confirms they checked the video's post time by
+      // hand (30-minute rule). Ask once, then retry with the
+      // override flag.
+      setBusyAction(action);
+      setBusy(s.id);
+      try {
+        let res = await fetch("/api/admin/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        let data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          message?: string;
+          needsUnverifiedOverride?: boolean;
+        };
+        if (!res.ok && data.needsUnverifiedOverride) {
+          if (
+            !window.confirm(
+              "This clip's posted time could not be verified — check the video's post time by hand (it must be within 30 minutes of posting) and confirm you checked it before approving."
+            )
+          ) {
+            return;
+          }
+          res = await fetch("/api/admin/review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...body, overrideUnverified: true }),
+          });
+          data = (await res.json()) as {
+            ok?: boolean;
+            error?: string;
+            message?: string;
+            needsUnverifiedOverride?: boolean;
+          };
+        }
+        if (!res.ok) throw new Error(data.error || "Action failed.");
+        showSuccess(data.message ?? "Submission approved.");
+        router.refresh();
+      } catch (e) {
+        showError(e instanceof Error ? e.message : "Action failed.");
+      } finally {
+        setBusy(null);
+        setBusyAction(null);
+      }
+      return;
+    }
     setBusyAction(action);
-    void call(
-      "/api/admin/review",
-      {
-        submissionId: s.id,
-        action,
-        views: v,
-        likes: l,
-        comments: c,
-        ...(reason ? { reason } : {}),
-      },
-      s.id,
-      `Submission ${action}d.`
-    );
+    void call("/api/admin/review", body, s.id, `Submission ${action}d.`);
   }
 
   function blockCreator(s: AdminSubmission) {
