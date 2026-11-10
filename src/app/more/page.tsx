@@ -6,7 +6,7 @@ import SignOutButton from "@/components/SignOutButton";
 
 const LINKS = [
   { href: "/campaigns", label: "Campaigns", icon: "◎", desc: "Browse funded campaigns" },
-  { href: "/connect", label: "My accounts", icon: "🔗", desc: "TikTok, Instagram & YouTube links" },
+  { href: "/connect", label: "My accounts", icon: "🔗", desc: "TikTok & YouTube logins, Instagram profile link" },
   { href: "/how-it-works", label: "How It Works & FAQ", icon: "?", desc: "Learn how earning works" },
   { href: "/dashboard", label: "Stats", icon: "▤", desc: "Your views and earnings" },
   { href: "/earnings", label: "Earnings", icon: "$", desc: "Balance, hold & withdrawals" },
