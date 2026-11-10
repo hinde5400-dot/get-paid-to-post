@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { getServerClient } from "@/lib/supabase/server";
+import { signInCronService } from "@/lib/supabase/cron-service";
 import { refreshPendingViews } from "@/lib/views/refresh";
 
 /**
@@ -8,10 +9,19 @@ import { refreshPendingViews } from "@/lib/views/refresh";
  *
  * Called by the GitHub Actions workflow (.github/workflows/
  * refresh-views.yml, free on a public repo) every 3 hours with
- * `Authorization: Bearer <CRON_SECRET>`. No user session is needed
- * — the route authenticates with the shared secret, and all
- * database access goes through SECURITY DEFINER functions (see
- * migration 0018). No service_role key is used anywhere.
+ * `Authorization: Bearer <CRON_SECRET>`. The route authenticates
+ * with the shared secret AND signs in as the dedicated cron
+ * service account (CRON_SERVICE_EMAIL / CRON_SERVICE_PASSWORD —
+ * a normal creator-role user, not an admin) before any database
+ * call, because migration 0036 revoked the anon grant on the
+ * refresh RPCs. All database access goes through SECURITY DEFINER
+ * functions (see migration 0018). No service_role key is used
+ * anywhere.
+ *
+ * FAIL LOUD: when the service-account env vars are missing or the
+ * sign-in fails, the route returns 503 immediately — a run must
+ * never silently do nothing, and must never fall back to the anon
+ * key for the revoked RPCs.
  *
  * STATUS (P1-11): 503 when the whole run failed (the pending list
  * could not be loaded at all, or every single row failed) — the
@@ -50,6 +60,14 @@ async function handle(request: Request) {
       { error: "Supabase is not configured yet." },
       { status: 503 }
     );
+  }
+  // Migration 0036 revoked anon on the refresh RPCs — sign in as
+  // the dedicated cron service account first. Fail loud (503) on
+  // missing env vars or a failed sign-in; never fall back to anon.
+  const serviceError = await signInCronService(supabase);
+  if (serviceError) {
+    console.error("Cron service sign-in failed:", serviceError);
+    return NextResponse.json({ error: serviceError }, { status: 503 });
   }
   try {
     const summary = await refreshPendingViews(supabase);
