@@ -626,6 +626,48 @@ function mapBrandMessage(row: Record<string, unknown>): BrandMessage {
 }
 
 /**
+ * Prefix of the admin message written to a campaign's brand chat
+ * when the campaign is rejected (see POST /api/admin/campaigns).
+ * There is NO rejection_reason column on campaigns — the column
+ * from migration 0020 lives on submissions only — and no new
+ * migration may be added in this batch, so the brand chat thread
+ * is the durable store for the reason (the admin insert policy
+ * in migration 0015 allows the owner to write sender='admin'
+ * messages), and getCampaignRejectionReason reads it back for
+ * the brand dashboard and payment page. The reason is also
+ * returned in the reject API response.
+ */
+export const CAMPAIGN_REJECTED_MESSAGE_PREFIX = "Campaign rejected:";
+
+/** The rejection reason for a campaign, read back from its brand
+ *  chat thread (latest admin "Campaign rejected: …" message).
+ *  Returns null when the campaign was never rejected this way
+ *  (e.g. rejected before this fix) or the chat cannot be read —
+ *  callers show generic copy then, never a wrong reason. */
+export async function getCampaignRejectionReason(
+  campaignId: string
+): Promise<string | null> {
+  try {
+    const messages = await getCampaignMessages(campaignId);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (
+        m.sender === "admin" &&
+        m.message.startsWith(CAMPAIGN_REJECTED_MESSAGE_PREFIX)
+      ) {
+        return (
+          m.message.slice(CAMPAIGN_REJECTED_MESSAGE_PREFIX.length).trim() ||
+          null
+        );
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Messages on one campaign, oldest first — for the payment-page
  * chat thread. RLS (migration 0015) lets a brand read every message
  * on its own campaigns (its own and the admin's replies) and the
