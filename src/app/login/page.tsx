@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 import Logo from "@/components/Logo";
 import Spinner from "@/components/Spinner";
 import { useToast } from "@/components/Toast";
@@ -95,11 +96,17 @@ function LoginForm() {
     }
   }
 
-  // Shown when middleware redirects a guest away from a protected page.
+  // Shown when middleware redirects a guest away from a protected page,
+  // or when the auth callback bounces a blocked / cancelled sign-in.
+  const noticeMessage = searchParams.get("message");
   const notice =
-    searchParams.get("message") === "login-required"
+    noticeMessage === "login-required"
       ? "Please login to continue."
-      : "";
+      : noticeMessage === "account-blocked"
+        ? "This account is blocked. Please contact support."
+        : noticeMessage === "google-cancelled"
+          ? "Google sign-in was cancelled. Try again or log in with email."
+          : "";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -247,6 +254,14 @@ function LoginForm() {
             "Log in"
           )}
         </button>
+        <div className="mt-6 flex items-center gap-3 text-xs font-bold uppercase tracking-wide text-fg/40">
+          <span className="h-px flex-1 bg-fg/10" />
+          or
+          <span className="h-px flex-1 bg-fg/10" />
+        </div>
+        <div className="mt-4">
+          <GoogleSignInButton next="/dashboard" />
+        </div>
         {locked && (
           <p className="mt-3 text-center text-sm font-semibold text-red-300">
             Too many failed attempts — login is locked for {lockLeft}{" "}
