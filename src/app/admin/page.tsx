@@ -8,6 +8,7 @@ import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewL
 import AdminFraudList, { type FraudCreator } from "@/components/AdminFraudList";
 import AdminRecheckList from "@/components/AdminRecheckList";
 import AdminPayoutsList, { type PayoutRow } from "@/components/AdminPayoutsList";
+import AdminCreatorsList, { type CreatorRow } from "@/components/AdminCreatorsList";
 import AdminCampaignList from "@/components/AdminCampaignList";
 import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
@@ -169,6 +170,40 @@ export default async function AdminPage() {
   payoutRows.sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  // Creators (admin batch 2): every creator who has submitted,
+  // with clip count, total views and total earnings (approved
+  // earnings only — rejected clips pay $0).
+  const creatorMap = new Map<string, CreatorRow>();
+  for (const s of items) {
+    let row = creatorMap.get(s.user_id);
+    if (!row) {
+      row = {
+        user_id: s.user_id,
+        email: s.creator_email,
+        clips: 0,
+        views: 0,
+        earnings: 0,
+        clipList: [],
+      };
+      creatorMap.set(s.user_id, row);
+    }
+    row.clips += 1;
+    row.views += s.views ?? 0;
+    if (s.status === "approved") row.earnings += s.earnings ?? 0;
+    row.clipList.push({
+      id: s.id,
+      campaign_title: s.campaign_title ?? "Campaign",
+      platform: s.platform,
+      post_url: s.post_url,
+      views: s.views ?? 0,
+      earnings: s.earnings ?? 0,
+      status: s.status,
+    });
+  }
+  const creatorRows = [...creatorMap.values()].sort(
+    (a, b) => b.views - a.views || b.clips - a.clips
   );
 
   // P1-c fraud watch: live bot-rejection counts from submissions,
@@ -375,6 +410,28 @@ export default async function AdminPage() {
         </p>
         <div className="mt-4">
           <AdminPayoutsList rows={payoutRows} />
+        </div>
+      </section>
+
+      {/* Creators — owner-only. Every creator who has submitted,
+          with clip count, total views and total earnings. Click a
+          creator to see their clips. Display-only. */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Creators
+          </h2>
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
+            {creatorRows.length} creator{creatorRows.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Creators who have submitted a clip, sorted by total views.
+          Click a creator to see every clip they submitted, with its
+          views and earnings.
+        </p>
+        <div className="mt-4">
+          <AdminCreatorsList creators={creatorRows} />
         </div>
       </section>
 
