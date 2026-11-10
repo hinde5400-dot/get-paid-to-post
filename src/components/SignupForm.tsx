@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 import Logo from "@/components/Logo";
 import RoleCards from "@/components/RoleCards";
 import Spinner from "@/components/Spinner";
@@ -150,8 +151,8 @@ export default function SignupForm({ role }: { role: Role | null }) {
       </h1>
       <p className="mt-2 text-center text-sm text-fg/60">
         {role === "brand"
-          ? "Launch a campaign and get viral clips. Email and password only."
-          : "Post clips, get paid per view. Email and password only."}
+          ? "Launch a campaign and get viral clips. Email and password, or continue with Google."
+          : "Post clips, get paid per view. Email and password, or continue with Google."}
       </p>
       <p className="mt-3 text-center text-sm">
         <Link href="/signup" className="font-bold text-lime hover:underline">
@@ -256,6 +257,17 @@ export default function SignupForm({ role }: { role: Role | null }) {
             "Sign up free"
           )}
         </button>
+        <div className="mt-6 flex items-center gap-3 text-xs font-bold uppercase tracking-wide text-fg/40">
+          <span className="h-px flex-1 bg-fg/10" />
+          or
+          <span className="h-px flex-1 bg-fg/10" />
+        </div>
+        <div className="mt-4">
+          <GoogleSignInButton
+            role={role}
+            next={role === "brand" ? "/brands" : "/onboarding"}
+          />
+        </div>
         <p className="mt-4 text-center text-sm text-fg/60">
           Already have an account?{" "}
           <Link href="/login" className="font-bold text-lime hover:underline">
