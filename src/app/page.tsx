@@ -1,12 +1,33 @@
 import Link from "next/link";
-import { getCampaigns, getCampaignStatsMap } from "@/lib/data";
-import { getCurrentUser } from "@/lib/auth";
+import {
+  campaignStatus,
+  getBrandCampaigns,
+  getCampaigns,
+  getCampaignStatsMap,
+} from "@/lib/data";
+import { getCurrentUser, getProfile } from "@/lib/auth";
 import CampaignGrid from "@/components/CampaignGrid";
 import CampaignBanner from "@/components/CampaignBanner";
 import Faq from "@/components/Faq";
 import DiscordButton from "@/components/DiscordButton";
 import RoleCards from "@/components/RoleCards";
-import { formatUSD, rateRangeText } from "@/lib/money";
+import { budgetUsedPct, formatUSD, rateRangeText } from "@/lib/money";
+import type { User } from "@supabase/supabase-js";
+import type { UserProfile } from "@/lib/types";
+
+const PENDING_EXPIRY_DAYS = 7;
+
+/** When an unpaid pending campaign expires (created + 7 days). */
+function pendingExpiryText(createdAt?: string | null): string | null {
+  if (!createdAt) return null;
+  const d = new Date(new Date(createdAt).getTime() + PENDING_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 const FAQS = [
   {
@@ -15,7 +36,7 @@ const FAQS = [
   },
   {
     q: "When do I get paid after a campaign ends?",
-    a: "About 1 week after the campaign ends. First there is a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then the 72-hour payment hold finishes and payouts are made. Approved earnings go into the 72-hour hold as soon as they are approved during the campaign — the week after a campaign ends is the final re-check and payout window.",
+    a: "About 1 week after the campaign ends. First there is a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then the 72-hour payment hold finishes and payouts are made. Approved earnings go into the 72-hour hold as soon as they are approved during the campaign — the week after a campaign ends is the final re-check and payout window. One day after payout finishes, the campaign, its proofs and its chat are deleted — your earnings history stays in your account.",
   },
   {
     q: "Do I need followers to join?",
@@ -23,15 +44,15 @@ const FAQS = [
   },
   {
     q: "How much can I earn per post?",
-    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. A clip needs at least 1,000 views to earn — clips below 1,000 views cannot be approved. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
+    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. The campaign sets ONE rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube. A clip needs at least 1,000 views to earn — clips below 1,000 views cannot be approved. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
   },
   {
     q: "What are the video rules?",
-    a: "Vertical 9:16 video, captions on screen, and a hook in the first 3 seconds. Follow the campaign brief, and post only your own original content.",
+    a: "Vertical 9:16 video, captions on screen, and a hook in the first 3 seconds. Follow the campaign brief, and post only your own original content. Submit your link within 30 minutes of posting — Instagram links are hand-checked by the admin (no automatic check yet). Every clip needs at least 1% engagement (likes + comments only — shares and saves never count). Fake engagement will lead to your account being strictly blocked or banned.",
   },
   {
     q: "How many posts can I submit?",
-    a: "Up to 15 approved clips per platform per campaign, and one clip per platform every 2 hours. Submit any 2 of TikTok, Instagram and YouTube together as one bundle. Rejected clips don't count toward the 15-clip limit.",
+    a: "Up to 15 approved clips per platform per campaign, and one clip per platform every 2 hours — the cooldown applies across all campaigns on that platform, not per campaign. A rejected or duplicate submission does not start the cooldown. Submit any 2 of TikTok, Instagram and YouTube together as one bundle. Rejected clips don't count toward the 15-clip limit, and a rejected clip cannot be resubmitted — post a new clip instead.",
   },
   {
     q: "What happens with fake engagement?",
@@ -39,7 +60,7 @@ const FAQS = [
   },
   {
     q: "Is Get Paid To Post safe?",
-    a: "Yes. Every campaign is funded by the brand before it goes live, creators are paid only for verified views, and creators never pay anything to join, post, or earn. The site runs over secure HTTPS, and support is available on Discord.",
+    a: "We make no guarantee of safety — here is how it works instead. Every campaign is funded by the brand before it goes live, creators are paid only for verified views, and creators never pay anything to join, post, or earn. Views are checked through the platforms and reviewed by hand, and fake engagement leads to an account being strictly blocked or banned. Support runs on Discord.",
   },
   {
     q: "What happens to my unspent budget?",
@@ -47,7 +68,11 @@ const FAQS = [
   },
   {
     q: "What if my clip is rejected by mistake?",
-    a: "You can appeal once through Discord support. A person will review your appeal and reply within 10 business days. Earnings that have already settled to your Withdrawable Balance are never reversed; only unsettled earnings can be returned to the campaign budget.",
+    a: "You can appeal once through Discord support. A person will review your appeal and reply within 10 business days. If a submission is rejected after it was approved, its earnings are reversed — taken back from your Pending Balance first, then from your Withdrawable Balance — and returned to the campaign budget. Only amounts already withdrawn (paid out) cannot be reversed.",
+  },
+  {
+    q: "What happens after a campaign ends?",
+    a: "About 1 week after the campaign ends: first a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then the 72-hour payment hold finishes and payouts are made. One day after payout finishes, the campaign, its proofs and its chat are deleted — your earnings history stays in your account.",
   },
   {
     q: "Do you guarantee views or earnings?",
@@ -55,12 +80,218 @@ const FAQS = [
   },
 ];
 
+/**
+ * Brand home — a brand's own campaigns, funding status and a
+ * Launch Campaign call to action. NEVER an earning pitch: a brand
+ * does not come here to earn, it comes to launch campaigns and get
+ * clips made.
+ */
+async function BrandHome({
+  user,
+  profile,
+}: {
+  user: User;
+  profile: UserProfile;
+}) {
+  const campaigns = await getBrandCampaigns(user.id);
+  const displayName =
+    profile.brand_name ?? profile.full_name ?? user.email ?? "Brand";
+  const liveCount = campaigns.filter(
+    (c) => campaignStatus(c) === "live"
+  ).length;
+  const pendingCount = campaigns.filter(
+    (c) => c.status === "pending"
+  ).length;
+  const needsFunding = campaigns.filter(
+    (c) => c.status === "pending" && !c.is_funded
+  ).length;
+
+  return (
+    <div className="space-y-10">
+      <section className="pt-6 text-center md:pt-10">
+        <p className="inline-block rounded-full bg-lime px-4 py-1.5 text-xs font-black uppercase tracking-widest text-black">
+          For Brands
+        </p>
+        <h1 className="mx-auto mt-5 max-w-3xl font-display text-5xl font-black uppercase leading-[0.95] tracking-tight text-fg md:text-7xl">
+          Launch a campaign. <span className="bg-lime px-2 text-black">Get clips made.</span>
+        </h1>
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-fg/70 md:text-lg">
+          Welcome back, {displayName}. Fund a budget, set your rate,
+          and real creators post clips about your brand — you pay only
+          for verified views.
+        </p>
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/brands"
+            className="rounded-full bg-lime px-7 py-3.5 text-sm font-black text-black transition hover:bg-limedark"
+          >
+            + Launch a campaign
+          </Link>
+          <Link
+            href="/pricing"
+            className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+          >
+            See pricing
+          </Link>
+        </div>
+        <p className="mt-8 text-sm font-bold text-fg/50">
+          <span className="font-black text-lime">
+            {campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}
+          </span>
+          {" · "}
+          {liveCount} live{" · "}{pendingCount} pending
+          {needsFunding > 0 && (
+            <>
+              {" · "}
+              <span className="font-black text-amber-300">
+                {needsFunding} need{needsFunding === 1 ? "s" : ""} funding
+              </span>
+            </>
+          )}
+        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-4 font-display text-2xl font-black uppercase tracking-tight text-fg">
+          Your campaigns
+        </h2>
+        {campaigns.length === 0 ? (
+          <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">
+            <p className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-lime/15 text-3xl">
+              🏢
+            </p>
+            <p className="mt-4 font-display text-2xl font-black uppercase tracking-tight text-fg">
+              You haven&apos;t launched a campaign yet
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+              Fund a budget and pay only for verified views. Your
+              campaign goes live once payment is verified.
+            </p>
+            <Link
+              href="/brands"
+              className="mt-6 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+            >
+              Create your first campaign
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {campaigns.map((c) => {
+              const status = campaignStatus(c);
+              const usedPct = budgetUsedPct(c.budget_total, c.budget_left);
+              const pill =
+                status === "live"
+                  ? "bg-lime/15 text-lime"
+                  : status === "settling"
+                    ? "bg-fg/10 text-fg/60"
+                    : c.status === "rejected"
+                      ? "bg-red-500/15 text-red-300"
+                      : "bg-yellow-500/15 text-yellow-300";
+              const label =
+                status === "live"
+                  ? "Live"
+                  : status === "settling"
+                    ? "Ended"
+                    : c.status === "rejected"
+                      ? "Rejected"
+                      : "Pending";
+              const expiry =
+                c.status === "pending" && !c.is_funded
+                  ? pendingExpiryText(c.created_at)
+                  : null;
+              return (
+                <div
+                  key={c.id}
+                  className="rounded-2xl border border-fg/10 bg-card p-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate font-display text-lg font-black text-fg">
+                          {c.title}
+                        </h3>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-black ${pill}`}
+                        >
+                          {label}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-fg/60">
+                        {formatUSD(c.view_bonus_per_1k)} per 1k views ·{" "}
+                        {usedPct}% budget used
+                      </p>
+                      {expiry && (
+                        <p className="mt-1 text-xs font-bold text-amber-300">
+                          Unpaid pending campaigns expire after 7 days
+                          {expiry ? ` — this one expires ${expiry}` : ""}.
+                          Chatting alone does not count as payment.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {c.status === "pending" && !c.is_funded && (
+                        <Link
+                          href={`/brands/payment/${c.id}`}
+                          className="rounded-full bg-lime px-4 py-2 text-xs font-black uppercase tracking-wide text-black transition hover:bg-limedark"
+                        >
+                          Fund this campaign
+                        </Link>
+                      )}
+                      <Link
+                        href={`/campaign/${c.id}`}
+                        className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
+                      >
+                        View campaign
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-lime/40 bg-card p-6 text-center md:p-8">
+        <h2 className="text-xl font-extrabold text-fg">
+          How brand funds are protected
+        </h2>
+        <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-fg/70">
+          Your budget is funded before your campaign goes live. Creators
+          are paid only for verified views at the rate you set — never
+          for promises. Unspent budget stays yours.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/pricing"
+            className="text-sm font-bold text-lime hover:underline"
+          >
+            See full pricing →
+          </Link>
+          <Link
+            href="/rules#brands"
+            className="text-sm font-bold text-lime hover:underline"
+          >
+            Rules for brands →
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default async function HomePage() {
+  const user = await getCurrentUser();
+  const profile = user ? await getProfile(user.id) : null;
+  // Brands get their own home: their campaigns and funding status —
+  // never an earning pitch. A brand does not come here to earn.
+  if (profile?.role === "brand") {
+    return <BrandHome user={user} profile={profile} />;
+  }
   const campaigns = await getCampaigns();
   const featured = campaigns[0];
   const rest = campaigns.slice(1, 7);
   const stats = await getCampaignStatsMap(rest.map((c) => c.id));
-  const user = await getCurrentUser();
 
   return (
     <div className="space-y-14">
@@ -210,7 +441,7 @@ export default async function HomePage() {
         </h2>
         <div className="grid gap-4 md:grid-cols-4">
           {[
-            { n: "1", t: "Sign up free", d: "Create your account with email and password only. Then connect your TikTok, Instagram and YouTube profiles." },
+            { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. Then connect your TikTok, Instagram and YouTube profiles." },
             { n: "2", t: "Pick a campaign", d: "Browse funded campaigns and choose one that fits your style. Check the brief, rate and rules first." },
             { n: "3", t: "Post your clip", d: "Film a vertical 9:16 clip with captions and a hook in the first 3 seconds. Post it, then submit the link." },
             { n: "4", t: "Get paid per view", d: "Approved earnings sit in a 72-hour hold, then land in your wallet. Withdraw from $15 in USDT (TRC20 or BEP20)." },
@@ -227,6 +458,62 @@ export default async function HomePage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Trust & verification — true claims only. Nothing here
+          promises views, earnings or safety as a guarantee. */}
+      <section>
+        <h2 className="mb-6 text-center font-display text-2xl font-black uppercase tracking-tight text-fg">
+          Why creators and brands trust Get Paid To Post
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[
+            {
+              t: "Funded upfront",
+              d: "Every campaign is funded by the brand before it goes live. Creators are paid from that funded budget — never from promises.",
+            },
+            {
+              t: "Verified views",
+              d: "Views are checked through the platforms' own data and reviewed by hand. Only verified views from real people count.",
+            },
+            {
+              t: "1% engagement gate",
+              d: "Every clip needs at least 1% engagement — likes + comments only. Shares and saves never count.",
+            },
+            {
+              t: "Bot-rejection ladder",
+              d: "Bot-view rejections add up: 6 is a concern, 10 flags the account, and one more after the flag bans it automatically.",
+            },
+            {
+              t: "Every rejection shows its reason",
+              d: "A rejected clip always tells you why — bot views, brief mismatch, wrong content or duplicate. One appeal via Discord.",
+            },
+            {
+              t: "Free to join — no fake engagement",
+              d: "Creators never pay anything to join, post or earn. Fake engagement will lead to an account being strictly blocked or banned.",
+            },
+          ].map((c) => (
+            <div
+              key={c.t}
+              className="rounded-2xl border border-fg/10 bg-card p-5"
+            >
+              <h3 className="font-display font-black tracking-tight text-fg">
+                {c.t}
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-fg/60">
+                {c.d}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-5 text-center text-sm">
+          <Link
+            href="/rules"
+            className="font-bold text-lime hover:underline"
+          >
+            Read the full rules →
+          </Link>
+        </p>
       </section>
 
       {/* FAQ */}
