@@ -42,7 +42,7 @@ export function extractYouTubeVideoId(rawUrl: string): string | null {
 type YouTubeResult = { views: number; likes: number; comments: number } | { error: string };
 
 type YouTubeVideoResult =
-  | { views: number; likes: number; comments: number; channelId: string; channelTitle: string }
+  | { views: number; likes: number; comments: number; channelId: string; channelTitle: string; publishedAt: string | null }
   | { error: string };
 
 /**
@@ -85,7 +85,7 @@ export async function fetchYouTubeVideoDetails(
   const data = (await res.json()) as {
     items?: {
       statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
-      snippet?: { channelId?: string; channelTitle?: string };
+      snippet?: { channelId?: string; channelTitle?: string; publishedAt?: string };
     }[];
   };
   const item = data?.items?.[0];
@@ -104,6 +104,9 @@ export async function fetchYouTubeVideoDetails(
     comments: Number.isNaN(comments) ? 0 : comments,
     channelId,
     channelTitle: item.snippet?.channelTitle ?? "",
+    // When the video itself was posted (30-minute submit rule) —
+    // null when YouTube does not return one.
+    publishedAt: item.snippet?.publishedAt ?? null,
   };
 }
 

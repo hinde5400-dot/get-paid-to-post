@@ -15,9 +15,9 @@
 
 const TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/";
 const VIDEO_QUERY_URL =
-  "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count,like_count,comment_count";
+  "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count,like_count,comment_count,create_time";
 const VIDEO_LIST_URL =
-  "https://open.tiktokapis.com/v2/video/list/?fields=id,share_url,view_count,like_count,comment_count";
+  "https://open.tiktokapis.com/v2/video/list/?fields=id,share_url,view_count,like_count,comment_count,create_time";
 
 export interface TikTokTokens {
   accessToken: string;
@@ -100,11 +100,22 @@ async function refreshAccessToken(
 
 /** Views + engagement counts for one video. likes/comments may be
  *  absent from the API response — the caller falls back to the
- *  stored counts rather than zeroing them. */
+ *  stored counts rather than zeroing them. postedAt is when the
+ *  video itself was posted (create_time, unix seconds), for the
+ *  30-minute submit rule — null when TikTok does not return one. */
 export interface TikTokVideoStats {
   views: number;
   likes: number | null;
   comments: number | null;
+  postedAt: string | null;
+}
+
+/** create_time (unix seconds) → ISO string, or null. */
+function postedAtFrom(createTime: unknown): string | null {
+  if (typeof createTime !== "number" || !Number.isFinite(createTime)) return null;
+  const ms = createTime * 1000;
+  if (ms <= 0) return null;
+  return new Date(ms).toISOString();
 }
 
 async function queryVideoViews(
@@ -135,6 +146,7 @@ async function queryVideoViews(
         view_count?: number;
         like_count?: number;
         comment_count?: number;
+        create_time?: number;
       }[];
     };
   };
@@ -145,6 +157,7 @@ async function queryVideoViews(
     likes: typeof video.like_count === "number" ? video.like_count : null,
     comments:
       typeof video.comment_count === "number" ? video.comment_count : null,
+    postedAt: postedAtFrom(video.create_time),
   };
 }
 
@@ -179,6 +192,7 @@ async function listVideoViews(
           view_count?: number;
           like_count?: number;
           comment_count?: number;
+          create_time?: number;
         }[];
         cursor?: number;
         has_more?: boolean;
@@ -194,6 +208,7 @@ async function listVideoViews(
         likes: typeof match.like_count === "number" ? match.like_count : null,
         comments:
           typeof match.comment_count === "number" ? match.comment_count : null,
+        postedAt: postedAtFrom(match.create_time),
       };
     }
     if (!data?.data?.has_more) return null;
@@ -203,7 +218,15 @@ async function listVideoViews(
 }
 
 export type TikTokViewResult =
-  | { views: number; likes: number | null; comments: number | null; tokens?: TikTokTokens }
+  | {
+      views: number;
+      likes: number | null;
+      comments: number | null;
+      /** When the video itself was posted (create_time) — null
+       *  when TikTok does not return one. 30-minute submit rule. */
+      postedAt: string | null;
+      tokens?: TikTokTokens;
+    }
   | { error: string; tokens?: TikTokTokens };
 
 /**
@@ -253,6 +276,7 @@ export async function fetchTikTokViews(
     views: stats.views,
     likes: stats.likes,
     comments: stats.comments,
+    postedAt: stats.postedAt,
     tokens: freshTokens,
   };
 }

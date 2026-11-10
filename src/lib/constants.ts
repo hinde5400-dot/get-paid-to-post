@@ -73,5 +73,11 @@ export const VIEWS_TRACKED_DAYS = 14; // views tracked for 14 days
 // YouTube 15). Rejected clips do NOT count toward the 15.
 export const MAX_APPROVED_CLIPS_PER_PLATFORM = 15;
 export const COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours, per platform
+// 30-minute submit rule (Turn's decision 2026-11-10, matches Content
+// Rewards exactly): a creator must submit the post link within 30
+// minutes of posting the video. A link posted more than 30 minutes
+// earlier is not accepted at submit time.
+export const SUBMIT_WINDOW_MINUTES = 30;
+export const SUBMIT_WINDOW_MS = SUBMIT_WINDOW_MINUTES * 60 * 1000;
 export const HOW_MADE_MIN_WORDS = 10;
 export const MAX_PROOF_SCREENSHOTS = 3;

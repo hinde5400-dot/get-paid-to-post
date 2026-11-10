@@ -8,7 +8,10 @@ import {
   MAX_APPROVED_CLIPS_PER_PLATFORM,
   MAX_PROOF_SCREENSHOTS,
   PLATFORM_LABELS,
+  SUBMIT_WINDOW_MINUTES,
+  SUBMIT_WINDOW_MS,
 } from "@/lib/constants";
+import { fetchPostedTime } from "@/lib/views/posted-time";
 import { countWords, validatePostUrl } from "@/lib/validate";
 import { canonicalizePostUrl } from "@/lib/canonical-url";
 import type { Platform } from "@/lib/types";
@@ -142,6 +145,9 @@ export async function POST(request: Request) {
   // link and claim its views. TikTok does not need this check —
   // Login Kit only ever returns the connected creator's own videos.
   const youtubeLink = links.find((l) => l.platform === "youtube");
+  // When the YouTube video itself was posted (30-minute rule) —
+  // captured here so the submit route reuses the gate's lookup.
+  let youtubePublishedAt: string | null = null;
   if (youtubeLink) {
     const { data: ytConn } = await supabase
       .from("youtube_connections")
@@ -179,6 +185,47 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    youtubePublishedAt = details.publishedAt;
+  }
+
+  // 30-minute submit rule (admin batch 2, Turn's decision
+  // 2026-11-10, matches Content Rewards exactly): the post link
+  // must be submitted within 30 minutes of the video being
+  // posted. The posted time is fetched from the platform API;
+  // when it cannot be obtained (Instagram has no API access yet,
+  // or the API fails) the submit is allowed but flagged
+  // "posted time unverified" for the admin to check by hand.
+  // Checked BEFORE any insert, so a too-old link rejects the
+  // whole bundle instead of half-creating it.
+  const postedInfo: { postedAt: string | null; unverified: boolean }[] = [];
+  for (const l of links) {
+    let postedAt: string | null = null;
+    try {
+      const res = await fetchPostedTime(
+        l.platform,
+        l.url,
+        user.id,
+        l.platform === "youtube" ? youtubePublishedAt : undefined
+      );
+      const ms = res.postedAt ? new Date(res.postedAt).getTime() : NaN;
+      postedAt = Number.isFinite(ms) ? res.postedAt : null;
+    } catch {
+      // An API failure must not block the submit — flag it
+      // unverified and let the admin check the post time.
+      postedAt = null;
+    }
+    if (postedAt) {
+      const ageMs = Math.max(0, Date.now() - new Date(postedAt).getTime());
+      if (ageMs > SUBMIT_WINDOW_MS) {
+        return NextResponse.json(
+          {
+            error: `This ${PLATFORM_LABELS[l.platform]} video was posted more than ${SUBMIT_WINDOW_MINUTES} minutes ago. Link submitted more than 30 minutes after the video was posted (30-minute limit) — submit your link within 30 minutes of posting.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+    postedInfo.push({ postedAt, unverified: postedAt === null });
   }
 
   const howMade = (body.howMade ?? "").trim();
@@ -255,7 +302,8 @@ export async function POST(request: Request) {
   const codes: string[] = [];
   let duplicateWarning = false;
 
-  for (const l of links) {
+  for (let i = 0; i < links.length; i++) {
+    const l = links[i];
     // Same link already submitted by someone else → duplicate, auto-rejected.
     const { data: existing } = await supabase
       .from("submissions")
@@ -282,6 +330,11 @@ export async function POST(request: Request) {
       how_made: howMade,
       proof_screenshots: proof,
       is_duplicate: isDuplicate,
+      // 30-minute rule (migration 0031): when the video itself was
+      // posted, plus the unverified flag when the API could not
+      // supply a posted time.
+      posted_at: postedInfo[i]?.postedAt ?? null,
+      posted_time_unverified: postedInfo[i]?.unverified ?? true,
     });
     if (insError) {
       return NextResponse.json(
