@@ -85,14 +85,37 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    // Refund FIRST: the amount was debited from the creator's
-    // available balance when they requested it — an approved (not
-    // yet paid) withdrawal gets it back too. The old code refunded
-    // pending rows only, then told the owner the refund happened
-    // for every row. P0-1: reverse BOTH sides of the request-time
-    // debit — available += amount AND withdrawn_total -= amount
-    // (floored at 0: a legacy row created before the fix never
-    // moved withdrawn_total, so there is nothing to take back).
+    // Status FIRST, refund SECOND — the old code refunded first
+    // and only then ran the status-guarded update, so two
+    // concurrent rejects (or a reject racing a "mark paid") BOTH
+    // refunded the money while only one won the status race: the
+    // loser returned 409 "already decided" AFTER already crediting
+    // the creator's available balance a second time. Flipping the
+    // guarded status first means exactly one caller ever reaches
+    // the refund — the loser gets 409 before touching any wallet.
+    const previousStatus = String(row.status);
+    const { data: rejected, error: rejectError } = await supabase
+      .from("withdrawals")
+      .update({ status: "rejected" })
+      .eq("id", row.id as string)
+      .in("status", ["pending", "approved"])
+      .select("id");
+    if (rejectError || !rejected || rejected.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This withdrawal was already decided — reload /admin to see its current status.",
+        },
+        { status: 409 }
+      );
+    }
+    // Refund: the amount was debited from the creator's available
+    // balance when they requested it — an approved (not yet paid)
+    // withdrawal gets it back too. P0-1: reverse BOTH sides of
+    // the request-time debit — available += amount AND
+    // withdrawn_total -= amount (floored at 0: a legacy row
+    // created before the fix never moved withdrawn_total, so
+    // there is nothing to take back).
     let refunded = false;
     const { data: wallet } = await supabase
       .from("wallets")
@@ -115,6 +138,15 @@ export async function POST(request: Request) {
         })
         .eq("user_id", row.user_id as string);
       if (refundError) {
+        // The status already flipped to rejected above, so put it
+        // back to what it was — otherwise the row would sit
+        // rejected with the money never refunded, and no retry
+        // would be possible (reject is blocked from "rejected").
+        await supabase
+          .from("withdrawals")
+          .update({ status: previousStatus })
+          .eq("id", row.id as string)
+          .eq("status", "rejected");
         return NextResponse.json(
           {
             error: `Could not refund the amount (${refundError.message}). The withdrawal was NOT rejected — try again.`,
@@ -123,21 +155,6 @@ export async function POST(request: Request) {
         );
       }
       refunded = true;
-    }
-    const { data: rejected, error: rejectError } = await supabase
-      .from("withdrawals")
-      .update({ status: "rejected" })
-      .eq("id", row.id as string)
-      .in("status", ["pending", "approved"])
-      .select("id");
-    if (rejectError || !rejected || rejected.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "This withdrawal was already decided — reload /admin to see its current status.",
-        },
-        { status: 409 }
-      );
     }
     return NextResponse.json({
       ok: true,
