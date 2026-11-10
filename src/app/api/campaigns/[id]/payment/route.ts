@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
+import { isValidTronTxId } from "@/lib/validate";
 import { getProfile, isOwner } from "@/lib/auth";
 import { notifyPaymentProof } from "@/lib/notify";
 import type { NotifyCampaign } from "@/lib/notify";
@@ -59,9 +60,15 @@ export async function POST(
 
   const body = (await request.json()) as { txId?: string };
   const txId = String(body.txId ?? "").trim();
-  if (txId.length < 8 || txId.length > 128 || /\s/.test(txId)) {
+  // A TRON transaction ID is exactly 64 hex characters. The old
+  // check (8–128 chars, no whitespace) accepted any string — a
+  // brand could "pay" with "aaaaaaaa" and no error would fire.
+  if (!isValidTronTxId(txId)) {
     return NextResponse.json(
-      { error: "Enter a valid Transaction ID / hash." },
+      {
+        error:
+          "Enter a valid TRON Transaction ID — 64 hexadecimal characters (the hash of your USDT transfer).",
+      },
       { status: 400 }
     );
   }
@@ -85,6 +92,7 @@ export async function POST(
   });
   return NextResponse.json({
     ok: true,
-    message: "Payment submitted. The admin will verify it and your campaign will go LIVE in 1-2 hours.",
+    message:
+      "Payment submitted. The admin will verify it and your campaign will go live once payment is verified.",
   });
 }

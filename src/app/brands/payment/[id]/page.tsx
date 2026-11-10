@@ -169,8 +169,22 @@ export default async function BrandPaymentPage({
         </div>
 
         <p className="mt-5 text-center text-sm leading-relaxed text-fg/60">
-          After admin verifies payment, your campaign will go LIVE in 1-2
-          hours.
+          After the admin verifies your payment, your campaign will go
+          live.
+        </p>
+        <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-amber-200">
+          Unpaid pending campaigns expire after 7 days
+          {campaign.created_at
+            ? ` — this one expires ${new Date(
+                new Date(campaign.created_at).getTime() +
+                  7 * 24 * 60 * 60 * 1000
+              ).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}`
+            : ""}
+          . Chatting alone does not count as payment.
         </p>
       </div>
 

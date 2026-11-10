@@ -68,6 +68,14 @@ export default function BrandForm({
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
     null
   );
+  // Already-uploaded images, kept so a retry never uploads the same
+  // file twice: if the thumbnail upload or the campaign POST fails
+  // after the logo uploaded, the next submit reuses the stored URL
+  // instead of uploading again — no orphaned file, no re-picking.
+  const [uploaded, setUploaded] = useState<{
+    logo?: { file: File; url: string };
+    thumbnail?: { file: File; url: string };
+  }>({});
 
   function pickLogo(f: File | null) {
     if (logoPreview) URL.revokeObjectURL(logoPreview);
@@ -168,6 +176,33 @@ export default function BrandForm({
     if (!res.ok)
       throw new Error(data.error || "Could not upload the image.");
     return String(data.url ?? "");
+  }
+
+  // Upload with one retry, reusing an already-uploaded URL for the
+  // same file: a failed thumbnail upload or a failed campaign POST
+  // must not orphan the first image or force the brand to re-pick
+  // both files. (The daily orphan sweep still deletes any image
+  // that ends up unreferenced after a day.)
+  async function uploadImageReuse(
+    file: File,
+    kind: "logo" | "thumbnail"
+  ): Promise<string> {
+    const prev = uploaded[kind];
+    if (prev && prev.file === file && prev.url) return prev.url;
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const url = await uploadImage(file, kind);
+        setUploaded((u) => ({ ...u, [kind]: { file, url } }));
+        return url;
+      } catch (err) {
+        lastErr =
+          err instanceof Error
+            ? err
+            : new Error("Could not upload the image.");
+      }
+    }
+    throw lastErr ?? new Error("Could not upload the image.");
   }
 
   async function submit(e: React.FormEvent) {
@@ -293,8 +328,10 @@ export default function BrandForm({
       // Upload the images first (at confirmed submit only — a
       // brand that goes "Back to edit" never uploads anything),
       // then create the campaign with the returned storage URLs.
-      const logoUrl = await uploadImage(logo, "logo");
-      const thumbnailUrl = await uploadImage(thumbnail, "thumbnail");
+      // Each upload retries once; an already-uploaded file is
+      // reused, so a failure never orphans the first image.
+      const logoUrl = await uploadImageReuse(logo, "logo");
+      const thumbnailUrl = await uploadImageReuse(thumbnail, "thumbnail");
       const res = await fetch("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -326,8 +363,10 @@ export default function BrandForm({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the campaign.");
+      // Approval cannot happen until the brand pays: the campaign
+      // stays pending, and the payment page is the next step.
       showSuccess(
-        "Your campaign is under review. Admin will approve it soon."
+        "Campaign saved as pending. Now send your budget plus the 15% fee on the payment page — your campaign goes live only after the admin verifies your payment."
       );
       setDone(true);
       // Next step is payment: the campaign stays pending until the
@@ -355,7 +394,9 @@ export default function BrandForm({
           Campaign submitted
         </h3>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/70">
-          Your campaign is under review. Admin will approve it soon.
+          Your campaign is saved as pending. It goes live only after
+          you send your budget plus the 15% platform fee and the admin
+          verifies your payment.
         </p>
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-fg/50">
           Next step: send your budget in USDT on the payment page. Your
@@ -395,7 +436,10 @@ export default function BrandForm({
         }
       : null;
   const fmtChoice = (n: number) =>
-    `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+    `$${n.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
   // Item 9: the Max Payout Per Post help example uses the brand's
   // ENTERED rate + cap — at 100k views the clip earns
@@ -442,6 +486,11 @@ export default function BrandForm({
         Set any rate and any budget — no minimums. After you submit,
         you will send your budget in USDT on the payment page; your
         campaign goes live once the admin verifies your payment.
+      </p>
+      <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
+        Unpaid pending campaigns expire after 7 days — send your
+        payment within 7 days of submitting. Chatting alone does not
+        count as payment.
       </p>
       {!isLoggedIn && (
         <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
@@ -912,6 +961,13 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
         />
       </div>
         </>
+      )}
+      {reviewing && (
+        <p className="mt-4 rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
+          After submitting, send your payment within 7 days — unpaid
+          pending campaigns expire after 7 days, and chatting alone
+          does not count as payment.
+        </p>
       )}
       {reviewing ? (
         <div className="mt-6 flex flex-col gap-2">

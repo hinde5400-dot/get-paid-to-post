@@ -51,6 +51,38 @@ export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+/**
+ * A plausible TRON transaction ID: exactly 64 hexadecimal
+ * characters (the hash of a TRC20 USDT transfer). Anything else —
+ * a random word, a short string, a URL — is not a transaction ID
+ * and must be rejected, so a brand cannot "pay" with nonsense.
+ */
+export function isValidTronTxId(raw: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(raw.trim());
+}
+
+/**
+ * Originality-proof screenshot links must be real URLs (an image
+ * or file link), not any string. Any http(s) URL with a hostname
+ * is accepted — proof lives on many hosts (Drive, Imgur, …) — but
+ * bare words and non-URLs are rejected.
+ */
+export function validateProofUrl(raw: string): {
+  ok: boolean;
+  error?: string;
+} {
+  const url = raw.trim();
+  if (!url) return { ok: false, error: "A proof link is required." };
+  if (!/^https?:\/\/.+\..+/.test(url)) {
+    return {
+      ok: false,
+      error:
+        "Proof must be a real link (starting with http:// or https://) to your screenshot.",
+    };
+  }
+  return { ok: true };
+}
+
 /** Video rules every submission must follow. */
 export const VIDEO_RULES = [
   "Vertical video only — 9:16 format.",

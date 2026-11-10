@@ -19,17 +19,18 @@ const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
  * the whole campaign (item 2): the single `ratePer1k` applies to
  * every selected platform and is written into `rates` for all of
  * them; the legacy `rate_per_1m` / `view_bonus_per_1k` carry the
- * same rate as the fallback. A per-platform `rates` map is still
- * accepted from older clients, but the single rate wins when both
- * are sent. There is no minimum budget and no minimum rate — any
- * budget above $0 and any rate above $0 are accepted. Platforms are
- * stored in campaigns.platforms (migration 0012) with the legacy
- * platform column kept in sync: "all" when all three are chosen,
- * otherwise the first chosen. `min_views` (site-wide floor of 1,000
- * views per clip — missing means 1,000, below 1,000 is rejected)
- * and the REQUIRED Google Drive link (`brief_url`, item 6) are
- * brand-set. There is NO per-creator payout cap (item 4): the
- * `max_payout_per_creator` column is left unused, never written.
+ * same rate as the fallback. A per-platform `rates` map is only
+ * accepted when every platform's rate is the same value — a map
+ * with differing rates is rejected. There is no minimum budget and
+ * no minimum rate — any budget above $0 and any rate above $0 are
+ * accepted. Platforms are stored in campaigns.platforms (migration
+ * 0012) with the legacy platform column kept in sync: "all" when
+ * all three are chosen, otherwise the first chosen. `min_views`
+ * (site-wide floor of 1,000 views per clip — missing means 1,000,
+ * below 1,000 is rejected) and the REQUIRED Google Drive link
+ * (`brief_url`, item 6) are brand-set. There is NO per-creator
+ * payout cap (item 4): the `max_payout_per_creator` column is left
+ * unused, never written.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -174,8 +175,11 @@ export async function POST(request: Request) {
     );
   }
   // Single rate (item 2): the single `ratePer1k` — when sent —
-  // applies to EVERY selected platform. Without it, a legacy
-  // per-platform `rates` map is honoured per platform.
+  // applies to EVERY selected platform. A legacy per-platform
+  // `rates` map is only accepted when every platform's rate is the
+  // SAME value (one rate for the whole campaign) — a map with
+  // differing rates is rejected outright, so no code path can ever
+  // create a per-platform-rate campaign.
   const rates: Record<string, number> = {};
   for (const p of platforms) {
     const v =
@@ -193,6 +197,15 @@ export async function POST(request: Request) {
       );
     }
     rates[p] = Math.round(v * 100) / 100;
+  }
+  if (new Set(Object.values(rates)).size > 1) {
+    return NextResponse.json(
+      {
+        error:
+          "Error: One rate per 1,000 views applies to the whole campaign — set the same rate for every platform.",
+      },
+      { status: 400 }
+    );
   }
   // The legacy single rate is the campaign's one rate, so old code
   // paths (rate_per_1m, view_bonus_per_1k) keep working.
@@ -344,47 +357,18 @@ export async function POST(request: Request) {
   insertRow.thumbnail_url = thumbnailUrl;
   if (durationDays !== null) insertRow.duration_days = durationDays;
 
-  let insertResult = await supabase
+  const { data, error } = await supabase
     .from("campaigns")
     .insert(insertRow)
     .select("id")
     .single();
-  if (insertResult.error) {
-    // New columns come from migrations (0007 max_payout_per_post,
-    // 0009 brief/duration, 0012 platforms, 0013 user_id, 0021
-    // platform_fee) which may not have been run yet. Drop the
-    // column the database complains about and retry once, instead
-    // of failing the submission. logo_url / thumbnail_url are
-    // NEVER stripped: they are required uploads (migration 0032),
-    // so a campaign must not be created without them.
-    const msg = insertResult.error.message;
-    const retryRow: Record<string, unknown> = { ...insertRow };
-    let stripped = false;
-    for (const col of [
-      "max_payout_per_post",
-      "brief_url",
-      "duration_days",
-      "platforms",
-      "platform_fee",
-      "user_id",
-      "rates",
-      "min_views",
-    ] as const) {
-      if (new RegExp(col, "i").test(msg)) {
-        delete retryRow[col];
-        stripped = true;
-      }
-    }
-    if (stripped) {
-      insertResult = await supabase
-        .from("campaigns")
-        .insert(retryRow)
-        .select("id")
-        .single();
-    }
-  }
-  const { data, error } = insertResult;
   if (error) {
+    // No silent fallback: if the insert fails (e.g. a column is
+    // missing), the brand sees the real error instead of a campaign
+    // silently created without its owner, fee, rate or brief. All
+    // migrations 0001–0034 are applied live, so a missing column
+    // means something is genuinely wrong — never strip user_id or
+    // platform_fee and retry.
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   // Notify the owner on Discord (Item 11a) — full campaign details
@@ -404,6 +388,6 @@ export async function POST(request: Request) {
     ok: true,
     id: (data as { id: string }).id,
     message:
-      "Your campaign is under review. Admin will approve it soon.",
+      "Campaign saved as pending. Now send your budget plus the 15% fee on the payment page — it goes live only after the admin verifies your payment.",
   });
 }

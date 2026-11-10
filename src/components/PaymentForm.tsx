@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
+import { isValidTronTxId } from "@/lib/validate";
 
 /**
  * Brand payment form: paste the Transaction ID / hash of the USDT
@@ -24,8 +25,12 @@ export default function PaymentForm({
 
   async function submit() {
     const hash = txId.trim();
-    if (hash.length < 8 || hash.length > 128 || /\s/.test(hash)) {
-      showError("Enter a valid Transaction ID / hash.");
+    // A TRON transaction ID is exactly 64 hex characters — the old
+    // 8–128-char check accepted any string as a "payment".
+    if (!isValidTronTxId(hash)) {
+      showError(
+        "Enter a valid TRON Transaction ID — 64 hexadecimal characters (the hash of your USDT transfer)."
+      );
       return;
     }
     setBusy(true);
@@ -38,7 +43,7 @@ export default function PaymentForm({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the payment.");
       showSuccess(
-        "Payment submitted. The admin will verify it and your campaign will go LIVE in 1-2 hours."
+        "Payment submitted. The admin will verify it and your campaign will go live once payment is verified."
       );
       setSubmitted(true);
       // The chat opens below — scroll to it so the brand can attach
@@ -59,8 +64,8 @@ export default function PaymentForm({
         <p className="text-3xl">🎉</p>
         <p className="mt-2 text-lg font-black text-fg">Payment submitted</p>
         <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-fg/70">
-          After admin verifies payment, your campaign will go LIVE in 1-2
-          hours. Attach your payment screenshot in the chat below so the
+          After the admin verifies your payment, your campaign will go
+          live. Attach your payment screenshot in the chat below so the
           admin can verify it faster.
         </p>
         <p className="mx-auto mt-3 max-w-md break-all rounded-xl bg-fg/5 px-4 py-3 font-mono text-xs text-fg">
