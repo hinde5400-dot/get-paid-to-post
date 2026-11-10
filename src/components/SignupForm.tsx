@@ -152,7 +152,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
       </h1>
       <p className="mt-2 text-center text-sm text-fg/60">
         {role === "brand"
-          ? "Launch a campaign and get viral clips. Email and password, or continue with Google."
+          ? "Launch a campaign and get real clips from creators. Email and password, or continue with Google."
           : "Post clips, get paid per view. Email and password, or continue with Google."}
       </p>
       <p className="mt-3 text-center text-sm">
@@ -166,6 +166,10 @@ export default function SignupForm({ role }: { role: Role | null }) {
           confirm you are 18 or older to receive payouts.
         </p>
       )}
+      <p className="mt-4 rounded-xl bg-fg/5 px-4 py-2.5 text-center text-xs leading-relaxed text-fg/60">
+        By signing up you confirm this is your only account — one account
+        per person.
+      </p>
       {!isSupabaseConfigured && (
         <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
           Supabase is not configured yet — add NEXT_PUBLIC_SUPABASE_URL and
