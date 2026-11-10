@@ -64,10 +64,10 @@ export type CampaignSort =
  * - recommended (default): live campaigns first, then by most
  *   budget remaining % (creators should join campaigns that can
  *   still pay), then newest.
- * - highest: by rate per 1,000 views descending — with per-platform
- *   rates (P1-b) a campaign sorts by its HIGHEST platform rate, so a
- *   campaign paying $2/1k on YouTube is not hidden behind a $1/1k
- *   flat campaign.
+ * - highest: by the campaign's single rate per 1,000 views
+ *   descending — one rate for the whole campaign, the same on
+ *   every platform (single-rate rule), so a campaign paying
+ *   $2/1k is not hidden behind a $1/1k campaign.
  * - new: by created_at descending.
  * - trending: by creator/submission activity descending (count of
  *   submissions, then newest). Needs the stats map; a campaign

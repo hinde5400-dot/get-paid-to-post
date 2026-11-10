@@ -31,6 +31,26 @@ function hrefWith(
   return `/campaigns${qs ? `?${qs}` : ""}`;
 }
 
+function loadError() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
+          Campaigns
+        </h1>
+      </div>
+      <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">
+        <p className="font-display text-2xl font-black uppercase tracking-tight text-fg">
+          Couldn&apos;t load campaigns
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+          Couldn&apos;t load campaigns — please try again.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default async function CampaignsPage({
   searchParams,
 }: {
@@ -45,15 +65,30 @@ export default async function CampaignsPage({
   // Discover (P1-a): live campaigns PLUS settling ones — ended
   // campaigns stay visible until the cleanup deletes them >= 7 days
   // after the end (migration 0023). Home keeps live-only.
-  const all = await getDiscoverCampaigns();
+  // The data getters THROW on a Supabase error (throw-contract,
+  // decided by the coordinator) instead of returning [] — so a
+  // failed load renders the honest error state above, never the
+  // "No Live Campaigns Yet" empty state.
+  let all: Campaign[];
+  let stats: Awaited<ReturnType<typeof getCampaignStatsMap>>;
+  let topClippers: Awaited<ReturnType<typeof getTopClippers>>;
+  let joinedSubs: Awaited<ReturnType<typeof getUserSubmissions>> | null =
+    null;
   const tab = searchParams.tab === "joined" ? "joined" : "explore";
   const user = await getCurrentUser();
+  try {
+    all = await getDiscoverCampaigns();
+    if (tab === "joined" && user) {
+      joinedSubs = await getUserSubmissions(user.id);
+    }
+  } catch {
+    return loadError();
+  }
 
   let list: Campaign[] = [...all];
   if (tab === "joined") {
     if (user) {
-      const subs = await getUserSubmissions(user.id);
-      const joinedIds = new Set(subs.map((s) => s.campaign_id));
+      const joinedIds = new Set((joinedSubs ?? []).map((s) => s.campaign_id));
       list = list.filter((c) => joinedIds.has(c.id));
     } else {
       list = [];
@@ -76,10 +111,14 @@ export default async function CampaignsPage({
   // Stats are loaded BEFORE sorting: the Trending sort orders by
   // submission count. No extra queries — the same stats map already
   // fed the cards and the modal.
-  const stats = await getCampaignStatsMap(list.map((c) => c.id));
-  // Win Board: real top earners from approved submissions only —
-  // empty (all counts 0) until the first clip is approved.
-  const topClippers = await getTopClippers(5);
+  try {
+    stats = await getCampaignStatsMap(list.map((c) => c.id));
+    // Win Board: real top earners from approved submissions only —
+    // empty (all counts 0) until the first clip is approved.
+    topClippers = await getTopClippers(5);
+  } catch {
+    return loadError();
+  }
   // Sorts (P1-a, Content Rewards model — definitions in
   // src/lib/campaigns.ts sortCampaigns). "best" is the old
   // Recommended value and still maps to it; unknown values fall back
@@ -116,7 +155,8 @@ export default async function CampaignsPage({
         <p className="mt-2 text-sm text-fg/60">
           Funded campaigns only. Pick one, post your clip, get paid per
           view at the campaign&apos;s rate per 1,000 views. Every clip
-          needs at least 1,000 views to earn.
+          needs at least 1,000 views to earn — a brand may set a higher
+          minimum, shown on the campaign.
         </p>
       </div>
 
@@ -205,11 +245,13 @@ export default async function CampaignsPage({
           {settlingCount > 0 && (
             <p className="rounded-2xl bg-amber-400/10 px-4 py-3 text-sm leading-relaxed text-amber-200/90">
               Completed campaigns have ended — no new clips can be
-              submitted. They are now in Campaign Review: payouts
-              finish about 1 week after a campaign ends: a 3-day
-              re-check window, then the 72-hour payment hold, then
-              payout. Completed campaigns are removed automatically
-              after the settlement window.
+              submitted. They are now in Campaign Review: approved
+              earnings enter a 72-hour hold as soon as they are
+              approved — even while the campaign is still running.
+              After the campaign ends there is a 3-day re-check window,
+              then payouts are made manually (about 1 week after the
+              campaign ends in total). Completed campaigns are removed
+              automatically after the settlement window.
             </p>
           )}
           <CampaignGrid campaigns={list} stats={stats} />

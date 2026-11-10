@@ -44,10 +44,32 @@ async function getUserCampaignHistory(
 export default async function MyPostsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const [submissions, pastCampaigns] = await Promise.all([
-    getUserSubmissions(user.id),
-    getUserCampaignHistory(user.id),
-  ]);
+  // The data getters THROW on a Supabase error (throw-contract,
+  // decided by the coordinator) instead of returning [] — so a
+  // failed load renders the honest error state below, never an
+  // empty "No posts here yet".
+  let submissions: Awaited<ReturnType<typeof getUserSubmissions>>;
+  let pastCampaigns: CampaignHistoryRow[];
+  try {
+    [submissions, pastCampaigns] = await Promise.all([
+      getUserSubmissions(user.id),
+      getUserCampaignHistory(user.id),
+    ]);
+  } catch {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">My Posts</h1>
+        </div>
+        <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
+          <p className="text-lg font-bold text-fg">Couldn&apos;t load your posts</p>
+          <p className="mt-2 text-sm text-fg/60">
+            Couldn&apos;t load your posts — please try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
