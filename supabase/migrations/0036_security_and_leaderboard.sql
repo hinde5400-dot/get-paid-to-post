@@ -42,6 +42,15 @@
 --     working after this migration: release_matured_holds (called
 --     from the admin review route and lazy wallet reads, both
 --     authenticated) and the admin manual refresh.
+--     UPDATE 2026-11-10 (guard follow-up, section (1b) below):
+--     the cron follow-up above is BUILT — both cron routes now
+--     sign in as a dedicated service account (cron-service.ts,
+--     commits 59c1bdb + c9fac25) before any RPC call, and the
+--     guards in (1b) accept exactly that account (JWT email
+--     cron@get-paid-to-post.vercel.app) plus the owner. A signed-in
+--     user who is neither gets a clear exception from the RPC
+--     itself — the authenticated-only grant alone was not enough
+--     (any free signup could still call the RPCs directly).
 --
 --     Deliberately NOT revoked:
 --       - campaign_stats(uuid): read-only public aggregates,
@@ -187,6 +196,484 @@ revoke execute on function public.release_matured_holds()
   from anon, public;
 grant execute on function public.release_matured_holds()
   to authenticated;
+
+-- ================================================================
+-- (1b) Internal caller guards (P0-3 follow-up).
+-- ================================================================
+--
+-- Section (1) revoked anon, but granting to `authenticated` alone
+-- does NOT close P0-3: ANY signed-in user (free signup) could
+-- still call these RPCs directly with the anon key + their session
+-- and forge views, read every creator's TikTok tokens, or delete
+-- eligible campaigns. The grant is the outer gate; the guard
+-- inside each function below is the real check. The guard allows
+-- exactly two callers: the owner (is_admin()) and the dedicated
+-- cron service account (JWT email cron@get-paid-to-post.vercel.app
+-- — the account both cron routes sign in as, cron-service.ts).
+-- Everyone else gets a clear exception naming the function.
+-- Each redefinition below is byte-identical to its source
+-- migration except for the guard as the first statement (and the
+-- language sql -> plpgsql conversion for the read-only list
+-- functions, which need a statement body to hold the guard —
+-- same signature, same return type, same query).
+--
+-- ONE CONSTANT: if the service account is ever created with a
+-- different email, change it in is_privileged_caller() below and
+-- nowhere else. The cron routes read the same address from
+-- CRON_SERVICE_EMAIL in Vercel — the two must match, or both cron
+-- jobs fail with the guard exception (fail loud, never silent).
+--
+-- Deliberately NOT guarded here (read the reasoning — each one
+-- would break a legitimate flow or adds nothing):
+--   - campaign_eligible_for_cleanup / campaign_expired_unpaid_
+--     pending / campaign_image_cleanup_allowed / campaign_image_
+--     is_orphan: pure read-only boolean predicates. They mutate
+--     nothing; the mutations that use them (cleanup_ended_campaign
+--     etc.) are guarded below. All four are ALSO evaluated inside
+--     storage delete policies (brand-proofs cleanup policies in
+--     0023/0030, campaign-images policies in 0032), and those
+--     policies are evaluated for brand users too — e.g. the brand
+--     chat route deletes a failed proof upload through the
+--     brand-proofs bucket as the brand (messages route), so a
+--     guard inside a predicate would raise for a brand instead
+--     of the policy evaluating. The policies themselves are the
+--     enforcement point for storage deletes (eligible / expired /
+--     orphan only — the bounded blast radius 0023 accepted).
+--     campaign_image_is_orphan is BOTH a policy helper AND a
+--     direct RPC (the cron orphan sweep) — its direct call returns
+--     a boolean only; the delete after it stays policy-gated.
+--   - release_matured_holds: NOT guarded — and the "bypasses the
+--     72h hold" fear is wrong for this function. Its body (0011)
+--     only releases holds with hold_until <= now() (already
+--     matured), to the rightful owner, exactly once
+--     (hold_released_at is null + FOR UPDATE lock). Calling it
+--     early moves nothing. And it is called lazily by ANY signed-in
+--     user — getWallet on every wallet read and the withdrawals
+--     route — so an admin-or-cron guard would strand creators'
+--     matured earnings in Pending until an admin happened to act.
+--     The 72h hold is enforced by the time condition inside the
+--     function, not by who calls it.
+--   - get_public_leaderboard / get_total_paid_out: public
+--     aggregates by design (section (4)), granted to anon.
+--   - decrement_campaign_budget / set_campaign_budget_total:
+--     already check is_admin() inside (section (5)) — verified.
+--   - save_tiktok_tokens gets a THIRD allowed caller below: the
+--     creator saving their OWN tokens (auth.uid() = p_user_id) —
+--     the submit flow (submissions route, posted-time.ts) saves
+--     refreshed tokens as the signed-in creator, while the refresh
+--     job saves them as the cron account for OTHER users' ids, so
+--     a plain admin-or-cron guard would break submits.
+
+-- The single privilege check. Plain SQL function (no SECURITY
+-- DEFINER needed — it only reads auth state); default grants,
+-- like is_admin(): it reveals only whether the CALLER is
+-- privileged, which is not sensitive. The lower() makes the email
+-- comparison case-insensitive (Supabase lowercases signup emails,
+-- but the Vercel env value is typed by hand).
+create or replace function public.is_privileged_caller()
+returns boolean
+language sql stable
+set search_path = public as $$
+  select public.is_admin()
+      or lower(coalesce(auth.jwt() ->> 'email', '')) = 'cron@get-paid-to-post.vercel.app';
+$$;
+
+-- View refresh (0018 / 0019 / 0022), guarded. Callers: lib/views/
+-- refresh.ts only — the 3-hour cron (service account) and the
+-- owner's manual refresh (admin). Bodies verbatim from their
+-- source migrations.
+create or replace function public.list_pending_submissions_for_refresh()
+returns table (
+  id uuid,
+  user_id uuid,
+  platform text,
+  post_url text,
+  views bigint,
+  likes bigint,
+  comments bigint,
+  views_refreshed_at timestamptz
+)
+language plpgsql security definer
+set search_path = public as $$
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'list_pending_submissions_for_refresh: admin or cron service account only';
+  end if;
+  return query
+  select s.id, s.user_id, s.platform, s.post_url, s.views,
+         s.likes, s.comments, s.views_refreshed_at
+  from public.submissions s
+  where s.status = 'pending'
+    and s.created_at > now() - interval '14 days'
+  order by s.views_refreshed_at asc nulls first, s.created_at asc
+  limit 200;
+end; $$;
+
+create or replace function public.apply_view_refresh(
+  p_submission_id uuid,
+  p_views bigint
+)
+returns boolean
+language plpgsql security definer
+set search_path = public as $$
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'apply_view_refresh: admin or cron service account only';
+  end if;
+  update public.submissions
+    set views = greatest(0, p_views),
+        views_refreshed_at = now()
+    where id = p_submission_id
+      and status = 'pending';
+  return found;
+end; $$;
+
+create or replace function public.apply_view_refresh(
+  p_submission_id uuid,
+  p_views bigint,
+  p_likes bigint default 0,
+  p_comments bigint default 0
+)
+returns boolean
+language plpgsql security definer
+set search_path = public as $$
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'apply_view_refresh: admin or cron service account only';
+  end if;
+  update public.submissions
+    set views = greatest(0, p_views),
+        likes = greatest(0, p_likes),
+        comments = greatest(0, p_comments),
+        views_refreshed_at = now()
+    where id = p_submission_id
+      and status = 'pending';
+  return found;
+end; $$;
+
+create or replace function public.list_tiktok_tokens_for_refresh()
+returns table (
+  user_id uuid,
+  open_id text,
+  access_token text,
+  refresh_token text,
+  token_expires_at timestamptz,
+  refresh_expires_at timestamptz
+)
+language plpgsql security definer
+set search_path = public as $$
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'list_tiktok_tokens_for_refresh: admin or cron service account only';
+  end if;
+  return query
+  select c.user_id, c.open_id, c.access_token, c.refresh_token,
+         c.token_expires_at, c.refresh_expires_at
+  from public.tiktok_connections c;
+end; $$;
+
+create or replace function public.save_tiktok_tokens(
+  p_user_id uuid,
+  p_open_id text,
+  p_access_token text,
+  p_refresh_token text,
+  p_token_expires_at timestamptz,
+  p_refresh_expires_at timestamptz
+)
+returns boolean
+language plpgsql security definer
+set search_path = public as $$
+begin
+  -- Owner, cron service account, or the creator saving their OWN
+  -- tokens (submit flow). The refresh job saves tokens for OTHER
+  -- users' ids, so it passes via the service account, never via
+  -- the self check. `is distinct from` (not <>) so a null
+  -- auth.uid() can never silently pass the check.
+  if not public.is_privileged_caller()
+     and auth.uid() is distinct from p_user_id then
+    raise exception 'save_tiktok_tokens: admin, cron service account, or own tokens only';
+  end if;
+  update public.tiktok_connections
+    set access_token = p_access_token,
+        refresh_token = p_refresh_token,
+        token_expires_at = p_token_expires_at,
+        refresh_expires_at = p_refresh_expires_at,
+        updated_at = now()
+    where user_id = p_user_id
+      and open_id = p_open_id;
+  return found;
+end; $$;
+
+create or replace function public.list_youtube_channels_for_refresh()
+returns table (
+  user_id uuid,
+  channel_id text
+)
+language plpgsql security definer
+set search_path = public as $$
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'list_youtube_channels_for_refresh: admin or cron service account only';
+  end if;
+  return query
+  select c.user_id, c.channel_id
+  from public.youtube_connections c;
+end; $$;
+
+-- Cleanup (0023 / 0027 / 0030 / 0032), guarded. Callers: the
+-- daily cleanup cron route only (service account). list_* bodies
+-- are the 0032 versions (with image_paths); cleanup_ended_campaign
+-- is the 0027 version (participant history first).
+create or replace function public.list_cleanup_candidates()
+returns table (
+  campaign_id uuid,
+  title text,
+  ended_at timestamptz,
+  pending_count bigint,
+  approved_count bigint,
+  latest_hold_until timestamptz,
+  storage_paths text[],
+  image_paths text[],
+  eligible boolean,
+  skip_reason text
+)
+language plpgsql security definer
+set search_path = public as $$
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'list_cleanup_candidates: admin or cron service account only';
+  end if;
+  return query
+  with agg as (
+    select
+      c.id,
+      c.title,
+      c.created_at,
+      coalesce(
+        nullif(
+          least(
+            coalesce(c.ends_at, 'infinity'::timestamptz),
+            coalesce(max(s.created_at), 'infinity'::timestamptz)
+          ),
+          'infinity'::timestamptz
+        ),
+        c.created_at
+      ) as ended_at,
+      count(s.id) filter (where s.status = 'pending') as pending_count,
+      count(s.id) filter (where s.status = 'approved') as approved_count,
+      count(s.id) filter (
+        where s.status = 'approved' and s.hold_until is null
+      ) as approved_null_hold,
+      max(s.hold_until) filter (where s.status = 'approved')
+        as latest_hold_until,
+      max(substring(c.logo_url from '/campaign-images/(.+)$'))
+        as logo_path,
+      max(substring(c.thumbnail_url from '/campaign-images/(.+)$'))
+        as thumbnail_path
+    from public.campaigns c
+    left join public.submissions s on s.campaign_id = c.id
+    where c.is_funded
+      and c.status = 'live'
+      and (c.budget_left <= 0
+           or (c.ends_at is not null and c.ends_at <= now()))
+    group by c.id, c.title, c.created_at, c.ends_at
+  )
+  select
+    a.id,
+    a.title,
+    a.ended_at,
+    a.pending_count,
+    a.approved_count,
+    a.latest_hold_until,
+    coalesce(
+      (
+        select array_agg(o.name order by o.name)
+        from storage.objects o
+        where o.bucket_id = 'brand-proofs'
+          and o.name like a.id::text || '/%'
+      ),
+      '{}'::text[]
+    ) as storage_paths,
+    array_remove(
+      array[a.logo_path, a.thumbnail_path],
+      null
+    ) as image_paths,
+    public.campaign_eligible_for_cleanup(a.id) as eligible,
+    case
+      when a.pending_count > 0
+        then 'pending submissions remain'
+      when a.approved_null_hold > 0
+        then 'approved submission with unknown hold_until'
+      when a.latest_hold_until is not null
+           and a.latest_hold_until > now() - interval '1 day'
+        then 'latest payout hold matured less than 1 day ago'
+      when a.ended_at > now() - interval '7 days'
+        then 'ended less than 7 days ago (settlement timeline)'
+      else null
+    end as skip_reason
+  from agg a
+  order by a.ended_at asc;
+end; $$;
+
+create or replace function public.cleanup_ended_campaign(
+  p_campaign_id uuid
+)
+returns table (
+  deleted boolean,
+  reason text,
+  submissions_deleted integer,
+  messages_deleted integer
+)
+language plpgsql security definer
+set search_path = public as $$
+declare
+  v_campaign public.campaigns%rowtype;
+  v_subs integer := 0;
+  v_msgs integer := 0;
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'cleanup_ended_campaign: admin or cron service account only';
+  end if;
+  if not public.campaign_eligible_for_cleanup(p_campaign_id) then
+    return query
+      select false, 'not eligible for cleanup'::text, 0, 0;
+    return;
+  end if;
+
+  select * into v_campaign
+  from public.campaigns
+  where id = p_campaign_id;
+
+  -- Participant history (migration 0027): one row per creator who
+  -- submitted to this campaign, saved BEFORE anything is deleted.
+  -- Only that creator can ever read their row (RLS).
+  insert into public.campaign_history
+    (user_id, campaign_id, campaign_title, brand_name, platforms,
+     joined_at, clips_submitted, clips_approved, total_views,
+     total_earned, status)
+  select
+    s.user_id,
+    p_campaign_id,
+    v_campaign.title,
+    v_campaign.brand_name,
+    v_campaign.platforms,
+    min(s.created_at),
+    count(*)::int,
+    (count(*) filter (where s.status = 'approved'))::int,
+    coalesce(sum(s.views), 0),
+    coalesce(sum(s.earnings), 0),
+    'completed'
+  from public.submissions s
+  where s.campaign_id = p_campaign_id
+  group by s.user_id;
+
+  delete from public.brand_messages
+  where campaign_id = p_campaign_id;
+  get diagnostics v_msgs = row_count;
+
+  delete from public.submissions
+  where campaign_id = p_campaign_id;
+  get diagnostics v_subs = row_count;
+
+  delete from public.campaigns
+  where id = p_campaign_id;
+  if not found then
+    return query
+      select false, 'campaign already gone'::text, 0, 0;
+    return;
+  end if;
+
+  return query select true, null::text, v_subs, v_msgs;
+end; $$;
+
+create or replace function public.list_expired_pending_campaigns()
+returns table (
+  campaign_id uuid,
+  title text,
+  created_at timestamptz,
+  messages_count bigint,
+  storage_paths text[],
+  image_paths text[]
+)
+language plpgsql security definer
+set search_path = public as $$
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'list_expired_pending_campaigns: admin or cron service account only';
+  end if;
+  return query
+  select
+    c.id,
+    c.title,
+    c.created_at,
+    count(m.id) as messages_count,
+    coalesce(
+      (
+        select array_agg(o.name order by o.name)
+        from storage.objects o
+        where o.bucket_id = 'brand-proofs'
+          and o.name like c.id::text || '/%'
+      ),
+      '{}'::text[]
+    ) as storage_paths,
+    array_remove(
+      array[
+        max(substring(c.logo_url from '/campaign-images/(.+)$')),
+        max(substring(c.thumbnail_url from '/campaign-images/(.+)$'))
+      ],
+      null
+    ) as image_paths
+  from public.campaigns c
+  left join public.brand_messages m on m.campaign_id = c.id
+  where c.status = 'pending'
+    and (c.payment_tx_id is null or c.payment_tx_id = '')
+    and c.created_at < now() - interval '7 days'
+  group by c.id, c.title, c.created_at
+  order by c.created_at asc;
+end; $$;
+
+create or replace function public.cleanup_expired_pending_campaign(
+  p_campaign_id uuid
+)
+returns table (
+  deleted boolean,
+  reason text,
+  submissions_deleted integer,
+  messages_deleted integer
+)
+language plpgsql security definer
+set search_path = public as $$
+declare
+  v_subs integer := 0;
+  v_msgs integer := 0;
+begin
+  if not public.is_privileged_caller() then
+    raise exception 'cleanup_expired_pending_campaign: admin or cron service account only';
+  end if;
+  if not public.campaign_expired_unpaid_pending(p_campaign_id) then
+    return query
+      select false, 'not an expired unpaid pending campaign'::text, 0, 0;
+    return;
+  end if;
+
+  delete from public.brand_messages
+  where campaign_id = p_campaign_id;
+  get diagnostics v_msgs = row_count;
+
+  delete from public.submissions
+  where campaign_id = p_campaign_id;
+  get diagnostics v_subs = row_count;
+
+  delete from public.campaigns
+  where id = p_campaign_id;
+  if not found then
+    return query
+      select false, 'campaign already gone'::text, 0, 0;
+    return;
+  end if;
+
+  return query select true, null::text, v_subs, v_msgs;
+end; $$;
 
 -- ================================================================
 -- (2) First-account-owner race (P1-10).
