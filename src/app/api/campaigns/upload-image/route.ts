@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
+import { imageBytesMatchMime } from "@/lib/image-validation";
 
 // Campaign image upload (migration 0032): Brand Logo and Thumbnail
 // are REQUIRED file uploads on the /brands form (Turn's decision
@@ -40,8 +42,7 @@ export async function POST(request: Request) {
   }
   // Campaign images belong to brands: a blocked account or a
   // random creator could otherwise store files in the public
-  // bucket with no campaign attached. (MIME-only validation stays
-  // as-is — a full signature sniff is a later hardening step.)
+  // bucket with no campaign attached.
   const profile = await getProfile(auth.user.id);
   if (profile?.is_blocked) {
     return NextResponse.json(
@@ -53,6 +54,20 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Only brand accounts can upload campaign images." },
       { status: 403 }
+    );
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 image
+  // uploads per minute per brand — uploads are unbounded 2 MB
+  // writes into the public bucket, so they get the strictest
+  // limit of the brand routes.
+  const rl = rateLimit(`upload-image:${auth.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many uploads — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
     );
   }
 
@@ -88,6 +103,19 @@ export async function POST(request: Request) {
   if (file.size > MAX_IMAGE_BYTES) {
     return NextResponse.json(
       { error: "Image must be 2 MB or smaller." },
+      { status: 400 }
+    );
+  }
+  // Magic-byte sniff: file.type is client-supplied, so a renamed
+  // non-image with a spoofed MIME must not reach the bucket. The
+  // bytes must be a real image of the claimed type.
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!imageBytesMatchMime(bytes, file.type)) {
+    return NextResponse.json(
+      {
+        error:
+          "That file is not a real PNG, JPG or WebP image — its contents do not match its type. Upload an actual image file.",
+      },
       { status: 400 }
     );
   }
