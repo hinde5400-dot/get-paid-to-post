@@ -25,7 +25,10 @@ export function hostnameOf(raw: string): string | null {
  *  page: tiktok.com/@someone or instagram.com/someone passes a
  *  host-only check but is not a clip. Short-link hosts (vm/vt,
  *  ig.me, youtu.be) carry no readable path, so any path is allowed
- *  there — the link resolves to the real video before the check. */
+ *  there — the link resolves to the real video before the check.
+ *  tiktok.com/t/CODE is TikTok's own Share → Copy link format, so
+ *  it counts as a video link too (it resolves to /video/ID
+ *  server-side; see canonical-url.ts). */
 function pathLooksLikeVideo(raw: string, platform: Platform): boolean {
   let path = "";
   try {
@@ -37,7 +40,7 @@ function pathLooksLikeVideo(raw: string, platform: Platform): boolean {
     return false;
   }
   if (platform === "tiktok") {
-    return /\/video\/\d+/.test(path);
+    return /\/video\/\d+/.test(path) || /^\/t\/[A-Za-z0-9]+/.test(path);
   }
   if (platform === "instagram") {
     return /^\/(reel|reels|p)\/[^/]+/.test(path);
@@ -59,15 +62,26 @@ export function validatePostUrl(
   const allowed = PLATFORM_HOSTS[platform];
   const matches = allowed.some((h) => host === h || host.endsWith(`.${h}`));
   if (!matches) {
-    const label =
+    // Name the full accepted set: TikTok also accepts its
+    // vm/vt.tiktok.com short links, YouTube also accepts youtu.be,
+    // Instagram also accepts ig.me — a creator pasting a short
+    // link that fails for another reason must not be told only
+    // the main host is allowed.
+    const accepted =
       platform === "tiktok"
         ? "TikTok"
         : platform === "instagram"
           ? "Instagram"
           : "YouTube";
+    const hosts =
+      platform === "tiktok"
+        ? "tiktok.com, vm.tiktok.com and vt.tiktok.com"
+        : platform === "instagram"
+          ? "instagram.com and ig.me"
+          : "youtube.com and youtu.be";
     return {
       ok: false,
-      error: `Please paste a real ${label} link (only ${allowed[0]} links are accepted).`,
+      error: `Please paste a real ${accepted} link (${hosts} links are accepted).`,
     };
   }
   // Short-link hosts resolve to the real video later, so their
@@ -81,7 +95,7 @@ export function validatePostUrl(
   if (!isShortHost && !pathLooksLikeVideo(url, platform)) {
     const label =
       platform === "tiktok"
-        ? "TikTok video (/video/…)"
+        ? "TikTok video (/video/… or a /t/ share link)"
         : platform === "instagram"
           ? "Instagram Reel (/reel/…)"
           : "YouTube video";
@@ -108,25 +122,99 @@ export function isValidTronTxId(raw: string): boolean {
 }
 
 /**
- * Originality-proof screenshot links must be real URLs (an image
- * or file link), not any string. Any http(s) URL with a hostname
- * is accepted — proof lives on many hosts (Drive, Imgur, …) — but
- * bare words and non-URLs are rejected.
+ * Originality-proof screenshot links must be image links, not any
+ * URL. Accepted: a direct image link (.png / .jpg / .jpeg / .webp /
+ * .gif) or a link from a screenshot host (Imgur, Lightshot /
+ * prnt.sc, ibb.co, postimages). Google Drive file links are NOT
+ * images — they open a Drive viewer, not a screenshot — and bare
+ * domains, the campaign page and the post link itself are not
+ * proof either. The error names what counts, so a creator is never
+ * left guessing why their link was refused.
+ *
+ * `postUrls` (the submitted clip links, when the caller knows
+ * them) lets the proof be rejected explicitly when it IS the post
+ * link itself, instead of only failing the image check.
  */
-export function validateProofUrl(raw: string): {
+export function validateProofUrl(
+  raw: string,
+  postUrls: string[] = []
+): {
   ok: boolean;
   error?: string;
 } {
   const url = raw.trim();
   if (!url) return { ok: false, error: "A proof link is required." };
-  if (!/^https?:\/\/.+\..+/.test(url)) {
+  let parsed: URL;
+  try {
+    parsed = new URL(
+      /^https?:\/\//i.test(url) ? url : `https://${url}`
+    );
+  } catch {
     return {
       ok: false,
       error:
         "Proof must be a real link (starting with http:// or https://) to your screenshot.",
     };
   }
-  return { ok: true };
+  if (!/^https?:$/i.test(parsed.protocol) || !parsed.hostname.includes(".")) {
+    return {
+      ok: false,
+      error:
+        "Proof must be a direct image link (.png, .jpg, .webp or .gif) or a screenshot link from Imgur, Lightshot (prnt.sc), ibb.co or postimages — not a bare domain.",
+    };
+  }
+  // The post link itself is not proof of anything.
+  const normalize = (s: string) =>
+    s
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/[?#].*$/, "")
+      .replace(/\/+$/, "")
+      .toLowerCase();
+  const normalized = normalize(url);
+  for (const post of postUrls) {
+    if (post.trim() && normalize(post) === normalized) {
+      return {
+        ok: false,
+        error:
+          "Proof must be a screenshot link, not the post link itself — link to a screenshot of your live post or your editing project.",
+      };
+    }
+  }
+  const host = parsed.hostname.toLowerCase();
+  const path = parsed.pathname.toLowerCase();
+  // Direct image link — any host.
+  if (/\.(png|jpe?g|webp|gif)(\?|#|$)/.test(path)) return { ok: true };
+  // Known screenshot hosts — any path (their short/page links are
+  // still screenshot links).
+  const screenshotHosts = [
+    "imgur.com",
+    "i.imgur.com",
+    "prnt.sc",
+    "prntscr.com",
+    "lightshot.com",
+    "ibb.co",
+    "i.ibb.co",
+    "postimages.org",
+    "postimg.cc",
+    "i.postimg.cc",
+  ];
+  if (screenshotHosts.some((h) => host === h || host.endsWith(`.${h}`))) {
+    return { ok: true };
+  }
+  if (host === "drive.google.com" || host.endsWith(".drive.google.com") || host === "docs.google.com" || host.endsWith(".docs.google.com")) {
+    return {
+      ok: false,
+      error:
+        "Google Drive links are not images — upload your screenshot to Imgur, Lightshot (prnt.sc), ibb.co or postimages and paste the image link instead.",
+    };
+  }
+  return {
+    ok: false,
+    error:
+      "Proof must be a direct image link (.png, .jpg, .webp or .gif) or a screenshot link from Imgur, Lightshot (prnt.sc), ibb.co or postimages.",
+  };
 }
 
 /** Video rules every submission must follow. */

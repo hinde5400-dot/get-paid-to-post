@@ -83,14 +83,16 @@ export async function resolveRedirectUrl(rawUrl: string): Promise<string> {
  *   params) becomes https://www.youtube.com/watch?v=VIDEOID.
  *   No readable ID → returned unchanged.
  * - TikTok / Instagram short links (vm.tiktok.com, vt.tiktok.com,
- *   ig.me): resolved to the final URL. A TikTok final URL is kept
- *   exactly as resolved (tiktok.com/@user/video/ID) — the video ID
- *   is NOT parsed out of it.
+ *   ig.me) and TikTok share links (tiktok.com/t/CODE — what
+ *   TikTok's own Share → Copy link produces) are resolved to the
+ *   final URL, so extractTikTokVideoId can read an ID off them.
+ * - Dedupe canonical form drops the author segment: TikTok →
+ *   tiktok.com/video/<id>; Instagram → instagram.com/reel/<id>
+ *   or /p/<id> without the author. A username change must not
+ *   make the same video a "different" URL for the duplicate check.
  * - Anything else (plain tiktok.com / instagram.com links):
  *   tracking params, fragments and trailing slashes are stripped,
- *   and a leading www. is dropped, so
- *   tiktok.com/@u/video/123?lang=en and tiktok.com/@u/video/123
- *   collapse to one URL for the duplicate check.
+ *   and a leading www. is dropped.
  */
 export async function canonicalizePostUrl(
   rawUrl: string,
@@ -102,7 +104,18 @@ export async function canonicalizePostUrl(
     return videoId ? `https://www.youtube.com/watch?v=${videoId}` : url;
   }
   const host = hostOf(url);
-  if (host && (REDIRECT_HOSTS.has(host) || host.endsWith(".vm.tiktok.com") || host.endsWith(".vt.tiktok.com"))) {
+  const isTikTokShareLink =
+    platform === "tiktok" &&
+    (host === "tiktok.com" || host === "www.tiktok.com") &&
+    /^\/t\/[^/]+/.test(pathOf(url));
+  let working = url;
+  if (
+    host &&
+    (REDIRECT_HOSTS.has(host) ||
+      host.endsWith(".vm.tiktok.com") ||
+      host.endsWith(".vt.tiktok.com") ||
+      isTikTokShareLink)
+  ) {
     const resolved = await resolveRedirectUrl(url);
     // A dead/unknown short code redirects to the platform's
     // homepage (e.g. tiktok.com/?_r=1). That is NOT the video —
@@ -120,9 +133,36 @@ export async function canonicalizePostUrl(
     } catch {
       return url;
     }
-    return stripTracking(resolved);
+    working = stripTracking(resolved);
+  } else {
+    working = stripTracking(url);
   }
-  return stripTracking(url);
+  // Drop the author segment so the same video under a changed
+  // username still dedupes to one URL.
+  if (platform === "tiktok") {
+    const videoId = working.match(/\/video\/(\d+)/);
+    if (videoId) return `https://tiktok.com/video/${videoId[1]}`;
+  }
+  if (platform === "instagram") {
+    const reel = working.match(/\/(reel|reels|p)\/([^/?#]+)/);
+    if (reel) {
+      const kind = reel[1] === "reels" ? "reel" : reel[1];
+      return `https://instagram.com/${kind}/${reel[2]}`;
+    }
+  }
+  return working;
+}
+
+/** Pathname of a URL, "" when it cannot be parsed. */
+function pathOf(raw: string): string {
+  try {
+    const withScheme = /^https?:\/\//i.test(raw.trim())
+      ? raw.trim()
+      : `https://${raw.trim()}`;
+    return new URL(withScheme).pathname;
+  } catch {
+    return "";
+  }
 }
 
 /**
