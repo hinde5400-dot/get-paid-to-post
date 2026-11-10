@@ -106,6 +106,10 @@ export default function CampaignDetailTabs({
                 . Post your clip on any of them, then submit the link from
                 the Home tab.
               </p>
+              <p className="mt-2 text-sm font-semibold text-amber-200">
+                ⏱ Submit your link within 30 minutes of posting — a link
+                posted more than 30 minutes earlier is not accepted.
+              </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {platforms.map((p) => {
                   const site = PLATFORM_SITES.find((s) => s.key === p)!;

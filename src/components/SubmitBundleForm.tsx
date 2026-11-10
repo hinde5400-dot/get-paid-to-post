@@ -217,6 +217,10 @@ export default function SubmitBundleForm({
         Up to 15 approved clips per platform — rejected clips
         don&apos;t count toward the limit.
       </p>
+      <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
+        ⏱ Submit your link within 30 minutes of posting — a link
+        posted more than 30 minutes ago is not accepted.
+      </p>
       {isLoggedIn && (
         <p className="mt-1 text-sm text-fg/60">
           Your approved clips:{" "}
