@@ -89,6 +89,30 @@ export async function refreshPendingViews(
     summary.byPlatform[platform][key] += 1;
   };
 
+  // P2-8: stamp a failed/skipped attempt so the row stops crowding
+  // out good rows. apply_view_refresh (migration 0022) sets
+  // views_refreshed_at = now() even when the numbers are unchanged,
+  // so re-saving the CURRENT values marks this row attempted and
+  // the stalest-first list (limit 200) moves on to the next row
+  // next run. Best-effort: a stamp failure is logged, never fatal.
+  // (Not called when apply_view_refresh itself failed — stamping
+  // through the same failing call would fail the same way, and a
+  // row whose save persistently fails SHOULD stay at the front.)
+  const stampAttempt = async (row: PendingRow) => {
+    const { error } = await supabase.rpc("apply_view_refresh", {
+      p_submission_id: row.id,
+      p_views: row.views ?? 0,
+      p_likes: row.likes ?? 0,
+      p_comments: row.comments ?? 0,
+    });
+    if (error) {
+      console.error(
+        `[refresh] could not stamp attempt for ${row.id.slice(0, 8)}:`,
+        error.message
+      );
+    }
+  };
+
   const { data: rows, error: listError } = await supabase.rpc(
     "list_pending_submissions_for_refresh"
   );
@@ -99,10 +123,22 @@ export async function refreshPendingViews(
   }
   const pending = (rows ?? []) as PendingRow[];
 
-  // TikTok tokens, once per run, keyed by creator.
-  const { data: tokenRows } = await supabase.rpc(
+  // TikTok tokens, once per run, keyed by creator. A list error is
+  // logged, not silently ignored (P2-8) — with no tokens every
+  // TikTok row below fails as "not connected", and the log is the
+  // only trace that the real cause was the token lookup.
+  const { data: tokenRows, error: tokenListError } = await supabase.rpc(
     "list_tiktok_tokens_for_refresh"
   );
+  if (tokenListError) {
+    console.error(
+      "[refresh] list_tiktok_tokens_for_refresh failed:",
+      tokenListError.message
+    );
+    summary.errors.push(
+      `Could not list TikTok tokens: ${tokenListError.message}`
+    );
+  }
   const tokensByUser = new Map<string, TokenRow>();
   for (const row of (tokenRows ?? []) as TokenRow[]) {
     tokensByUser.set(row.user_id, row);
@@ -113,7 +149,7 @@ export async function refreshPendingViews(
       (!isEncryptedToken(row.access_token) ||
         (row.refresh_token && !isEncryptedToken(row.refresh_token)))
     ) {
-      await supabase.rpc("save_tiktok_tokens", {
+      const { error: saveError } = await supabase.rpc("save_tiktok_tokens", {
         p_user_id: row.user_id,
         p_open_id: row.open_id,
         p_access_token: encryptToken(decryptToken(row.access_token)),
@@ -123,14 +159,32 @@ export async function refreshPendingViews(
         p_token_expires_at: row.token_expires_at,
         p_refresh_expires_at: row.refresh_expires_at,
       });
+      if (saveError) {
+        // P2-8: a failed re-save used to be retried forever with
+        // no trace. Log it; the plaintext token stays until a
+        // later run succeeds.
+        console.error(
+          `[refresh] could not re-save encrypted TikTok tokens for user ${row.user_id.slice(0, 8)}:`,
+          saveError.message
+        );
+      }
     }
   }
 
   // Connected YouTube channels, once per run, keyed by creator —
   // the refresh only counts a video from the creator's own channel.
-  const { data: channelRows } = await supabase.rpc(
+  const { data: channelRows, error: channelListError } = await supabase.rpc(
     "list_youtube_channels_for_refresh"
   );
+  if (channelListError) {
+    console.error(
+      "[refresh] list_youtube_channels_for_refresh failed:",
+      channelListError.message
+    );
+    summary.errors.push(
+      `Could not list YouTube channels: ${channelListError.message}`
+    );
+  }
   const youtubeChannelByUser = new Map<string, string>();
   for (const row of (channelRows ?? []) as YouTubeChannelRow[]) {
     youtubeChannelByUser.set(row.user_id, row.channel_id);
@@ -154,6 +208,10 @@ export async function refreshPendingViews(
       summary.errors.push(
         `Instagram not connected yet — ${row.id.slice(0, 8)} skipped.`
       );
+      // P2-8: stamp the skip too — an unstamped Instagram row
+      // stays stalest-first forever and crowds out good rows
+      // exactly like a failed row.
+      await stampAttempt(row);
       continue;
     }
 
@@ -168,6 +226,7 @@ export async function refreshPendingViews(
         summary.errors.push(
           `YouTube ${row.id.slice(0, 8)}: creator has not connected YouTube.`
         );
+        await stampAttempt(row);
         continue;
       }
       const result = await fetchYouTubeVideoDetails(row.post_url);
@@ -175,6 +234,7 @@ export async function refreshPendingViews(
         summary.failed += 1;
         tally(platform, "failed");
         summary.errors.push(`YouTube ${row.id.slice(0, 8)}: ${result.error}`);
+        await stampAttempt(row);
         continue;
       }
       if (result.channelId !== connectedChannel) {
@@ -183,6 +243,7 @@ export async function refreshPendingViews(
         summary.errors.push(
           `YouTube ${row.id.slice(0, 8)}: video is not from the creator's connected YouTube channel — not counted.`
         );
+        await stampAttempt(row);
         continue;
       }
       const { error: applyError } = await supabase.rpc("apply_view_refresh", {
@@ -212,6 +273,7 @@ export async function refreshPendingViews(
         summary.errors.push(
           `TikTok ${row.id.slice(0, 8)}: creator has not connected TikTok.`
         );
+        await stampAttempt(row);
         continue;
       }
       const accessToken = decryptToken(tokenRow.access_token);
@@ -222,6 +284,7 @@ export async function refreshPendingViews(
         summary.errors.push(
           `TikTok ${row.id.slice(0, 8)}: saved login cannot be used.`
         );
+        await stampAttempt(row);
         continue;
       }
       const tokens: TikTokTokens = {
@@ -233,7 +296,7 @@ export async function refreshPendingViews(
       const result = await fetchTikTokViews(row.post_url, tokens);
       if (result.tokens) {
         // Tokens were refreshed — save the new ones back encrypted.
-        await supabase.rpc("save_tiktok_tokens", {
+        const { error: saveError } = await supabase.rpc("save_tiktok_tokens", {
           p_user_id: tokenRow.user_id,
           p_open_id: tokenRow.open_id,
           p_access_token: encryptToken(result.tokens.accessToken),
@@ -241,11 +304,23 @@ export async function refreshPendingViews(
           p_token_expires_at: result.tokens.tokenExpiresAt,
           p_refresh_expires_at: result.tokens.refreshExpiresAt,
         });
+        if (saveError) {
+          // P2-8: log it — a silently failed save was retried
+          // forever with no trace.
+          console.error(
+            `[refresh] could not save refreshed TikTok tokens for user ${tokenRow.user_id.slice(0, 8)}:`,
+            saveError.message
+          );
+          summary.errors.push(
+            `TikTok ${row.id.slice(0, 8)}: refreshed login could not be saved (${saveError.message})`
+          );
+        }
       }
       if ("error" in result) {
         summary.failed += 1;
         tally(platform, "failed");
         summary.errors.push(`TikTok ${row.id.slice(0, 8)}: ${result.error}`);
+        await stampAttempt(row);
         continue;
       }
       const { error: applyError } = await supabase.rpc("apply_view_refresh", {
@@ -272,6 +347,7 @@ export async function refreshPendingViews(
     summary.skipped += 1;
     tally(platform, "skipped");
     summary.errors.push(`Unknown platform "${platform}" — skipped.`);
+    await stampAttempt(row);
   }
 
   return fresh(summary);

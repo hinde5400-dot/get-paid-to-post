@@ -37,29 +37,30 @@ import { getServerClient } from "@/lib/supabase/server";
  *       A campaign that never went live is never a candidate.
  *   (b) NO submissions with status 'pending' remain.
  *   (c) NO approved submission has an unknown hold (hold_until null).
- *   (d) PAYOUT COMPLETE — conservative operational definition
- *       (see migration 0023 header; confirm with Turn): every
- *       approved submission's 72h hold has matured AND at least 1
- *       day has passed since the LATEST hold_until. Withdrawals are
- *       not linked to campaigns in the schema, so per-campaign
- *       "all earnings withdrawn" cannot be verified exactly — but
- *       matured holds already sit in creators' available balances,
- *       and wallets/withdrawals are never deleted, so no money can
- *       be lost or stranded by deleting the campaign row.
+ *   (d) PAYOUT COMPLETE — DECIDED (Turn, 2026-11-10): the gate is
+ *       1 day after the last hold matures, NOT "after payout
+ *       finishes". Per-campaign withdrawal linkage is impossible
+ *       (withdrawals are not linked to campaigns in the schema),
+ *       so "all earnings withdrawn" cannot be verified per
+ *       campaign — there is no payout-finishes gate, and none is
+ *       coming. Money is safe anyway: matured holds already sit
+ *       in creators' available balances, and wallets/withdrawals
+ *       are never deleted, so no money can be lost or stranded by
+ *       deleting the campaign row.
  *   (e) SETTLEMENT TIMELINE: nothing is deleted earlier than 7
  *       days after the campaign ended (3-day re-check window +
  *       3-day/72h hold + 1-day buffer).
  *
- * ORDER MATTERS — storage first, database second. A SQL delete of
- * storage.objects would only remove the metadata and orphan the
- * file bytes in S3, so proof images are removed through the Storage
- * API (remove()), which deletes metadata AND bytes. That call is
- * gated by a storage policy that only permits deleting objects of
- * campaigns passing the same eligibility function. Only when every
- * listed object is removed does the route call the database delete;
- * if any storage removal fails, the campaign is left untouched and
- * retried on the next daily run. A campaign whose eligibility
- * cannot be determined is skipped, never failed and never deleted.
+ * ORDER MATTERS — database first, storage second (P2-11). The
+ * old storage-first order could partially delete proof bytes and
+ * then leave the campaign row in place on a storage error — the
+ * proofs were gone while the campaign still lived. Now the
+ * campaign DB row is deleted FIRST (the RPC re-checks eligibility
+ * in the same transaction), and storage objects are removed
+ * afterwards best-effort: a storage failure is logged and does
+ * NOT fail the job, because the daily orphan sweep below cleans
+ * up leftover objects. A campaign whose eligibility cannot be
+ * determined is skipped, never failed and never deleted.
  *
  * Response: { ok, checked, deleted, skipped, failed,
  *   expired_pending_deleted, expired_pending_failed,
@@ -68,6 +69,12 @@ import { getServerClient } from "@/lib/supabase/server";
  * expired-pending), and `deleted` counts ended campaigns only —
  * expired pending deletions are counted separately in
  * `expired_pending_deleted` so the two jobs never blur together.
+ *
+ * STATUS (P1-11): 503 when the expired-pending lookup fails (a
+ * whole half of the job did nothing) or when ALL candidates
+ * failed — GitHub Actions only tests the status code, so a job
+ * that deleted nothing must not report 200. 200 with counts
+ * otherwise (partial failures are reported in the body).
  */
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -187,59 +194,10 @@ async function handle(request: Request) {
     }
 
     try {
-      // 1) Storage first: remove the proof images through the
-      // Storage API (the only path that frees the S3 bytes). The
-      // bucket policy only allows this for eligible campaigns.
-      const paths = candidate.storage_paths ?? [];
-      if (paths.length > 0) {
-        const { error: removeError } = await supabase.storage
-          .from("brand-proofs")
-          .remove(paths);
-        if (removeError) {
-          failed += 1;
-          details.push({
-            campaign_id: campaignId,
-            result: "failed",
-            reason: `storage removal failed: ${removeError.message}`,
-          });
-          console.error(
-            `Cleanup: storage removal failed for campaign ${campaignId}:`,
-            removeError.message
-          );
-          // Leave the campaign (and its chat/submissions) untouched
-          // so the next daily run can retry.
-          continue;
-        }
-      }
-
-      // 1b) Campaign images (migration 0032): the logo + thumbnail
-      // in the public 'campaign-images' bucket, listed by the same
-      // list function. Same storage-first order, same failure rule
-      // — a failed removal leaves the campaign untouched for the
-      // next daily run.
-      const imagePaths = candidate.image_paths ?? [];
-      if (imagePaths.length > 0) {
-        const { error: imageRemoveError } = await supabase.storage
-          .from("campaign-images")
-          .remove(imagePaths);
-        if (imageRemoveError) {
-          failed += 1;
-          details.push({
-            campaign_id: campaignId,
-            result: "failed",
-            reason: `campaign image removal failed: ${imageRemoveError.message}`,
-          });
-          console.error(
-            `Cleanup: campaign image removal failed for campaign ${campaignId}:`,
-            imageRemoveError.message
-          );
-          continue;
-        }
-      }
-
-      // 2) Database: re-checks eligibility in the same transaction,
-      // then deletes messages, submissions and the campaign row.
-      // Wallets and withdrawals are never touched.
+      // 1) Database FIRST (P2-11): re-checks eligibility in the
+      // same transaction, then deletes messages, submissions and
+      // the campaign row. Wallets and withdrawals are never
+      // touched. Only after the row is gone do we touch storage.
       const { data: cleaned, error: cleanupError } = await supabase.rpc(
         "cleanup_ended_campaign",
         { p_campaign_id: campaignId }
@@ -277,6 +235,46 @@ async function handle(request: Request) {
         continue;
       }
 
+      // 2) Storage best-effort: remove the proof images through
+      // the Storage API (the only path that frees the S3 bytes).
+      // A failure here is logged and does NOT fail the job — the
+      // campaign row is already gone, and the daily orphan sweep
+      // cleans up leftovers. (The bucket policy gates removal to
+      // eligible campaigns, so a post-delete removal may be
+      // refused — that is exactly what the sweep is for.)
+      let objectsDeleted = 0;
+      const paths = candidate.storage_paths ?? [];
+      if (paths.length > 0) {
+        const { error: removeError } = await supabase.storage
+          .from("brand-proofs")
+          .remove(paths);
+        if (removeError) {
+          console.error(
+            `Cleanup: storage removal failed for deleted campaign ${campaignId} (orphan sweep will retry):`,
+            removeError.message
+          );
+        } else {
+          objectsDeleted += paths.length;
+        }
+      }
+
+      // 2b) Campaign images (migration 0032): logo + thumbnail in
+      // the public 'campaign-images' bucket. Same best-effort rule.
+      const imagePaths = candidate.image_paths ?? [];
+      if (imagePaths.length > 0) {
+        const { error: imageRemoveError } = await supabase.storage
+          .from("campaign-images")
+          .remove(imagePaths);
+        if (imageRemoveError) {
+          console.error(
+            `Cleanup: campaign image removal failed for deleted campaign ${campaignId} (orphan sweep will retry):`,
+            imageRemoveError.message
+          );
+        } else {
+          objectsDeleted += imagePaths.length;
+        }
+      }
+
       deleted += 1;
       details.push({
         campaign_id: campaignId,
@@ -284,14 +282,14 @@ async function handle(request: Request) {
         kind: "ended",
         submissions_deleted: result.submissions_deleted ?? 0,
         messages_deleted: result.messages_deleted ?? 0,
-        objects_deleted: paths.length + imagePaths.length,
+        objects_deleted: objectsDeleted,
       });
       console.log(
         `Cleanup: deleted campaign ${campaignId} — ` +
           `${result.submissions_deleted ?? 0} submissions, ` +
           `${result.messages_deleted ?? 0} messages, ` +
-          `${paths.length} proof objects, ` +
-          `${imagePaths.length} campaign images`
+          `${objectsDeleted} objects removed ` +
+          `(${paths.length + imagePaths.length} listed)`
       );
     } catch (err) {
       failed += 1;
@@ -306,17 +304,17 @@ async function handle(request: Request) {
 
   // --- Expired unpaid pending campaigns (migration 0030) ---
   // A campaign that stayed pending with no payment_tx_id for 7+
-  // days is junk. Same storage-first order as above: remove the
-  // proof images through the Storage API (gated by the
-  // expired-pending storage policy), then delete the database rows
-  // through the SECURITY DEFINER function, which re-checks the
-  // predicate — a campaign that got paid or was approved/rejected
-  // after the list step is never deleted. A failure here must not
+  // days is junk. Same DB-first order as above: delete the
+  // database rows through the SECURITY DEFINER function (which
+  // re-checks the predicate — a campaign that got paid or was
+  // approved/rejected after the list step is never deleted), then
+  // remove storage objects best-effort. A failure here must not
   // undo the ended-campaign work above, and if migration 0030 has
-  // not been run yet the list call simply errors: log it and carry
-  // on with the ended-campaign result instead of failing the job.
+  // not been run yet the list call simply errors: that is a
+  // whole-half failure, reported as 503 at the end (P1-11).
   let expiredPendingDeleted = 0;
   let expiredPendingFailed = 0;
+  let expiredPendingTotal = 0;
   let expiredPendingError: string | null = null;
 
   const { data: expiredRows, error: expiredListError } =
@@ -327,6 +325,7 @@ async function handle(request: Request) {
     console.error("Cleanup expired-pending list failed:", expiredListError);
   } else {
     const expired = expiredRows as ExpiredPendingRow[];
+    expiredPendingTotal = expired.length;
     for (const row of expired) {
       const campaignId = row.campaign_id;
       if (!campaignId) {
@@ -334,50 +333,7 @@ async function handle(request: Request) {
         continue;
       }
       try {
-        const paths = row.storage_paths ?? [];
-        if (paths.length > 0) {
-          const { error: removeError } = await supabase.storage
-            .from("brand-proofs")
-            .remove(paths);
-          if (removeError) {
-            expiredPendingFailed += 1;
-            details.push({
-              campaign_id: campaignId,
-              result: "failed",
-              kind: "expired_pending",
-              reason: `storage removal failed: ${removeError.message}`,
-            });
-            console.error(
-              `Cleanup: storage removal failed for expired pending campaign ${campaignId}:`,
-              removeError.message
-            );
-            continue;
-          }
-        }
-
-        // Campaign images (migration 0032): same storage-first
-        // order as the ended-campaign loop above.
-        const imagePaths = row.image_paths ?? [];
-        if (imagePaths.length > 0) {
-          const { error: imageRemoveError } = await supabase.storage
-            .from("campaign-images")
-            .remove(imagePaths);
-          if (imageRemoveError) {
-            expiredPendingFailed += 1;
-            details.push({
-              campaign_id: campaignId,
-              result: "failed",
-              kind: "expired_pending",
-              reason: `campaign image removal failed: ${imageRemoveError.message}`,
-            });
-            console.error(
-              `Cleanup: campaign image removal failed for expired pending campaign ${campaignId}:`,
-              imageRemoveError.message
-            );
-            continue;
-          }
-        }
-
+        // 1) Database FIRST (P2-11) — same reason as above.
         const { data: cleaned, error: cleanupError } = await supabase.rpc(
           "cleanup_expired_pending_campaign",
           { p_campaign_id: campaignId }
@@ -416,6 +372,37 @@ async function handle(request: Request) {
           continue;
         }
 
+        // 2) Storage best-effort (see ended-campaign loop).
+        let objectsDeleted = 0;
+        const paths = row.storage_paths ?? [];
+        if (paths.length > 0) {
+          const { error: removeError } = await supabase.storage
+            .from("brand-proofs")
+            .remove(paths);
+          if (removeError) {
+            console.error(
+              `Cleanup: storage removal failed for deleted expired pending campaign ${campaignId} (orphan sweep will retry):`,
+              removeError.message
+            );
+          } else {
+            objectsDeleted += paths.length;
+          }
+        }
+        const imagePaths = row.image_paths ?? [];
+        if (imagePaths.length > 0) {
+          const { error: imageRemoveError } = await supabase.storage
+            .from("campaign-images")
+            .remove(imagePaths);
+          if (imageRemoveError) {
+            console.error(
+              `Cleanup: campaign image removal failed for deleted expired pending campaign ${campaignId} (orphan sweep will retry):`,
+              imageRemoveError.message
+            );
+          } else {
+            objectsDeleted += imagePaths.length;
+          }
+        }
+
         expiredPendingDeleted += 1;
         details.push({
           campaign_id: campaignId,
@@ -423,14 +410,14 @@ async function handle(request: Request) {
           kind: "expired_pending",
           submissions_deleted: result.submissions_deleted ?? 0,
           messages_deleted: result.messages_deleted ?? 0,
-          objects_deleted: paths.length + imagePaths.length,
+          objects_deleted: objectsDeleted,
         });
         console.log(
           `Cleanup: deleted expired pending campaign ${campaignId} ("${row.title ?? ""}") — ` +
             `${result.submissions_deleted ?? 0} submissions, ` +
             `${result.messages_deleted ?? 0} messages, ` +
-            `${paths.length} proof objects, ` +
-            `${imagePaths.length} campaign images`
+            `${objectsDeleted} objects removed ` +
+            `(${paths.length + imagePaths.length} listed)`
         );
       } catch (err) {
         expiredPendingFailed += 1;
@@ -496,8 +483,21 @@ async function handle(request: Request) {
     console.error("Cleanup: orphan image sweep failed:", err);
   }
 
-  return NextResponse.json({
-    ok: true,
+  // P1-11: a job that did nothing must not report success — the
+  // GitHub workflow only tests the status code. 503 when the
+  // expired-pending lookup failed (a whole half of the job did
+  // nothing) or when ALL candidates failed (every eligible ended
+  // campaign, and every expired pending one, failed). Partial
+  // failure stays 200 with the counts in the body.
+  const eligibleEnded = candidates.filter((c) => c.eligible).length;
+  const allEndedFailed =
+    eligibleEnded > 0 && deleted === 0 && failed >= eligibleEnded;
+  const allExpiredFailed =
+    expiredPendingTotal > 0 &&
+    expiredPendingDeleted === 0 &&
+    expiredPendingFailed >= expiredPendingTotal;
+  const body = {
+    ok: !expiredPendingError && !allEndedFailed && !allExpiredFailed,
     checked: candidates.length,
     deleted,
     skipped,
@@ -507,7 +507,19 @@ async function handle(request: Request) {
     expired_pending_error: expiredPendingError,
     orphan_images_deleted: orphanImagesDeleted,
     details,
-  });
+  };
+  if (expiredPendingError || allEndedFailed || allExpiredFailed) {
+    return NextResponse.json(
+      {
+        ...body,
+        error:
+          expiredPendingError ??
+          "All cleanup candidates failed — nothing was deleted.",
+      },
+      { status: 503 }
+    );
+  }
+  return NextResponse.json(body);
 }
 
 export async function GET(request: Request) {

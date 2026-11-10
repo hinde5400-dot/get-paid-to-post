@@ -3,8 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { holdUntil, payoutForViews } from "@/lib/money";
-import { HOLD_HOURS } from "@/lib/constants";
-import { ratesFromRow, rateForPlatform } from "@/lib/types";
+import { HOLD_HOURS, MAX_APPROVED_CLIPS_PER_PLATFORM } from "@/lib/constants";
 import {
   BOT_REJECTION_REASON,
   handleBotRejection,
@@ -112,7 +111,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as ReviewBody;
+  let body: ReviewBody;
+  try {
+    body = (await request.json()) as ReviewBody;
+  } catch {
+    return NextResponse.json(
+      { error: "Request body must be valid JSON." },
+      { status: 400 }
+    );
+  }
   const { data: submission, error: subError } = await supabase
     .from("submissions")
     .select("*")
@@ -223,25 +230,31 @@ export async function POST(request: Request) {
             `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be reversed — no wallet found for user ${submission.user_id}.`
           );
         }
-        // Restore the campaign budget: the earnings go back into
-        // budget_left and come off paid_out.
+        // Restore the campaign budget — but ONLY what is actually
+        // still in the system (P1-8). If the creator already
+        // withdrew part of the earnings, that money has left and
+        // restoring the full amount would let it be paid out a
+        // second time to another creator. restorable = earnings
+        // minus the shortfall; paid_out comes down by the same.
+        const restorable =
+          Math.round((prevEarnings - shortfall) * 100) / 100;
         const { data: campaign } = await supabase
           .from("campaigns")
           .select("budget_left, paid_out")
           .eq("id", submission.campaign_id)
           .single();
-        if (campaign) {
+        if (campaign && restorable > 0) {
           const { error: budgetError } = await supabase
             .from("campaigns")
             .update({
               budget_left:
                 Math.round(
-                  (Number(campaign.budget_left ?? 0) + prevEarnings) * 100
+                  (Number(campaign.budget_left ?? 0) + restorable) * 100
                 ) / 100,
               paid_out: Math.max(
                 0,
                 Math.round(
-                  (Number(campaign.paid_out ?? 0) - prevEarnings) * 100
+                  (Number(campaign.paid_out ?? 0) - restorable) * 100
                 ) / 100
               ),
             })
@@ -425,16 +438,33 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    // Per-platform rate (P1-b): the rate for THIS clip's platform
-    // (rates[platform]), falling back to the campaign's legacy
-    // single rate when no per-platform rate is set.
-    const ratePer1k = rateForPlatform(
-      {
-        rates: ratesFromRow(campaign as Record<string, unknown>),
-        view_bonus_per_1k: Number(campaign.rate_per_1m ?? 0) / 1000,
-      },
-      submission.platform
-    );
+    // SINGLE rate (P2-4): the campaign's view_bonus_per_1k is the
+    // one source of truth — it is what every display (card, modal,
+    // detail page, My Posts) shows the creator. The old code paid
+    // from rate_per_1m / 1000, which diverges on any legacy row
+    // or rounding drift, and on a row with rate_per_1m = 0 but a
+    // set view_bonus_per_1k it failed with the misleading
+    // "budget too small" error. Fall back to rate_per_1m / 1000
+    // ONLY when view_bonus_per_1k is missing/0, and log it so a
+    // legacy row gets fixed instead of silently paying the
+    // fallback rate. There is no per-platform rate any more.
+    const legacyRatePer1k = Number(campaign.rate_per_1m ?? 0) / 1000;
+    let ratePer1k = Number(campaign.view_bonus_per_1k ?? 0);
+    if (!Number.isFinite(ratePer1k) || ratePer1k <= 0) {
+      ratePer1k = legacyRatePer1k;
+      console.warn(
+        `[admin/review] campaign ${campaign.id} has no view_bonus_per_1k — fell back to rate_per_1m/1000 ($${ratePer1k.toFixed(2)}/1k) for submission ${submission.id}.`
+      );
+    }
+    if (!Number.isFinite(ratePer1k) || ratePer1k <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This campaign has no pay rate set ($0 per 1k views) — set its rate before approving, or reject the clip.",
+        },
+        { status: 400 }
+      );
+    }
     const budgetLeft = Number(campaign.budget_left ?? 0);
     // A drained budget used to approve a clip at $0.00 with a
     // normal-looking "Approved — $0.00 credited" toast. Block it:
@@ -484,6 +514,38 @@ export async function POST(request: Request) {
     // limits are the per-post cap above and the 15-approved-clips
     // per-platform count cap.
 
+    // P1-3: approve-time backstop for the 15-approved-clips cap
+    // (per campaign, per creator, per platform). Submit time
+    // already checks it, but the pending backlog is uncapped, so
+    // without this the owner could approve a 16th, 17th… clip
+    // with no warning. Counted BEFORE the claim below; two
+    // concurrent approves of the same creator/platform can still
+    // both pass this read, so this is a backstop, not a lock.
+    const { count: approvedCount, error: approvedCountError } =
+      await supabase
+        .from("submissions")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", submission.campaign_id)
+        .eq("user_id", submission.user_id)
+        .eq("platform", submission.platform)
+        .eq("status", "approved");
+    if (approvedCountError) {
+      return NextResponse.json(
+        {
+          error: `Could not check the approved-clips cap (${approvedCountError.message}). Nothing was changed — try again.`,
+        },
+        { status: 500 }
+      );
+    }
+    if ((approvedCount ?? 0) >= MAX_APPROVED_CLIPS_PER_PLATFORM) {
+      return NextResponse.json(
+        {
+          error: `This creator already has ${MAX_APPROVED_CLIPS_PER_PLATFORM} approved ${submission.platform} clips for this campaign — the limit is ${MAX_APPROVED_CLIPS_PER_PLATFORM} approved clips per platform per campaign.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const hold = holdUntil(new Date());
     // Claim the submission FIRST, with a status guard: two
     // concurrent approves both pass the in-memory check above,
@@ -520,6 +582,62 @@ export async function POST(request: Request) {
       );
     }
 
+    // P0-2: atomic budget decrement (migration 0036). The old
+    // code read budget_left once and wrote an absolute value, so
+    // two concurrent approves both read $100, each earned $80,
+    // and the second write overwrote the first — $160 credited
+    // against $80 of budget, paid_out undercounted forever. The
+    // RPC decrements inside the database and refuses (ok: false)
+    // when the remaining budget is too small or changed. Never
+    // fall back to the absolute write — that IS the double-spend.
+    const {
+      data: budgetRows,
+      error: budgetRpcError,
+    } = await supabase.rpc("decrement_campaign_budget", {
+      p_campaign_id: campaign.id,
+      p_amount: earnings,
+    });
+    if (budgetRpcError) {
+      // Function missing = migration 0036 not applied yet.
+      // Abort the approval (revert the claim) — do NOT credit
+      // the wallet and do NOT write the budget by hand.
+      console.error(
+        "[admin/review] decrement_campaign_budget RPC failed:",
+        budgetRpcError.message
+      );
+      await supabase
+        .from("submissions")
+        .update({ status: "pending", earnings: 0, hold_until: null })
+        .eq("id", submission.id)
+        .eq("status", "approved");
+      return NextResponse.json(
+        {
+          error:
+            "Campaign budget could not be updated atomically — run migration 0036 in Supabase first, then retry. The approval was aborted and nothing was credited.",
+        },
+        { status: 500 }
+      );
+    }
+    const budgetResult = (budgetRows as
+      | { ok: boolean; new_budget_left: number; new_paid_out: number }[]
+      | null)?.[0];
+    if (!budgetResult?.ok) {
+      // Budget too small or changed since the read above — abort
+      // the approval (revert the claim) and credit nothing.
+      await supabase
+        .from("submissions")
+        .update({ status: "pending", earnings: 0, hold_until: null })
+        .eq("id", submission.id)
+        .eq("status", "approved");
+      return NextResponse.json(
+        {
+          error:
+            "This campaign's budget is too small or changed while this review was open — nothing was credited. Reload /admin and try again.",
+        },
+        { status: 409 }
+      );
+    }
+    const newBudgetLeft = Number(budgetResult.new_budget_left ?? 0);
     const { data: wallet } = await supabase
       .from("wallets")
       .select("*")
@@ -545,39 +663,33 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      // No wallet row (signup trigger missed it, or it was
-      // deleted): create it instead of silently dropping the
-      // credit — the old code approved the clip and credited
-      // nobody.
-      const { error: walletInsertError } = await supabase
-        .from("wallets")
-        .insert({
-          user_id: submission.user_id,
-          pending_balance: earnings,
-          available_balance: 0,
-          withdrawn_total: 0,
-        });
-      if (walletInsertError) {
-        return NextResponse.json(
-          {
-            error: `Clip approved, but no wallet exists for this creator and one could not be created (${walletInsertError.message}). The clip shows as approved in /admin — create the wallet and credit $${earnings.toFixed(2)} by hand.`,
-          },
-          { status: 500 }
-        );
-      }
-    }
-    const { error: budgetError } = await supabase
-      .from("campaigns")
-      .update({
-        budget_left: Math.max(0, budgetLeft - earnings),
-        spots_left: Math.max(0, Number(campaign.spots_left ?? 0) - 1),
-        paid_out: Number(campaign.paid_out ?? 0) + earnings,
-      })
-      .eq("id", campaign.id);
-    if (budgetError) {
+      // P2-5: no wallet row. The old code tried to INSERT one
+      // here, but there is no wallets INSERT RLS policy anywhere,
+      // so that insert could never succeed — dead code. It is
+      // removed; wallets are created by the signup trigger, so a
+      // missing row means the trigger missed this user. The clip
+      // is approved and the budget already decremented below, so
+      // the message tells the owner exactly what to do by hand.
       return NextResponse.json(
         {
-          error: `Clip approved and credited, but the campaign budget could not be updated (${budgetError.message}). Fix the budget in /admin — the clip paid $${earnings.toFixed(2)} from a budget that still shows $${budgetLeft.toFixed(2)} left.`,
+          error: `Clip approved and the campaign budget was decremented, but no wallet exists for this creator and the site cannot create one (wallets are created by the signup trigger — this user missed it). Create the wallet row in Supabase (wallets table, user_id ${submission.user_id}, pending_balance $${earnings.toFixed(2)}, available_balance 0, withdrawn_total 0) to credit the $${earnings.toFixed(2)}.`,
+        },
+        { status: 500 }
+      );
+    }
+    // spots_left is not money — it still moves with a plain
+    // update (the RPC only owns budget_left/paid_out). A failure
+    // here does not undo the credit; the owner is told plainly.
+    const { error: spotsError } = await supabase
+      .from("campaigns")
+      .update({
+        spots_left: Math.max(0, Number(campaign.spots_left ?? 0) - 1),
+      })
+      .eq("id", campaign.id);
+    if (spotsError) {
+      return NextResponse.json(
+        {
+          error: `Clip approved and credited, but the campaign's remaining-spots count could not be updated (${spotsError.message}). Fix the spots count in /admin — the clip paid $${earnings.toFixed(2)}.`,
         },
         { status: 500 }
       );
@@ -588,7 +700,7 @@ export async function POST(request: Request) {
     await resolveFlag(supabase, submission.id, "approved");
 
     const budgetNote = budgetCapped
-      ? ` Capped by the remaining budget ($${budgetLeft.toFixed(2)} left) — the views earned $${cappedEarnings.toFixed(2)}.`
+      ? ` Capped by the remaining budget ($${newBudgetLeft.toFixed(2)} left) — the views earned $${cappedEarnings.toFixed(2)}.`
       : "";
     return NextResponse.json({
       ok: true,

@@ -3,6 +3,7 @@ import { getServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { releaseMaturedHolds } from "@/lib/data";
 import { feeFor, finalFor } from "@/lib/money";
+import { rateLimit } from "@/lib/rate-limit";
 import { WITHDRAW_MIN } from "@/lib/constants";
 
 export async function GET() {
@@ -39,12 +40,38 @@ export async function POST(request: Request) {
       { status: 403 }
     );
   }
-  const body = (await request.json()) as {
-    amount?: number;
-    method?: string;
-    details?: string;
-  };
-  const amount = Number(body.amount ?? 0);
+  // Best-effort rate limit (see lib/rate-limit.ts): 5 withdrawal
+  // requests per minute per user — this is a money route with no
+  // idempotency key, so rapid double-submits/retries must not
+  // create multiple withdrawals.
+  const rl = rateLimit(`withdrawals:${auth.user.id}`, 5, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many withdrawal requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
+    );
+  }
+  let body: { amount?: number; method?: string; details?: string };
+  try {
+    body = (await request.json()) as {
+      amount?: number;
+      method?: string;
+      details?: string;
+    };
+  } catch {
+    return NextResponse.json(
+      { error: "Request body must be valid JSON." },
+      { status: 400 }
+    );
+  }
+  // Round to cents FIRST — the fee/final were already rounded, but
+  // the amount itself (and the debit below) never was, so the DB
+  // numeric(12,2) rounding could make the stored withdrawal differ
+  // from the debited balance by a cent.
+  const amount = Math.round(Number(body.amount ?? 0) * 100) / 100;
   const method = String(body.method ?? "").trim();
   const details = String(body.details ?? "").trim();
   if (!["usdt_trc20", "usdt_bep20"].includes(method)) {
@@ -126,9 +153,29 @@ export async function POST(request: Request) {
     // equality is exact. A failed debit rolls the withdrawal row
     // back — the old code left the row in place and reported
     // success with the money never debited.
+    //
+    // P0-1: the wallet-update trigger (migration 0010,
+    // enforce_wallet_update) allows a non-owner wallet update
+    // ONLY as a withdrawal — available_delta < 0 AND
+    // withdrawn_delta = -available_delta AND pending_delta = 0.
+    // Debiting available alone (withdrawn_delta = 0) is rejected
+    // by the trigger, so EVERY withdrawal failed here. The debit
+    // therefore moves withdrawn_total at REQUEST time (available
+    // -= amount AND withdrawn_total += amount); "mark paid" in
+    // /api/admin/withdrawals only flips the status and must NOT
+    // move withdrawn_total again, and a reject reverses both
+    // fields. The owner bypasses the trigger, so the admin route
+    // is unaffected either way — the trigger is what forces this
+    // shape for the creator's own request.
+    const withdrawnTotal = Number(
+      (wallet as Record<string, unknown>).withdrawn_total ?? 0
+    );
     const { data: debited, error: debitError } = await supabase
       .from("wallets")
-      .update({ available_balance: available - amount })
+      .update({
+        available_balance: available - amount,
+        withdrawn_total: Math.round((withdrawnTotal + amount) * 100) / 100,
+      })
       .eq("user_id", auth.user.id)
       .eq("available_balance", available)
       .select("user_id");
