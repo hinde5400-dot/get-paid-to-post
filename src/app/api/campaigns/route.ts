@@ -211,13 +211,16 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Optional new fields (migration 0009): a thumbnail image link
-  // and the campaign duration in days (null = runs until the
-  // budget ends). The Google Drive link (item 6) is REQUIRED —
-  // the content lives in Drive. Any valid URL is accepted (Drive
-  // links come in several forms — the domain is NOT restricted
-  // to drive.google.com).
+  // Required uploads (migration 0032, Turn's decision 2026-11-10):
+  // Brand Logo and Thumbnail are file uploads — the form uploads
+  // them to the public 'campaign-images' bucket and sends the
+  // storage URLs here. External image links are no longer accepted.
+  // The Google Drive link (item 6) is REQUIRED — the content lives
+  // in Drive. Any valid URL is accepted (Drive links come in
+  // several forms — the domain is NOT restricted to
+  // drive.google.com).
   const briefUrl = String(body.briefUrl ?? "").trim();
+  const logoUrl = String(body.logoUrl ?? "").trim();
   const thumbnailUrl = String(body.thumbnailUrl ?? "").trim();
   const durationDays =
     body.durationDays === null || body.durationDays === undefined
@@ -238,14 +241,47 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (thumbnailUrl && !/^https?:\/\/.+\..+/.test(thumbnailUrl)) {
+  if (!logoUrl) {
     return NextResponse.json(
-      {
-        error:
-          "Error: Thumbnail Image Link must be a valid URL (starts with http:// or https://).",
-      },
+      { error: "This field is required: Brand Logo." },
       { status: 400 }
     );
+  }
+  if (!thumbnailUrl) {
+    return NextResponse.json(
+      { error: "This field is required: Thumbnail." },
+      { status: 400 }
+    );
+  }
+  // The logo/thumbnail URLs must live in our own campaign-images
+  // bucket — a brand cannot point its card at an arbitrary image.
+  // (If the Supabase URL is not configured, only the shape check
+  // above applies — same defensive style as the rest of the app.)
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(
+    /\/$/,
+    ""
+  );
+  const imagesPrefix = supabaseUrl
+    ? `${supabaseUrl}/storage/v1/object/public/campaign-images/`
+    : "";
+  for (const [label, url] of [
+    ["Brand Logo", logoUrl],
+    ["Thumbnail", thumbnailUrl],
+  ] as const) {
+    if (!/^https?:\/\/.+\..+/.test(url)) {
+      return NextResponse.json(
+        { error: `Error: ${label} must be a valid image URL.` },
+        { status: 400 }
+      );
+    }
+    if (imagesPrefix && !url.startsWith(imagesPrefix)) {
+      return NextResponse.json(
+        {
+          error: `Error: ${label} must be uploaded through the form (campaign-images storage).`,
+        },
+        { status: 400 }
+      );
+    }
   }
   if (durationDays !== null && ![7, 14, 30].includes(durationDays)) {
     return NextResponse.json(
@@ -301,10 +337,11 @@ export async function POST(request: Request) {
     is_funded: false,
     status: "pending",
   };
-  const logoUrl = String(body.logoUrl ?? "").trim();
-  if (logoUrl) insertRow.logo_url = logoUrl;
+  // Logo + thumbnail are REQUIRED uploads (validated above), so
+  // they are always written — never conditionally.
+  insertRow.logo_url = logoUrl;
   if (briefUrl) insertRow.brief_url = briefUrl;
-  if (thumbnailUrl) insertRow.thumbnail_url = thumbnailUrl;
+  insertRow.thumbnail_url = thumbnailUrl;
   if (durationDays !== null) insertRow.duration_days = durationDays;
 
   let insertResult = await supabase
@@ -313,19 +350,19 @@ export async function POST(request: Request) {
     .select("id")
     .single();
   if (insertResult.error) {
-    // New columns come from migrations (0004 logo_url, 0007
-    // max_payout_per_post, 0009 brief/thumbnail/duration, 0012
-    // platforms, 0013 user_id, 0021 platform_fee) which may not have
-    // been run yet. Drop the column the database complains about
-    // and retry once, instead of failing the submission.
+    // New columns come from migrations (0007 max_payout_per_post,
+    // 0009 brief/duration, 0012 platforms, 0013 user_id, 0021
+    // platform_fee) which may not have been run yet. Drop the
+    // column the database complains about and retry once, instead
+    // of failing the submission. logo_url / thumbnail_url are
+    // NEVER stripped: they are required uploads (migration 0032),
+    // so a campaign must not be created without them.
     const msg = insertResult.error.message;
     const retryRow: Record<string, unknown> = { ...insertRow };
     let stripped = false;
     for (const col of [
-      "logo_url",
       "max_payout_per_post",
       "brief_url",
-      "thumbnail_url",
       "duration_days",
       "platforms",
       "platform_fee",
