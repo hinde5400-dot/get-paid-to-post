@@ -47,7 +47,14 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = getServerClient();
     if (supabase) {
-      await supabase.auth.exchangeCodeForSession(code);
+      const { data: exchanged, error: exchangeError } =
+        await supabase.auth.exchangeCodeForSession(code);
+      // A failed / expired code must never proceed: with a stale
+      // session present, getUser() below would return the OLD user
+      // and the brand-role claim could run on a failed exchange.
+      if (exchangeError || !exchanged.session) {
+        return NextResponse.redirect(`${origin}/login?message=google-error`);
+      }
       const { data } = await supabase.auth.getUser();
       const user = data.user ?? null;
       if (user) {
