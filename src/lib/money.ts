@@ -88,7 +88,10 @@ export function budgetBarClass(usedPct: number): string {
   return "bg-red-800";
 }
 
-/** Final payout after the 5% fee: amount × 0.95 */
+/** Final payout after the 5% fee: amount minus the rounded fee
+ *  (NOT amount × 0.95 — that formula is off by 1¢ whenever the
+ *  fee rounds, e.g. $15.10 → fee $0.76 → $14.34, while ×0.95
+ *  gives $14.35). */
 export function finalFor(amount: number): number {
   return Math.round((amount - feeFor(amount)) * 100) / 100;
 }
