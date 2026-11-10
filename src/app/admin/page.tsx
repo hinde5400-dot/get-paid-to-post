@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewList";
 import AdminFraudList, { type FraudCreator } from "@/components/AdminFraudList";
 import AdminRecheckList from "@/components/AdminRecheckList";
+import AdminPayoutsList, { type PayoutRow } from "@/components/AdminPayoutsList";
 import AdminCampaignList from "@/components/AdminCampaignList";
 import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
@@ -88,6 +89,87 @@ export default async function AdminPage() {
   // as the fraud view below.
   const botCounts: Record<string, number> = {};
   for (const row of botRows) botCounts[row.user_id] = row.bot_rejections;
+
+  // Payouts (admin batch 2): every approved earning + every
+  // withdrawal request, as one list. Display + flag only — the
+  // money flow (manual USDT payouts) does not change.
+  const payoutRows: PayoutRow[] = [];
+  for (const s of items) {
+    if (s.status === "approved") {
+      const holdUntil = s.hold_until ? new Date(s.hold_until) : null;
+      const inHold = holdUntil !== null && holdUntil.getTime() > Date.now();
+      payoutRows.push({
+        key: `earning-${s.id}`,
+        kind: "earning",
+        submissionId: s.id,
+        creator_email: s.creator_email,
+        campaign_title: s.campaign_title ?? "Campaign",
+        post_url: s.post_url,
+        platform: s.platform,
+        views: s.views ?? 0,
+        amount: s.earnings ?? 0,
+        status: inHold ? "Pending (72h hold)" : "Withdrawable",
+        tone: inHold ? "amber" : "sky",
+        hold_until: s.hold_until,
+        created_at: s.created_at,
+        flagged: Boolean(submissionFlags[s.id]),
+        flagReason: submissionFlags[s.id]?.reason,
+      });
+    } else if (s.status === "rejected" && s.hold_until) {
+      // Was approved, then rejected — its earnings were reversed.
+      payoutRows.push({
+        key: `earning-${s.id}`,
+        kind: "earning",
+        submissionId: s.id,
+        creator_email: s.creator_email,
+        campaign_title: s.campaign_title ?? "Campaign",
+        post_url: s.post_url,
+        platform: s.platform,
+        views: s.views ?? 0,
+        amount: 0,
+        status: "Rejected / Returned",
+        tone: "red",
+        hold_until: s.hold_until,
+        created_at: s.created_at,
+        flagged: Boolean(submissionFlags[s.id]),
+        flagReason: submissionFlags[s.id]?.reason,
+      });
+    }
+  }
+  for (const w of withdrawalItems) {
+    const wStatus = w.status;
+    payoutRows.push({
+      key: `withdrawal-${w.id}`,
+      kind: "withdrawal",
+      creator_email: w.creator_email,
+      campaign_title: "Withdrawal request",
+      views: 0,
+      amount: w.final_amount ?? w.amount,
+      status:
+        wStatus === "pending"
+          ? "Withdrawal requested"
+          : wStatus === "approved"
+            ? "Approved — send USDT, then mark paid"
+            : wStatus === "paid"
+              ? "Paid"
+              : "Rejected",
+      tone:
+        wStatus === "pending"
+          ? "amber"
+          : wStatus === "approved"
+            ? "sky"
+            : wStatus === "paid"
+              ? "green"
+              : "red",
+      created_at: w.created_at,
+      network: w.method,
+      address: w.details,
+    });
+  }
+  payoutRows.sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 
   // P1-c fraud watch: live bot-rejection counts from submissions,
   // flag state (flagged/banned dates) from creator_flags.
@@ -267,6 +349,32 @@ export default async function AdminPage() {
         </p>
         <div className="mt-4">
           <AdminWithdrawalList withdrawals={withdrawalItems} />
+        </div>
+      </section>
+
+      {/* Payouts — owner-only. Every approved earning (72h hold /
+          withdrawable / returned) plus every withdrawal request, in
+          one list, with a Flag payout action per earning row.
+          Display + flag only; payouts stay manual USDT. */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Payouts
+          </h2>
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
+            {payoutRows.length} payout{payoutRows.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Every approved earning — in its 72-hour hold, withdrawable,
+          or returned after a rejection — plus every withdrawal
+          request. Flag a payout to pause it while you check it; a
+          flagged payout is not a rejection. Money still moves only
+          by hand: send the USDT, then mark Paid in Withdrawal
+          requests above.
+        </p>
+        <div className="mt-4">
+          <AdminPayoutsList rows={payoutRows} />
         </div>
       </section>
 
