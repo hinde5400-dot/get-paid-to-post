@@ -68,7 +68,7 @@ export default function AdminCampaignList({
             <span
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
                 c.payment_tx_id
-                  ? "bg-lime/15 text-lime"
+                  ? "bg-red-500/15 text-red-300"
                   : "bg-amber-500/15 text-amber-300"
               }`}
             >
@@ -77,7 +77,7 @@ export default function AdminCampaignList({
             <span
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
                 c.is_funded
-                  ? "bg-lime/15 text-lime"
+                  ? "bg-red-500/15 text-red-300"
                   : "bg-fg/10 text-fg/60"
               }`}
             >
@@ -135,7 +135,7 @@ export default function AdminCampaignList({
           <div
             className={`mt-3 rounded-xl px-4 py-3 ${
               c.payment_tx_id
-                ? "border border-lime/30 bg-lime/10"
+                ? "border border-red-500/30 bg-red-500/10"
                 : "border border-amber-400/30 bg-amber-500/10"
             }`}
           >
@@ -144,7 +144,7 @@ export default function AdminCampaignList({
             </p>
             {c.payment_tx_id ? (
               <>
-                <p className="mt-1 text-xs font-black text-lime">
+                <p className="mt-1 text-xs font-black text-red-300">
                   Payment submitted
                 </p>
                 <p
@@ -175,7 +175,7 @@ export default function AdminCampaignList({
               type="button"
               disabled={busyId === c.id}
               onClick={() => void act(c, "approve")}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-lime py-2.5 text-sm font-black text-black transition hover:bg-limedark disabled:opacity-40"
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-500 py-2.5 text-sm font-black text-white transition hover:bg-red-600 disabled:opacity-40"
             >
               {busyId === c.id ? (
                 <>

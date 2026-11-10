@@ -126,7 +126,7 @@ export default function AdminMessagesList({
           <div
             key={campaignId}
             className={`rounded-3xl border bg-card p-5 ${
-              unread > 0 ? "border-lime/50" : "border-fg/10"
+              unread > 0 ? "border-red-500/50" : "border-fg/10"
             }`}
           >
             <div className="flex flex-wrap items-center gap-2">
@@ -134,7 +134,7 @@ export default function AdminMessagesList({
                 {first?.campaign_title ?? "Campaign"}
               </p>
               {unread > 0 && (
-                <span className="shrink-0 rounded-full bg-lime px-3 py-1 text-xs font-black text-black">
+                <span className="shrink-0 rounded-full bg-red-500 px-3 py-1 text-xs font-black text-white">
                   {unread} New
                 </span>
               )}
@@ -148,7 +148,7 @@ export default function AdminMessagesList({
                 Transaction ID
               </p>
               {first?.payment_tx_id ? (
-                <p className="mt-1 break-all font-mono text-xs font-bold text-lime">
+                <p className="mt-1 break-all font-mono text-xs font-bold text-red-300">
                   {first.payment_tx_id}
                 </p>
               ) : (
@@ -169,7 +169,7 @@ export default function AdminMessagesList({
                     <div
                       className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                         own
-                          ? "rounded-br-md bg-lime/15"
+                          ? "rounded-br-md bg-red-500/15"
                           : "rounded-bl-md bg-fg/5"
                       }`}
                     >
@@ -194,7 +194,7 @@ export default function AdminMessagesList({
                             alt="Payment proof"
                             className="max-h-64 w-auto rounded-xl border border-fg/10"
                           />
-                          <span className="mt-1 block text-xs font-bold text-lime underline">
+                          <span className="mt-1 block text-xs font-bold text-red-300 underline">
                             Open proof ↗
                           </span>
                         </a>
@@ -220,13 +220,13 @@ export default function AdminMessagesList({
                 }}
                 placeholder="Reply to this brand…"
                 maxLength={2000}
-                className="min-w-0 flex-1 rounded-xl border border-fg/15 bg-ink px-4 py-3 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-lime"
+                className="min-w-0 flex-1 rounded-xl border border-fg/15 bg-ink px-4 py-3 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
               />
               <button
                 type="button"
                 onClick={() => void reply(campaignId)}
                 disabled={busy || !draft.trim()}
-                className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-lime px-5 py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-red-500 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {busy ? (
                   <>

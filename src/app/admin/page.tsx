@@ -168,7 +168,7 @@ export default async function AdminPage() {
           72-hour hold and are released to their withdrawable balance
           automatically once the hold ends.
         </p>
-        <p className="mt-2 inline-block rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+        <p className="mt-2 inline-block rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
           {pending} pending · {items.length} total submissions
         </p>
       </div>
@@ -195,7 +195,7 @@ export default async function AdminPage() {
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
             Pending campaigns
           </h2>
-          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
             {pendingCampaigns.length} waiting for review
           </span>
         </div>
@@ -226,7 +226,7 @@ export default async function AdminPage() {
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
             Brand messages
           </h2>
-          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
             {unreadMessages} unread · {brandMessages.length} total
           </span>
         </div>
@@ -248,7 +248,7 @@ export default async function AdminPage() {
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
             Withdrawal requests
           </h2>
-          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
             {pendingWithdrawals} pending · {withdrawals.length} total
           </span>
         </div>
@@ -272,7 +272,7 @@ export default async function AdminPage() {
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
             Fraud watch
           </h2>
-          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
             {fraudCreators.length} creator
             {fraudCreators.length === 1 ? "" : "s"} in fraud watch
           </span>
@@ -308,7 +308,7 @@ export default async function AdminPage() {
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
             Post-end re-check
           </h2>
-          <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
             {recheckItems.length} approved clip
             {recheckItems.length === 1 ? "" : "s"} to re-check
           </span>

@@ -72,7 +72,7 @@ export default function AdminSettingsForm({
           placeholder="T..."
           autoComplete="off"
           spellCheck={false}
-          className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 font-mono text-sm text-fg outline-none placeholder:text-fg/30 focus:border-lime"
+          className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 font-mono text-sm text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
         />
         <span className="mt-1 block text-xs font-medium text-fg/50">
           TRC20 addresses start with T and are 34 characters.
@@ -82,7 +82,7 @@ export default function AdminSettingsForm({
         type="button"
         onClick={() => void save()}
         disabled={busy}
-        className="mt-4 flex items-center justify-center gap-2 rounded-full bg-lime px-6 py-2.5 text-sm font-bold text-ink transition hover:bg-limedark disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-4 flex items-center justify-center gap-2 rounded-full bg-red-500 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy ? (
           <>

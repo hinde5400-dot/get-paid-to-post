@@ -92,7 +92,7 @@ export default function AdminRecheckList({
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-lime">
+                      <p className="text-xs font-bold uppercase tracking-wider text-red-300">
                         {PLATFORM_LABELS[s.platform]} · {s.creator_email}
                       </p>
                       <a
@@ -104,7 +104,7 @@ export default function AdminRecheckList({
                         {s.post_url}
                       </a>
                     </div>
-                    <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+                    <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
                       Approved
                     </span>
                   </div>
@@ -129,7 +129,7 @@ export default function AdminRecheckList({
                         className={
                           rate < 0.01
                             ? "font-bold text-red-300"
-                            : "font-bold text-lime"
+                            : "font-bold text-red-300"
                         }
                       >
                         {formatEngagementRate(rate)}
@@ -159,7 +159,7 @@ export default function AdminRecheckList({
                             [s.id]: e.target.value,
                           }))
                         }
-                        className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                        className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
                       >
                         <option value="">Select a reason…</option>
                         {REJECTION_REASONS.map((r) => (
@@ -183,7 +183,7 @@ export default function AdminRecheckList({
                               [s.id]: e.target.value,
                             }))
                           }
-                          className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                          className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
                         />
                       </label>
                     )}

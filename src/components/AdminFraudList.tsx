@@ -46,7 +46,7 @@ export interface FraudCreator {
 }
 
 const STATUS_STYLES: Record<FraudStatus, string> = {
-  ok: "bg-lime/15 text-lime",
+  ok: "bg-red-500/15 text-red-300",
   concern: "bg-yellow-500/15 text-yellow-300",
   flagged: "bg-orange-500/15 text-orange-300",
   banned: "bg-red-500/15 text-red-300",
@@ -202,7 +202,7 @@ export default function AdminFraudList({
               href={c.latest.post_url}
               target="_blank"
               rel="noreferrer"
-              className="ml-2 max-w-md truncate text-lime underline"
+              className="ml-2 max-w-md truncate text-red-300 underline"
             >
               video
             </a>
@@ -220,7 +220,7 @@ export default function AdminFraudList({
         <div className="mt-4 flex flex-wrap gap-2">
           <a
             href="#submission-review"
-            className="inline-flex items-center rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            className="inline-flex items-center rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
           >
             View their submissions ↓
           </a>
@@ -232,7 +232,7 @@ export default function AdminFraudList({
               <button
                 onClick={() => unblockCreator(c)}
                 disabled={busy === c.user_id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-lime/50 px-4 py-2 text-sm font-bold text-lime disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 disabled:opacity-40"
               >
                 {busy === c.user_id ? (
                   <>

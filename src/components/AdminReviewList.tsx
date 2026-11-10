@@ -177,7 +177,7 @@ export default function AdminReviewList({
           type="button"
           onClick={refreshViewsNow}
           disabled={refreshing}
-          className="inline-flex items-center gap-1.5 rounded-full border border-lime/50 px-4 py-2 text-sm font-bold text-lime transition hover:bg-lime/10 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
         >
           {refreshing ? (
             <>
@@ -195,7 +195,7 @@ export default function AdminReviewList({
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-lime">
+              <p className="text-xs font-bold uppercase tracking-wider text-red-300">
                 {PLATFORM_LABELS[s.platform]} · {s.creator_email}
               </p>
               <h3 className="mt-1 font-bold text-fg">
@@ -237,7 +237,7 @@ export default function AdminReviewList({
                   href={p}
                   target="_blank"
                   rel="noreferrer"
-                  className="mr-3 text-lime underline"
+                  className="mr-3 text-red-300 underline"
                 >
                   screenshot
                 </a>
@@ -255,7 +255,7 @@ export default function AdminReviewList({
                 onChange={(e) =>
                   setViews((prev) => ({ ...prev, [s.id]: e.target.value }))
                 }
-                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
               />
             </label>
             <label className="block text-xs font-bold text-fg">
@@ -267,7 +267,7 @@ export default function AdminReviewList({
                 onChange={(e) =>
                   setLikes((prev) => ({ ...prev, [s.id]: e.target.value }))
                 }
-                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
               />
             </label>
             <label className="block text-xs font-bold text-fg">
@@ -282,7 +282,7 @@ export default function AdminReviewList({
                     [s.id]: e.target.value,
                   }))
                 }
-                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
               />
             </label>
           </div>
@@ -303,7 +303,7 @@ export default function AdminReviewList({
                   Engagement:{" "}
                   <span
                     className={
-                      below ? "font-bold text-red-300" : "font-bold text-lime"
+                      below ? "font-bold text-red-300" : "font-bold text-fg"
                     }
                   >
                     {formatEngagementRate(rate)}
@@ -353,7 +353,7 @@ export default function AdminReviewList({
                 onChange={(e) =>
                   setReasons((prev) => ({ ...prev, [s.id]: e.target.value }))
                 }
-                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
               >
                 <option value="">Select a reason…</option>
                 {REJECTION_REASONS.map((r) => (
@@ -377,7 +377,7 @@ export default function AdminReviewList({
                       [s.id]: e.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-lime"
+                  className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
                 />
               </label>
             )}
@@ -387,7 +387,7 @@ export default function AdminReviewList({
             <button
               onClick={() => review(s, "approve")}
               disabled={busy === s.id}
-              className="inline-flex items-center gap-1.5 rounded-full bg-lime px-4 py-2 text-sm font-bold text-ink disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
             >
               {busy === s.id && busyAction === "approve" ? (
                 <>

@@ -12,7 +12,7 @@ export type WithdrawalWithCreator = Withdrawal & { creator_email: string };
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-300",
   approved: "bg-sky-500/15 text-sky-300",
-  paid: "bg-lime/15 text-lime",
+  paid: "bg-red-500/15 text-red-300",
   rejected: "bg-red-500/15 text-red-300",
 };
 
@@ -96,7 +96,7 @@ export default function AdminWithdrawalList({
                 type="button"
                 disabled={busy === w.id}
                 onClick={() => void act(w.id, "approve")}
-                className="inline-flex items-center gap-1.5 rounded-full bg-lime px-4 py-2 text-xs font-black text-black transition hover:bg-limedark disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-xs font-black text-black transition hover:bg-red-600 disabled:opacity-40"
               >
                 {busy === w.id && busyAction === "approve" ? (
                   <>
@@ -128,7 +128,7 @@ export default function AdminWithdrawalList({
                 type="button"
                 disabled={busy === w.id}
                 onClick={() => void act(w.id, "paid")}
-                className="inline-flex items-center gap-1.5 rounded-full bg-lime px-4 py-2 text-xs font-black text-black transition hover:bg-limedark disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-xs font-black text-black transition hover:bg-red-600 disabled:opacity-40"
               >
                 {busy === w.id && busyAction === "paid" ? (
                   <>
