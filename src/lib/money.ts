@@ -45,13 +45,18 @@ export function totalToSend(budget: number): number {
  * flipped from % remaining 2026-11-10: the bar now FILLS as the
  * budget is used). The payment page is the one place that still
  * shows $ amounts (the fee split). 0 when there is no budget to
- * divide by (a campaign with no budget yet shows 0% used).
+ * divide by (a campaign with no budget yet shows 0% used — never
+ * 100% "ended").
  */
 export function budgetUsedPct(
   budgetTotal: number,
   budgetLeft: number
 ): number {
-  return 100 - budgetRemainingPct(budgetTotal, budgetLeft);
+  if (!budgetTotal || budgetTotal <= 0) return 0;
+  return Math.min(
+    100,
+    Math.max(0, Math.round((1 - budgetLeft / budgetTotal) * 100))
+  );
 }
 
 /**
@@ -89,24 +94,15 @@ export function finalFor(amount: number): number {
 }
 
 /**
- * Rate display for per-platform rates (P1-b): "$1.00–$2.00 per 1k
- * views" when the campaign pays different rates per platform, or
- * "$1.50 per 1k views" when every platform pays the same. The range
- * spans the lowest and highest platform rate; the legacy single rate
- * is used when no per-platform rates exist.
+ * Rate display — SINGLE rate per 1,000 views for the whole
+ * campaign (Turn's decision): the same rate on TikTok, Instagram
+ * and YouTube. Legacy per-platform `rates` rows are ignored here
+ * on purpose — no code path may surface a per-platform rate.
  */
 export function rateRangeText(campaign: {
-  rates?: Record<string, number> | null;
   view_bonus_per_1k: number;
 }): string {
-  const values = Object.values(campaign.rates ?? {}).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0
-  );
-  if (values.length === 0) return `${formatUSD(campaign.view_bonus_per_1k)} per 1k views`;
-  const lo = Math.min(...values);
-  const hi = Math.max(...values);
-  if (lo === hi) return `${formatUSD(lo)} per 1k views`;
-  return `${formatUSD(lo)}–${formatUSD(hi)} per 1k views`;
+  return `${formatUSD(campaign.view_bonus_per_1k)} per 1k views`;
 }
 
 export function formatUSD(n: number): string {
@@ -118,6 +114,7 @@ export function formatUSD(n: number): string {
 
 export function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 999_500) return "1.0M";
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return `${n}`;
 }
@@ -148,7 +145,8 @@ export function formatTimeLeft(
   const m = totalMin % 60;
   if (d > 0) return `Ends in ${d}d ${h}h`;
   if (h > 0) return `Ends in ${h}h ${m}m`;
-  return `Ends in ${m}m`;
+  if (m > 0) return `Ends in ${m}m`;
+  return "Ends in <1m";
 }
 
 /**
@@ -162,10 +160,14 @@ export function formatDeadline(
 ): string {
   if (!endsAt) return "Open-ended";
   const d = new Date(endsAt);
+  // Explicit UTC so the date never shifts with the server's
+  // local timezone (Vercel runs UTC; a viewer's day must not
+  // depend on where the server happens to run).
   const date = d.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   });
   return d.getTime() <= now ? `Ended ${date}` : `Ends ${date}`;
 }
@@ -215,7 +217,13 @@ export function budgetDaysLeft(
   if (campaign.ends_at) {
     const ms = new Date(campaign.ends_at).getTime() - now;
     if (ms > 0) {
-      return { days: Math.max(0, Math.ceil(ms / 86400000)), basis: "deadline" };
+      // Floored days, min 1 — matches the "Ends in 6d 4h"
+      // countdown on the same page (a ceil here used to read
+      // "~7 days left" next to "Ends in 6d 4h").
+      return {
+        days: Math.max(1, Math.floor(ms / 86400000)),
+        basis: "deadline",
+      };
     }
     return { days: 0, basis: "deadline" };
   }

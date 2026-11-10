@@ -82,8 +82,10 @@ export type SubmissionStatus = "pending" | "approved" | "rejected";
 /**
  * Per-platform rates (P1-b, Content Rewards model, migration 0025):
  * rate per 1,000 views per platform, e.g. { tiktok: 1.5, youtube: 2 }.
- * A platform missing from `rates` falls back to the campaign's legacy
- * single rate (view_bonus_per_1k). Old rows carry rates: {}.
+ * LEGACY — kept only so old rows still parse. A campaign now has
+ * ONE rate per 1,000 views for the whole campaign (Turn's
+ * decision): rateForPlatform() below always returns the single
+ * rate, and no display or payout path may use a per-platform rate.
  */
 export type PlatformRates = Partial<Record<Platform, number>>;
 
@@ -99,72 +101,41 @@ export function ratesFromRow(row: Record<string, unknown>): PlatformRates {
 }
 
 /**
- * The rate that applies to a clip on `platform`: the platform's own
- * rate when set, otherwise the campaign's legacy single rate
- * (view_bonus_per_1k). This is the rate review/earnings must use.
+ * The rate that applies to a clip: ALWAYS the campaign's single
+ * rate (view_bonus_per_1k). Legacy per-platform `rates` rows are
+ * deliberately ignored — one rate per 1,000 views for the whole
+ * campaign, the same on TikTok, Instagram and YouTube. This is the
+ * rate review/earnings must use.
  */
 export function rateForPlatform(
   campaign: { rates?: PlatformRates | null; view_bonus_per_1k: number },
-  platform: Platform
+  _platform: Platform
 ): number {
-  const own = campaign.rates?.[platform];
-  if (typeof own === "number" && Number.isFinite(own) && own > 0) return own;
   return campaign.view_bonus_per_1k;
 }
 
-/** Lowest per-platform rate (for the rate-range display). */
+/** The single rate (kept name for the sort + examples). */
 export function minRatePer1k(campaign: {
   rates?: PlatformRates | null;
   view_bonus_per_1k: number;
 }): number {
-  const values = Object.values(campaign.rates ?? {}).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0
-  );
-  return values.length > 0 ? Math.min(...values) : campaign.view_bonus_per_1k;
+  return campaign.view_bonus_per_1k;
 }
 
-/** Highest per-platform rate (for "Highest Paying" sort + examples). */
+/** The single rate (kept name for the sort + examples). */
 export function maxRatePer1k(campaign: {
   rates?: PlatformRates | null;
   view_bonus_per_1k: number;
 }): number {
-  const values = Object.values(campaign.rates ?? {}).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0
-  );
-  return values.length > 0 ? Math.max(...values) : campaign.view_bonus_per_1k;
+  return campaign.view_bonus_per_1k;
 }
 
-/** True when the campaign pays different rates per platform. */
-export function ratesDiffer(campaign: {
+/** Never true any more: one rate applies to the whole campaign. */
+export function ratesDiffer(_campaign: {
   rates?: PlatformRates | null;
   view_bonus_per_1k: number;
 }): boolean {
-  const values = Object.values(campaign.rates ?? {}).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0
-  );
-  return new Set(values).size > 1;
-}
-
-/** "TikTok $1.50 · Instagram $1.50 · YouTube $2.00" — per-platform
- *  rates in platform order, for the detail page. Only platforms with
- *  a rate in `rates` are listed; falls back to the legacy rate text
- *  when no per-platform rates exist. */
-export function platformRatesText(
-  campaign: {
-    rates?: PlatformRates | null;
-    view_bonus_per_1k: number;
-    platforms?: Platform[] | null;
-    platform: Platform | "all";
-  },
-  format: (n: number) => string
-): string {
-  const platforms = campaignPlatforms(campaign);
-  return platforms
-    .map(
-      (p) =>
-        `${p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube"} ${format(rateForPlatform(campaign, p))}`
-    )
-    .join(" · ");
+  return false;
 }
 
 export interface Campaign {
@@ -196,10 +167,11 @@ export interface Campaign {
   rules?: string | null;
   view_bonus_per_1k: number;
   /**
-   * Per-platform rates (P1-b, migration 0025): rate per 1,000 views
-   * per platform. {} on old rows — rateForPlatform() then falls back
-   * to view_bonus_per_1k. The legacy single rate is the first
-   * selected platform's rate, so old code paths keep working.
+   * Per-platform rates (P1-b, migration 0025) — LEGACY. Kept in the
+   * DB so old rows still parse; every platform carries the same
+   * single rate (view_bonus_per_1k) and rateForPlatform() ignores
+   * this map entirely. One rate per 1,000 views for the whole
+   * campaign.
    */
   rates: PlatformRates;
   /**

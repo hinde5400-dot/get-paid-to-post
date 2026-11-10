@@ -14,9 +14,9 @@ import MyPostsList from "@/components/MyPostsList";
 import CopyButton from "@/components/CopyButton";
 import SignOutButton from "@/components/SignOutButton";
 import { SITE_URL } from "@/lib/constants";
-import { budgetUsedPct, formatUSD } from "@/lib/money";
+import { budgetBarClass, budgetUsedPct, formatUSD } from "@/lib/money";
 import type { User } from "@supabase/supabase-js";
-import { maxRatePer1k, type Campaign, type UserProfile } from "@/lib/types";
+import { type Campaign, type UserProfile } from "@/lib/types";
 
 export default async function DashboardPage() {
   if (!isSupabaseConfigured) {
@@ -60,7 +60,9 @@ export default async function DashboardPage() {
     user.email ??
     "Creator";
 
-  const totalViews = submissions.reduce((s, x) => s + x.views, 0);
+  const totalViews = submissions
+    .filter((s) => s.status !== "rejected")
+    .reduce((s, x) => s + x.views, 0);
   const totalEarned = submissions.reduce((s, x) => s + x.earnings, 0);
 
   return (
@@ -86,9 +88,13 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
-          <p className="text-xs text-fg/50">Total Earned</p>
+          <p className="text-xs text-fg/50">Total earned (all time)</p>
           <p className="mt-1 text-2xl font-black text-fg">
             {formatUSD(totalEarned)}
+          </p>
+          <p className="mt-1 text-xs text-fg/50">
+            Lifetime earnings from approved clips, including amounts
+            already withdrawn.
           </p>
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
@@ -281,13 +287,10 @@ function BrandCampaignCard({
 }) {
   const status = brandStatus(c);
   const usedPct = Math.round(budgetUsedPct(c.budget_total, c.budget_left));
-  const barCls =
-    usedPct >= 100
-      ? "bg-red-500"
-      : usedPct >= 50
-        ? "bg-yellow-400"
-        : "bg-lime";
-  const rate = maxRatePer1k(c);
+  // SAME thresholds as the public card (item 28): <50% lime,
+  // 50–75% yellow, 75–90% red, >90% dark red.
+  const barCls = budgetBarClass(usedPct);
+  const rate = c.view_bonus_per_1k;
   const needsFunding = c.status === "pending" && !c.is_funded;
 
   return (
@@ -325,6 +328,47 @@ function BrandCampaignCard({
           </Link>
         </div>
       </div>
+
+      {/* Status banner: the brand always sees clearly where its
+          campaign stands and what happens next. */}
+      {c.status === "pending" && (
+        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
+          <span className="font-black">Pending — not live yet.</span>{" "}
+          {needsFunding ? (
+            <>
+              Send your budget plus the 15% platform fee on the payment
+              page — your campaign goes live only after the admin
+              verifies your payment. Unpaid pending campaigns expire
+              after 7 days; chatting alone does not count as payment.
+            </>
+          ) : (
+            <>
+              Your payment was submitted — the admin is verifying it.
+              Your campaign goes live once payment is verified.
+            </>
+          )}
+        </div>
+      )}
+      {c.status === "rejected" && (
+        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
+          <span className="font-black">Rejected by the admin.</span>{" "}
+          This campaign will not go live. If you already sent the
+          budget, contact the admin on Discord about your refund.
+        </div>
+      )}
+      {campaignStatus(c) === "live" && (
+        <div className="mt-4 rounded-xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm leading-relaxed text-lime">
+          <span className="font-black">Live.</span> Creators can now
+          submit clips for this campaign.
+        </div>
+      )}
+      {campaignStatus(c) === "settling" && (
+        <div className="mt-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3 text-sm leading-relaxed text-fg/70">
+          <span className="font-black text-fg">Ended — payouts in progress.</span>{" "}
+          Payouts finish about 1 week after the campaign ends: a 3-day
+          re-check window, then the 72-hour payment hold, then payout.
+        </div>
+      )}
 
       {/* Budget — % used bar (same rule as public cards) plus the
           $ total, because this is the brand's own money. */}

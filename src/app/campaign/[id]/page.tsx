@@ -25,15 +25,7 @@ import {
 } from "@/lib/money";
 import { VIDEO_RULES } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
-import {
-  campaignPlatforms,
-  maxRatePer1k,
-  minRatePer1k,
-  platformNamesText,
-  platformRatesText,
-  rateForPlatform,
-  ratesDiffer,
-} from "@/lib/types";
+import { campaignPlatforms, platformNamesText } from "@/lib/types";
 
 /**
  * Campaign detail, TryShoot brand-page style: brand profile
@@ -62,8 +54,13 @@ export default async function CampaignDetailPage({
   const settling = isCampaignSettling(campaign);
   if (!live && !settling) {
     const profile = user ? await getProfile(user.id) : null;
-    if (!isOwner(profile)) notFound();
+    // The site owner can preview any campaign; the brand that owns
+    // this campaign can preview its own pending campaign (it must
+    // NOT appear on public Discover until live).
+    const isBrandOwner = user !== null && campaign.user_id === user.id;
+    if (!isOwner(profile) && !isBrandOwner) notFound();
   }
+  const isPreview = !live && !settling;
   const stats = await getCampaignStats(campaign.id);
   // Win Board for this campaign: real top earners from approved
   // clips only — empty (all counts 0) until the first clip here
@@ -85,6 +82,10 @@ export default async function CampaignDetailPage({
     }
     const latest = new Map<Platform, string>();
     for (const s of subs) {
+      // Cooldown counts only live submissions (pending or
+      // approved) — a rejected or duplicate submission does not
+      // start the 2-hour cooldown.
+      if (s.status === "rejected") continue;
       const prev = latest.get(s.platform);
       if (!prev || s.created_at > prev) latest.set(s.platform, s.created_at);
     }
@@ -98,27 +99,10 @@ export default async function CampaignDetailPage({
   // (Turn's decision, P0 batch 2; flipped from % remaining
   // 2026-11-10). The bar FILLS as the budget is used.
   const usedPct = budgetUsedPct(campaign.budget_total, campaign.budget_left);
-  // Payout examples with the campaign's REAL rate(s) and cap, so a
-  // creator sees the exact math before filming. With per-platform
-  // rates (P1-b) the headline example uses the HIGHEST platform rate
-  // and names that platform; the payout box below then shows one
-  // example per platform, so no platform's rate is hidden.
-  const differ = ratesDiffer(campaign);
-  const headlineRate = differ
-    ? maxRatePer1k(campaign)
-    : campaign.view_bonus_per_1k;
-  const headlinePlatform = differ
-    ? campaignPlatforms(campaign).find(
-        (p) => rateForPlatform(campaign, p) === headlineRate
-      )
-    : undefined;
-  const headlinePlatformLabel = headlinePlatform
-    ? headlinePlatform === "tiktok"
-      ? "TikTok"
-      : headlinePlatform === "instagram"
-        ? "Instagram"
-        : "YouTube"
-    : null;
+  // Payout examples with the campaign's REAL single rate and cap,
+  // so a creator sees the exact math before filming. One rate per
+  // 1,000 views for the whole campaign — the same on every platform.
+  const headlineRate = campaign.view_bonus_per_1k;
   const example = payoutForViews(
     50000,
     headlineRate,
@@ -131,8 +115,6 @@ export default async function CampaignDetailPage({
   const budgetTimeLeft = live ? budgetTimeLeftText(campaign) : null;
   const deadline = formatDeadline(campaign.ends_at);
   // 20k example with the per-post cap applied, like the 50k example.
-  // With per-platform rates it also uses the highest rate, labelled
-  // "up to" in the payout box.
   const example20k = payoutForViews(
     20000,
     headlineRate,
@@ -154,6 +136,23 @@ export default async function CampaignDetailPage({
       >
         ← Back to campaigns
       </Link>
+
+      {/* Preview notice: this campaign is not live yet — only its
+          brand owner and the site owner can see this page. Creators
+          cannot see it on Discover, and no clips can be submitted. */}
+      {isPreview && (
+        <div className="rounded-3xl border border-amber-400/40 bg-amber-400/10 p-6">
+          <p className="font-display text-lg font-black tracking-tight text-amber-300">
+            ● Preview — this campaign is not live yet
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-fg/70">
+            Only you (the brand) and the site owner can see this page.
+            The campaign stays hidden from Discover until its budget
+            plus the 15% platform fee is sent and the admin verifies
+            payment. No clips can be submitted yet.
+          </p>
+        </div>
+      )}
 
       {/* Completed notice (P1-a): the campaign ended but is still in
           its settlement window — visible, no new submissions. */}
@@ -193,7 +192,7 @@ export default async function CampaignDetailPage({
               </h1>
               <p className="mt-0.5 text-sm font-bold text-fg/60">
                 {stats
-                  ? `${live ? "Live" : settling ? "Completed" : "Not live"} · ${stats.members} Member${stats.members === 1 ? "" : "s"} · ${stats.active30d} Active`
+                  ? `${live ? "Live" : settling ? "Completed" : "Not live"} · ${stats.members} Member${stats.members === 1 ? "" : "s"}`
                   : `${campaign.category} · ${platformListText}`}
               </p>
               <p className="mt-1 text-sm font-bold text-fg/60">
@@ -226,37 +225,18 @@ export default async function CampaignDetailPage({
             <div className="rounded-2xl bg-fg/5 p-4">
               <p className="text-xs text-fg/50">View bonus</p>
               <p className="mt-1 text-2xl font-black text-fg">
-                {differ ? (
-                  <span className="text-xl">{rateRangeText(campaign)}</span>
-                ) : (
-                  <>
-                    {formatUSD(campaign.view_bonus_per_1k)}
-                    <span className="text-sm font-semibold text-fg/60"> / 1K views</span>
-                  </>
-                )}
+                {formatUSD(campaign.view_bonus_per_1k)}
+                <span className="text-sm font-semibold text-fg/60"> / 1K views</span>
               </p>
-              {differ && (
-                <p className="mt-1 text-xs font-semibold text-fg/60">
-                  {platformRatesText(campaign, formatUSD)} / 1K views
-                </p>
-              )}
+              <p className="mt-1 text-xs font-semibold text-fg/60">
+                One rate for the whole campaign — same on every platform
+              </p>
             </div>
             <div className="rounded-2xl bg-fg/5 p-4">
               <p className="text-xs text-fg/50">Rate</p>
               <p className="mt-1 text-2xl font-black text-fg">
-                {differ ? (
-                  <span className="text-xl">
-                    {formatUSD(minRatePer1k(campaign) * 1000)}
-                    –
-                    {formatUSD(headlineRate * 1000)}
-                    <span className="text-sm font-semibold text-fg/60"> / 1M views</span>
-                  </span>
-                ) : (
-                  <>
-                    {formatUSD(campaign.rate_per_1m)}
-                    <span className="text-sm font-semibold text-fg/60"> / 1M views</span>
-                  </>
-                )}
+                {formatUSD(campaign.rate_per_1m)}
+                <span className="text-sm font-semibold text-fg/60"> / 1M views</span>
               </p>
             </div>
           </div>
@@ -325,6 +305,18 @@ export default async function CampaignDetailPage({
                   {campaign.rules ??
                     `Create an original clip for ${campaign.brand_name}. Keep it fun, honest and on-brand. Show the product clearly, follow the video rules below, and ${submitHint}`}
                 </p>
+                {campaign.brief_url && (
+                  <p className="mt-3">
+                    <a
+                      href={campaign.brief_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-bold text-lime hover:underline"
+                    >
+                      Open the campaign brief (Google Drive) ↗
+                    </a>
+                  </p>
+                )}
                 <ul className="mt-4 space-y-1.5 text-sm text-fg/70">
                   {VIDEO_RULES.map((r) => (
                     <li key={r}>✓ {r}</li>
@@ -334,61 +326,22 @@ export default async function CampaignDetailPage({
 
               <div className="rounded-3xl border border-lime/40 bg-card p-6">
                 <h2 className="text-lg font-extrabold text-fg">How the payout works</h2>
-                {differ ? (
-                  <>
-                    <p className="mt-3 text-sm leading-relaxed text-fg/70">
-                      This campaign pays a different rate per platform —{" "}
-                      {platformRatesText(campaign, formatUSD)} per 1k views.
-                      The highest rate is {headlinePlatformLabel} at{" "}
-                      {formatUSD(headlineRate)}/1k.
-                    </p>
-                    {campaignPlatformsList.map((p) => {
-                      const rate = rateForPlatform(campaign, p);
-                      const ex = payoutForViews(
-                        50000,
-                        rate,
-                        campaign.max_payout_per_post
-                      );
-                      const label =
-                        p === "tiktok"
-                          ? "TikTok"
-                          : p === "instagram"
-                            ? "Instagram"
-                            : "YouTube";
-                      return (
-                        <p
-                          key={p}
-                          className="mt-2 text-sm leading-relaxed text-fg/70"
-                        >
-                          {label}: 50,000 views at {formatUSD(rate)}/1k ={" "}
-                          {formatUSD(ex.uncapped)} earned.
-                          {ex.capped
-                            ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(ex.earnings)}.`
-                            : ` You earned ${formatUSD(ex.earnings)}.`}
-                        </p>
-                      );
-                    })}
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-3 text-sm leading-relaxed text-fg/70">
-                      Your video got 50,000 views at{" "}
-                      {formatUSD(campaign.view_bonus_per_1k)}/1k ={" "}
-                      {formatUSD(example.uncapped)} earned.
-                      {example.capped
-                        ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(example.earnings)}.`
-                        : ` You earned ${formatUSD(example.earnings)}.`}
-                    </p>
-                    <p className="mt-2 text-sm leading-relaxed text-fg/70">
-                      Example: 20,000 views ×{" "}
-                      {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
-                      <span className="font-bold text-fg">
-                        {formatUSD(example20k.earnings)} earned
-                      </span>
-                      .
-                    </p>
-                  </>
-                )}
+                <p className="mt-3 text-sm leading-relaxed text-fg/70">
+                  Your video got 50,000 views at{" "}
+                  {formatUSD(campaign.view_bonus_per_1k)}/1k ={" "}
+                  {formatUSD(example.uncapped)} earned.
+                  {example.capped
+                    ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(example.earnings)}.`
+                    : ` You earned ${formatUSD(example.earnings)}.`}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-fg/70">
+                  Example: 20,000 views ×{" "}
+                  {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
+                  <span className="font-bold text-fg">
+                    {formatUSD(example20k.earnings)} earned
+                  </span>
+                  .
+                </p>
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   A creator never earns more than{" "}
                   {formatUSD(campaign.max_payout_per_post)} on one post,
@@ -423,6 +376,18 @@ export default async function CampaignDetailPage({
                     hold, then payout.
                   </p>
                 </div>
+              ) : isPreview ? (
+                <div className="rounded-3xl border border-amber-400/40 bg-card p-6">
+                  <h2 className="text-lg font-extrabold text-fg">
+                    Not live yet
+                  </h2>
+                  <p className="mt-3 text-sm leading-relaxed text-fg/70">
+                    This campaign is still pending — it opens to
+                    creators only after its budget is funded and the
+                    admin verifies payment. No clips can be submitted
+                    yet.
+                  </p>
+                </div>
               ) : (
                 <SubmitBundleForm
                   campaign={campaign}
@@ -446,19 +411,14 @@ export default async function CampaignDetailPage({
                 ["Platforms", platformListText],
                 ["Budget", `${usedPct}% used`],
                 ["Rate", `${formatUSD(campaign.rate_per_1m)} per 1M views`],
-                ["View bonus", `${formatUSD(campaign.view_bonus_per_1k)} per 1K views`],
-                [
-                  "Rates per platform",
-                  differ
-                    ? `${platformRatesText(campaign, formatUSD)} per 1K views`
-                    : `${formatUSD(campaign.view_bonus_per_1k)} per 1K views on every platform`,
-                ],
+                ["View bonus", `${formatUSD(campaign.view_bonus_per_1k)} per 1K views on every platform`],
                 [
                   "Minimum views per clip",
                   `${Math.max(campaign.min_views, 1000).toLocaleString()} views`,
                 ],
                 ["Earn up to", `${formatUSD(campaign.max_payout_per_post)} per post`],
                 ["Creators", stats ? `${stats.members}` : "—"],
+                ["Posts in the last 30 days", stats ? `${stats.active30d}` : "—"],
                 ["Deadline", live || !campaign.ends_at ? deadline : "Ended"],
                 ["Budget time left", budgetTimeLeft ?? "—"],
                 ["Views tracked", `${campaign.views_tracked_days} days`],
@@ -483,6 +443,18 @@ export default async function CampaignDetailPage({
                 </div>
               ))}
             </dl>
+            {campaign.brief_url && (
+              <p className="mt-4">
+                <a
+                  href={campaign.brief_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-bold text-lime hover:underline"
+                >
+                  Open the campaign brief (Google Drive) ↗
+                </a>
+              </p>
+            )}
           </div>
         }
       />
