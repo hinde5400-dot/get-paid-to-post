@@ -17,7 +17,7 @@ import { refreshPendingViews } from "@/lib/views/refresh";
  * could not be loaded at all, or every single row failed) — the
  * workflow only tests the status code, so a run that checked
  * nothing must not report 200. 200 with failed counts otherwise.
- */
+ *
  * Why GitHub Actions and not Vercel Cron: the free Vercel Hobby
  * plan only allows cron jobs once a day, and Turn asked for every
  * 3 hours. GitHub Actions scheduled runs on a public repo are free.
