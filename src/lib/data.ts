@@ -795,3 +795,58 @@ export async function getSubmissionFlags(): Promise<
     return {};
   }
 }
+
+/** One row of the campaign budget edit trail (migration 0033):
+ *  what the owner changed a campaign's budget from/to, why, and
+ *  when. Newest first per campaign. */
+export interface BudgetHistoryEntry {
+  campaign_id: string;
+  old_budget_total: number;
+  new_budget_total: number;
+  old_budget_left: number;
+  new_budget_left: number;
+  reason: string;
+  created_at: string;
+}
+
+/** Budget edit history for a set of campaigns (admin campaign
+ *  cards). Best-effort — returns {} when the table does not exist
+ *  yet (migration not applied) so /admin still renders; the cards
+ *  just show no history until then. */
+export async function getCampaignBudgetHistory(
+  campaignIds: string[]
+): Promise<Record<string, BudgetHistoryEntry[]>> {
+  if (campaignIds.length === 0) return {};
+  const supabase = getServerClient();
+  if (!supabase) return {};
+  try {
+    const { data, error } = await supabase
+      .from("campaign_budget_history")
+      .select(
+        "campaign_id, old_budget_total, new_budget_total, old_budget_left, new_budget_left, reason, created_at"
+      )
+      .in("campaign_id", campaignIds)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error || !data) return {};
+    const out: Record<string, BudgetHistoryEntry[]> = {};
+    for (const row of data as Record<string, unknown>[]) {
+      const campaignId = String(row.campaign_id ?? "");
+      if (!campaignId) continue;
+      const list = out[campaignId] ?? [];
+      list.push({
+        campaign_id: campaignId,
+        old_budget_total: Number(row.old_budget_total ?? 0),
+        new_budget_total: Number(row.new_budget_total ?? 0),
+        old_budget_left: Number(row.old_budget_left ?? 0),
+        new_budget_left: Number(row.new_budget_left ?? 0),
+        reason: String(row.reason ?? ""),
+        created_at: String(row.created_at ?? ""),
+      });
+      out[campaignId] = list;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
