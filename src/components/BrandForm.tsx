@@ -136,6 +136,11 @@ export default function BrandForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Current step of a confirmed submit, shown on the submit
+  // button — "Uploading logo…" → "Uploading thumbnail…" →
+  // "Saving campaign…" — so the brand can see the upload is
+  // actually moving instead of a generic "Loading…".
+  const [submitStep, setSubmitStep] = useState<string | null>(null);
   // Pre-submit review step: when validation passes, the form shows
   // a "Review your campaign" panel instead of submitting at once.
   // The form state underneath stays intact for editing.
@@ -194,6 +199,22 @@ export default function BrandForm({
     );
   }
 
+  // A raw "Failed to fetch" (or a JSON SyntaxError from a dead
+  // connection) tells the brand nothing — and it is not their
+  // fault. Translate network failures into a plain-English retry
+  // message; named server errors pass through unchanged.
+  function friendlySubmitError(err: unknown): string {
+    const msg = err instanceof Error ? err.message : "";
+    if (
+      /failed to fetch|networkerror|load failed|network request failed/i.test(
+        msg
+      )
+    ) {
+      return "Connection failed — check your internet connection and try again. Your entries are saved, just tap Submit again.";
+    }
+    return msg || "Could not save the campaign.";
+  }
+
   // Upload one campaign image (logo or thumbnail) to the public
   // 'campaign-images' bucket (migration 0032). Returns the public
   // URL the campaign POST stores in logo_url / thumbnail_url.
@@ -205,9 +226,21 @@ export default function BrandForm({
       method: "POST",
       body: form,
     });
-    const data = await res.json();
+    // Read as text first: a dead connection or a proxy error page
+    // is not JSON, and res.json() would throw a SyntaxError that
+    // hides the real problem.
+    const text = await res.text();
+    let data: { error?: string; url?: string } = {};
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      // Non-JSON body — fall through to the status message below.
+    }
     if (!res.ok)
-      throw new Error(data.error || "Could not upload the image.");
+      throw new Error(
+        data.error ||
+          `Server error (HTTP ${res.status}) — please try again.`
+      );
     return String(data.url ?? "");
   }
 
@@ -366,8 +399,11 @@ export default function BrandForm({
       // reused, so a retry usually never re-uploads. An ambiguous
       // failure (object stored, response lost) can still orphan
       // an image — the daily orphan sweep cleans those up.
+      setSubmitStep("Uploading logo…");
       const logoUrl = await uploadImageReuse(logo, "logo");
+      setSubmitStep("Uploading thumbnail…");
       const thumbnailUrl = await uploadImageReuse(thumbnail, "thumbnail");
+      setSubmitStep("Saving campaign…");
       const res = await fetch("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -397,8 +433,20 @@ export default function BrandForm({
           durationDays: durationDays === "" ? null : Number(durationDays),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not save the campaign.");
+      // Read as text first — same reason as uploadImage: a
+      // non-JSON error page must not become a SyntaxError.
+      const text = await res.text();
+      let data: { id?: string; error?: string } = {};
+      try {
+        data = JSON.parse(text) as typeof data;
+      } catch {
+        // Non-JSON body — fall through to the status message below.
+      }
+      if (!res.ok)
+        throw new Error(
+          data.error ||
+            `Server error (HTTP ${res.status}) — please try again.`
+        );
       // Approval cannot happen until the brand pays: the campaign
       // stays pending, and the payment page is the next step.
       showSuccess(
@@ -409,8 +457,7 @@ export default function BrandForm({
       // brand sends the budget in USDT on the payment page.
       if (data.id) router.push(`/brands/payment/${data.id}`);
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Could not save the campaign.";
+      const msg = friendlySubmitError(err);
       // A server-side failure (e.g. a length/rate/budget cap) maps
       // to its field and scrolls to it — the bare toast alone
       // never says which field failed. The review panel is closed
@@ -426,6 +473,7 @@ export default function BrandForm({
       }
     } finally {
       setBusy(false);
+      setSubmitStep(null);
     }
   }
 
@@ -715,7 +763,7 @@ export default function BrandForm({
         <ImageUploadField
           fieldId="field-logoUrl"
           label="Brand Logo"
-          help="Required — upload your logo. It shows on your campaign card. PNG, JPG or WebP — max 2 MB."
+          help="Required — upload your logo. It shows on your campaign card. PNG, JPG or WebP — max 2 MB. Large phone photos are compressed automatically before upload."
           buttonLabel="Upload logo (PNG, JPG or WebP — max 2 MB)"
           file={logoFile}
           previewUrl={logoPreview}
@@ -1004,7 +1052,7 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
         <ImageUploadField
           fieldId="field-thumbnailUrl"
           label="Thumbnail"
-          help="Required — upload a banner image for your campaign. PNG, JPG or WebP — max 2 MB."
+          help="Required — upload a banner image for your campaign. PNG, JPG or WebP — max 2 MB. Large phone photos are compressed automatically before upload."
           buttonLabel="Upload thumbnail (PNG, JPG or WebP — max 2 MB)"
           file={thumbnailFile}
           previewUrl={thumbnailPreview}
@@ -1031,7 +1079,7 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
           >
             {busy ? (
               <>
-                <Spinner /> Loading...
+                <Spinner /> {submitStep ?? "Loading…"}
               </>
             ) : (
               "Submit campaign for review"
@@ -1054,7 +1102,7 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
       >
         {busy ? (
           <>
-            <Spinner /> Loading...
+            <Spinner /> {submitStep ?? "Loading…"}
           </>
         ) : (
           "Submit campaign for review"
