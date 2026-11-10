@@ -1,10 +1,5 @@
 import { HOLD_HOURS, PLATFORM_FEE_RATE, WITHDRAW_FEE_RATE } from "./constants";
 
-/** earnings = views / 1,000,000 × rate per 1M views */
-export function earningsForViews(views: number, ratePer1m: number): number {
-  return Math.round(((views / 1_000_000) * ratePer1m) * 100) / 100;
-}
-
 /**
  * Per-post payout with the campaign cap applied: a creator never earns
  * more than `cap` on one post, even if the views would pay more.

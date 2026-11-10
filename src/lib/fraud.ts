@@ -96,14 +96,23 @@ export async function handleBotRejection(
     // stamps unblocked_at, so a later re-ban re-alerts.
     let flaggedAt: string | null = null;
     let bannedAt: string | null = null;
+    // Count stored at the last processed rejection: the crossing
+    // test below (prevCount < threshold <= count) fires each alert
+    // exactly once even when a count is skipped (P2-1: exact ===
+    // missed the alert whenever a rejection was processed twice,
+    // failed, or jumped past the number).
+    let prevCount = 0;
     try {
       const { data: flagRow } = await supabase
         .from("creator_flags")
-        .select("flagged_at, banned_at")
+        .select("flagged_at, banned_at, bot_rejections")
         .eq("user_id", userId)
         .single();
       flaggedAt = (flagRow?.flagged_at as string | null) ?? null;
       bannedAt = (flagRow?.banned_at as string | null) ?? null;
+      prevCount = Number(
+        (flagRow?.bot_rejections as number | null) ?? 0
+      );
     } catch {
       // Migration 0026 not run yet — thresholds still alert below,
       // the flag row just cannot be stored.
@@ -183,12 +192,22 @@ export async function handleBotRejection(
       void notifyDiscord(
         `${prefix}⛔ Creator auto-banned — ${email} was banned after ${count} bot-view rejections. View: ${ADMIN_URL}`
       );
-    } else if (count === BOT_FLAG_THRESHOLD && !flaggedAt) {
+    } else if (
+      count >= BOT_FLAG_THRESHOLD &&
+      prevCount < BOT_FLAG_THRESHOLD &&
+      !flaggedAt &&
+      !bannedAt
+    ) {
       outcome = "flagged";
       void notifyDiscord(
         `${prefix}🚩 Creator flagged — ${email} has 10 bot-view rejections. One more bot rejection will auto-ban them. View: ${ADMIN_URL}`
       );
-    } else if (count === BOT_CONCERN_THRESHOLD) {
+    } else if (
+      count >= BOT_CONCERN_THRESHOLD &&
+      prevCount < BOT_CONCERN_THRESHOLD &&
+      !flaggedAt &&
+      !bannedAt
+    ) {
       outcome = "concern";
       void notifyDiscord(
         `${prefix}⚠️ Bot-view concern — ${email} has 6 bot-view rejections. Watch their next submissions. View: ${ADMIN_URL}`
