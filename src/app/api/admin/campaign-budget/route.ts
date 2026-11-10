@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
+import { platformFeeFor } from "@/lib/money";
 
 interface BudgetEditBody {
   campaignId?: string;
@@ -26,7 +27,11 @@ interface BudgetEditBody {
  * already have received the extra budget + 15% platform fee from
  * the brand (he verifies it himself); if it went down, he
  * refunds the remainder to the brand manually by email + USDT.
- * The site does not charge or refund anything on its own.
+ * The site does not charge or refund anything on its own. The
+ * platform fee is ALWAYS recomputed from the new total (15% of
+ * it) — a budget edit that left the old fee in place would make
+ * the admin card and the payment page verify/collect the wrong
+ * total.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -148,7 +153,13 @@ export async function POST(request: Request) {
 
   const { error: updateError } = await supabase
     .from("campaigns")
-    .update({ budget_total: newTotal, budget_left: newLeft })
+    .update({
+      budget_total: newTotal,
+      budget_left: newLeft,
+      // 15% platform fee, recomputed from the NEW total — never
+      // the stale fee from the old budget.
+      platform_fee: platformFeeFor(newTotal),
+    })
     .eq("id", row.id);
   if (updateError) {
     // The budget did not change — remove the history row we just
@@ -162,8 +173,9 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    message: `Budget updated to $${newTotal.toFixed(2)} ($${newLeft.toFixed(2)} left).`,
+    message: `Budget updated to $${newTotal.toFixed(2)} ($${newLeft.toFixed(2)} left). Platform fee is now $${platformFeeFor(newTotal).toFixed(2)} (15% of the new budget).`,
     budget_total: newTotal,
     budget_left: newLeft,
+    platform_fee: platformFeeFor(newTotal),
   });
 }

@@ -122,6 +122,19 @@ export async function POST(request: Request) {
       ? body.reason.trim()
       : null;
 
+  // Every rejection MUST show its reason — the creator sees it,
+  // and the bot-view ladder counts on it. A rejection without a
+  // reason is rejected here, before anything is stored.
+  if (body.action === "reject" && !reason) {
+    return NextResponse.json(
+      {
+        error:
+          "A reason is required for every rejection — the creator sees it (for example bot views, brief mismatch, wrong content, duplicate).",
+      },
+      { status: 400 }
+    );
+  }
+
   if (body.action === "reject") {
     if (submission.status === "rejected") {
       return NextResponse.json(
@@ -303,8 +316,10 @@ export async function POST(request: Request) {
     }
     // Minimum views per clip (site-wide floor 1,000, migration 0028):
     // a clip below the campaign's minimum cannot be approved — the
-    // owner must reject it instead.
-    const minViews = Number(campaign.min_views ?? 1000);
+    // owner must reject it instead. Clamped to >= 1,000: legacy
+    // rows with min_views = 0 used to skip this check entirely
+    // while the UI still showed "Min 1,000 views".
+    const minViews = Math.max(1000, Number(campaign.min_views ?? 1000));
     if (minViews > 0 && views < minViews) {
       return NextResponse.json(
         {

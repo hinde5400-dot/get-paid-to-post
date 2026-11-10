@@ -13,6 +13,7 @@ import {
 } from "@/lib/constants";
 import { fetchPostedTime } from "@/lib/views/posted-time";
 import { countWords, validatePostUrl, validateProofUrl } from "@/lib/validate";
+import { rateLimit } from "@/lib/rate-limit";
 import { canonicalizePostUrl } from "@/lib/canonical-url";
 import type { Platform } from "@/lib/types";
 import { platformsFromRow, platformNamesText } from "@/lib/types";
@@ -45,6 +46,19 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "This account is blocked." },
       { status: 403 }
+    );
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 bundle
+  // submits per minute per user — stops accidental double-submits
+  // and runaway loops.
+  const rl = rateLimit(`submissions:${user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many submissions — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
     );
   }
 

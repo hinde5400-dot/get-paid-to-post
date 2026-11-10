@@ -136,6 +136,14 @@ function AdminCampaignCard({
     c.budget_total
   );
   const aggRate = engagementRate(stats.likes, stats.comments, stats.views);
+  // The 1% gate is PER CLIP — a campaign average can pass while a
+  // single clip fails, so the aggregate never gets a ✓/✗. Show
+  // how many clips with views are below 1% instead.
+  const clipsWithViews = stats.posts.filter((p) => p.views > 0);
+  const clipsBelowGate = clipsWithViews.filter((p) => {
+    const r = engagementRate(p.likes, p.comments, p.views);
+    return r !== null && r < MIN_ENGAGEMENT_RATE;
+  }).length;
   const postsSorted = [...stats.posts].sort((a, b) => b.views - a.views);
 
   // Live preview of the new budget left while the owner types.
@@ -327,9 +335,11 @@ function AdminCampaignCard({
           <p className="mt-1 text-[11px] font-semibold text-fg/50">
             {aggRate === null
               ? "no views yet"
-              : aggRate >= MIN_ENGAGEMENT_RATE
-                ? "✓ meets 1% minimum"
-                : "✗ below 1% minimum"}
+              : clipsWithViews.length === 0
+                ? "no clips with views yet"
+                : clipsBelowGate === 0
+                  ? "all clips meet the 1% minimum"
+                  : `${clipsBelowGate} of ${clipsWithViews.length} clips below 1%`}
           </p>
         </div>
       </div>

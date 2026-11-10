@@ -3,6 +3,7 @@ import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { SITE_URL } from "@/lib/constants";
 import { notifyPaymentProof } from "@/lib/notify";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Private two-way brand <-> admin chat for one campaign (migration
@@ -135,6 +136,22 @@ export async function POST(
   }
   if (!(await canAccess(supabase, campaign, auth.user.id))) {
     return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 20 chat
+  // messages per minute per user per campaign.
+  const rl = rateLimit(
+    `messages:${auth.user.id}:${params.id}`,
+    20,
+    60_000
+  );
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many messages — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
+    );
   }
   const profile = await getProfile(auth.user.id);
   const sender = isOwner(profile) ? "admin" : "brand";

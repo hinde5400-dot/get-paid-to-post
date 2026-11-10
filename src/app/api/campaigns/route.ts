@@ -7,6 +7,7 @@ import {
 } from "@/lib/constants";
 import { platformFeeFor } from "@/lib/money";
 import { notifyCampaignCreated } from "@/lib/notify";
+import { rateLimit } from "@/lib/rate-limit";
 import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 
@@ -43,6 +44,18 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
     return NextResponse.json({ error: "Please log in first." }, { status: 401 });
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 5 campaign
+  // creates per minute per brand.
+  const rl = rateLimit(`campaigns:${auth.user.id}`, 5, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many campaigns — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
+    );
   }
   const body = (await request.json()) as {
     brandName?: string;
