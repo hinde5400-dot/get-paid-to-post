@@ -43,6 +43,10 @@ export default function CampaignModal({
   // (Turn's decision, P0 batch 2; flipped from % remaining
   // 2026-11-10). The bar FILLS as the budget is used.
   const usedPct = budgetUsedPct(campaign.budget_total, campaign.budget_left);
+  // "Ended" is decided on the UNROUNDED usage: the budget is truly
+  // spent only when budget_left is 0. The rounded display value
+  // (99.6% → 100) must never label a still-live campaign ended.
+  const budgetFullyUsed = campaign.budget_left <= 0;
   const approvalPct =
     stats && stats.total > 0
       ? Math.round((stats.approved / stats.total) * 100)
@@ -119,7 +123,7 @@ export default function CampaignModal({
           <div className="mt-5">
             <div className="flex items-baseline justify-between text-sm">
               <span className="font-bold text-fg">
-                {usedPct === 100
+                {budgetFullyUsed
                   ? "Campaign ended"
                   : `${usedPct}% budget used`}
               </span>
@@ -213,9 +217,12 @@ export default function CampaignModal({
             {!live ? (
               <span className="font-bold text-amber-300">
                 This campaign has ended and is now in Campaign Review
-                — no new clips can be submitted. Payouts finish about
-                1 week after the campaign ends (3-day re-check → 72h
-                hold → payout).
+                — no new clips can be submitted. Approved earnings
+                enter a 72-hour hold as soon as they are approved —
+                even while the campaign is still running. After the
+                campaign ends there is a 3-day re-check window, then
+                payouts are made manually (about 1 week after the
+                campaign ends in total).
               </span>
             ) : (
               <>
@@ -230,7 +237,9 @@ export default function CampaignModal({
                   {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
                   <span className="font-bold text-fg">
                     {formatUSD(example20k.earnings)} earned
-                  </span>
+                  </span>{" "}
+                  (up to the per-post cap and the campaign&apos;s
+                  remaining budget)
                 </>
               </>
             )}

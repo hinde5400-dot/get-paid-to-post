@@ -47,6 +47,10 @@ export default function CampaignCard({
   // 2026-11-10). The bar FILLS as the budget is used: green below
   // 50% used, yellow 50–75%, red 75–90%, dark red above 90%.
   const usedPct = budgetUsedPct(campaign.budget_total, campaign.budget_left);
+  // "Ended" is decided on the UNROUNDED usage: the budget is truly
+  // spent only when budget_left is 0. The rounded display value
+  // (99.6% → 100) must never label a still-live campaign ended.
+  const budgetFullyUsed = campaign.budget_left <= 0;
   // Ticking clock for the countdown (re-renders every minute).
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -142,7 +146,7 @@ export default function CampaignCard({
         <div className="mt-4">
           <div className="flex items-baseline justify-between text-sm">
             <span className="font-bold text-fg">
-              {usedPct === 100
+              {budgetFullyUsed
                 ? "Campaign ended"
                 : `${usedPct}% budget used`}
             </span>
@@ -173,7 +177,9 @@ export default function CampaignCard({
               20k views × {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
               <span className="font-bold text-fg">
                 {formatUSD(example20k.earnings)} earned
-              </span>
+              </span>{" "}
+              (up to the per-post cap and the campaign&apos;s remaining
+              budget)
             </span>
           </div>
           {burnText && (

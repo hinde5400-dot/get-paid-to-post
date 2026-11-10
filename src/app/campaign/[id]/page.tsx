@@ -127,6 +127,10 @@ export default async function CampaignDetailPage({
   // (Turn's decision, P0 batch 2; flipped from % remaining
   // 2026-11-10). The bar FILLS as the budget is used.
   const usedPct = budgetUsedPct(campaign.budget_total, campaign.budget_left);
+  // "Ended" is decided on the UNROUNDED usage: the budget is truly
+  // spent only when budget_left is 0. The rounded display value
+  // (99.6% → 100) must never label a still-live campaign ended.
+  const budgetFullyUsed = campaign.budget_left <= 0;
   // Payout examples with the campaign's REAL single rate and cap,
   // so a creator sees the exact math before filming. One rate per
   // 1,000 views for the whole campaign — the same on every platform.
@@ -167,8 +171,22 @@ export default async function CampaignDetailPage({
 
       {/* Preview notice: this campaign is not live yet — only its
           brand owner and the site owner can see this page. Creators
-          cannot see it on Discover, and no clips can be submitted. */}
-      {isPreview && (
+          cannot see it on Discover, and no clips can be submitted.
+          A REJECTED campaign shows "Rejected" plainly — never the
+          pay-to-go-live copy, which would read as "pay and it goes
+          live" for a campaign that will never be approved. */}
+      {isPreview && campaign.status === "rejected" && (
+        <div className="rounded-3xl border border-red-500/40 bg-red-500/10 p-6">
+          <p className="font-display text-lg font-black tracking-tight text-red-300">
+            ● Rejected — this campaign will not go live
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-fg/70">
+            This campaign was rejected by the admin and will not go
+            live.
+          </p>
+        </div>
+      )}
+      {isPreview && campaign.status !== "rejected" && (
         <div className="rounded-3xl border border-amber-400/40 bg-amber-400/10 p-6">
           <p className="font-display text-lg font-black tracking-tight text-amber-300">
             ● Preview — this campaign is not live yet
@@ -193,12 +211,17 @@ export default async function CampaignDetailPage({
             Campaign Review — payouts in progress
           </p>
           <p className="mt-2 text-sm leading-relaxed text-fg/70">
-            No new clips can be submitted. Payouts finish about 1 week
-            after the campaign ends: first a 3-day re-check window, during
-            which an approved video can still be rejected if fake or bot
-            views show up, then the 72-hour payment hold, then payout.
-            This campaign will be removed automatically after the
-            settlement window.
+            No new clips can be submitted. Approved earnings enter a
+            72-hour hold as soon as they are approved — even while the
+            campaign is still running. After the campaign ends there
+            is a 3-day re-check window, during which an approved video
+            can still be rejected if fake or bot views show up, then
+            payouts are made manually (about 1 week after the campaign
+            ends in total). The campaign, its proofs and its chat are
+            deleted 1 day after the last hold matures, never earlier
+            than 7 days after the campaign ends. Wallet and withdrawal
+            records are never deleted. This campaign will be removed
+            automatically after the settlement window.
           </p>
         </div>
       )}
@@ -260,20 +283,13 @@ export default async function CampaignDetailPage({
                 One rate for the whole campaign — same on every platform
               </p>
             </div>
-            <div className="rounded-2xl bg-fg/5 p-4">
-              <p className="text-xs text-fg/50">Rate</p>
-              <p className="mt-1 text-2xl font-black text-fg">
-                {formatUSD(campaign.rate_per_1m)}
-                <span className="text-sm font-semibold text-fg/60"> / 1M views</span>
-              </p>
-            </div>
           </div>
 
           {/* Budget bar — % used only, never $ amounts */}
           <div className="mt-6">
             <div className="flex justify-between text-sm text-fg/60">
               <span>
-                {usedPct === 100
+                {budgetFullyUsed
                   ? "Campaign ended"
                   : `${usedPct}% budget used`}
               </span>
@@ -360,15 +376,18 @@ export default async function CampaignDetailPage({
                   {formatUSD(example.uncapped)} earned.
                   {example.capped
                     ? ` Cap ${formatUSD(campaign.max_payout_per_post)} applied, you earned ${formatUSD(example.earnings)}.`
-                    : ` You earned ${formatUSD(example.earnings)}.`}
+                    : ` You earned ${formatUSD(example.earnings)}.`}{" "}
+                  (Up to the per-post cap and the campaign&apos;s
+                  remaining budget.)
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   Example: 20,000 views ×{" "}
                   {formatUSD(campaign.view_bonus_per_1k)} per 1k ={" "}
                   <span className="font-bold text-fg">
                     {formatUSD(example20k.earnings)} earned
-                  </span>
-                  .
+                  </span>{" "}
+                  (up to the per-post cap and the campaign&apos;s
+                  remaining budget).
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   A creator never earns more than{" "}
@@ -377,15 +396,19 @@ export default async function CampaignDetailPage({
                   {Math.max(campaign.min_views, 1000).toLocaleString()}{" "}
                   views before it can earn — a clip below the
                   campaign&apos;s minimum cannot be approved.{" "}
-                  Approved earnings sit in a 72-hour hold, then become
-                  withdrawable.
+                  Approved earnings enter a 72-hour hold as soon as
+                  they are approved — even while the campaign is still
+                  running — then become withdrawable.
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-fg/70">
                   When this campaign ends, a 3-day re-check window follows
                   — an approved video can still be rejected if fake or bot
-                  views show up — then the 72-hour payment hold finishes
-                  and payouts are made, about 1 week after the campaign
-                  ends in total.
+                  views show up — then payouts are made manually, about
+                  1 week after the campaign ends in total. The campaign,
+                  its proofs and its chat are deleted 1 day after the
+                  last hold matures, never earlier than 7 days after the
+                  campaign ends. Wallet and withdrawal records are never
+                  deleted.
                 </p>
               </div>
             </div>
@@ -398,22 +421,29 @@ export default async function CampaignDetailPage({
                   </h2>
                   <p className="mt-3 text-sm leading-relaxed text-fg/70">
                     This campaign has ended and is now in Campaign
-                    Review. No new clips can be submitted. Payouts
-                    finish about 1 week after the campaign ends — a
-                    3-day re-check window, then the 72-hour payment
-                    hold, then payout.
+                    Review. No new clips can be submitted. Approved
+                    earnings enter a 72-hour hold as soon as they are
+                    approved — even while the campaign is still
+                    running. After the campaign ends there is a 3-day
+                    re-check window, then payouts are made manually
+                    (about 1 week after the campaign ends in total).
+                    The campaign, its proofs and its chat are deleted
+                    1 day after the last hold matures, never earlier
+                    than 7 days after the campaign ends. Wallet and
+                    withdrawal records are never deleted.
                   </p>
                 </div>
               ) : isPreview ? (
                 <div className="rounded-3xl border border-amber-400/40 bg-card p-6">
                   <h2 className="text-lg font-extrabold text-fg">
-                    Not live yet
+                    {campaign.status === "rejected"
+                      ? "Rejected"
+                      : "Not live yet"}
                   </h2>
                   <p className="mt-3 text-sm leading-relaxed text-fg/70">
-                    This campaign is still pending — it opens to
-                    creators only after its budget is funded and the
-                    admin verifies payment. No clips can be submitted
-                    yet.
+                    {campaign.status === "rejected"
+                      ? "This campaign was rejected by the admin and will not go live."
+                      : "This campaign is still pending — it opens to creators only after its budget is funded and the admin verifies payment. No clips can be submitted yet."}
                   </p>
                 </div>
               ) : (
@@ -440,7 +470,6 @@ export default async function CampaignDetailPage({
                 ["Category", campaign.category],
                 ["Platforms", platformListText],
                 ["Budget", `${usedPct}% used`],
-                ["Rate", `${formatUSD(campaign.rate_per_1m)} per 1M views`],
                 ["View bonus", `${formatUSD(campaign.view_bonus_per_1k)} per 1K views on every platform`],
                 [
                   "Minimum views per clip",
@@ -455,13 +484,15 @@ export default async function CampaignDetailPage({
                 ["Clip limit", "Up to 15 approved clips per platform"],
                 [
                   "Status",
-                  !campaign.is_funded
-                    ? "Not funded"
-                    : live
-                      ? "Funded & live"
-                      : settling
-                        ? "Completed — payouts in progress"
-                        : "Funded",
+                  campaign.status === "rejected"
+                    ? "Rejected"
+                    : !campaign.is_funded
+                      ? "Not funded"
+                      : live
+                        ? "Funded & live"
+                        : settling
+                          ? "Completed — payouts in progress"
+                          : "Funded",
                 ],
               ].map(([label, value]) => (
                 <div
