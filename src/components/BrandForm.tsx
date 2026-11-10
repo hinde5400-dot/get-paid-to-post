@@ -323,7 +323,7 @@ export default function BrandForm({
     if (!Number.isFinite(rateNum) || rateNum <= 0) {
       return fail(
         "rate",
-        "Rate Per 1000 Views must be more than $0 per 1k views"
+        "Rate per 1,000 views must be more than $0 per 1k views"
       );
     }
     // Minimum views per clip: floor 1,000. Blank = 1,000 (the
@@ -559,6 +559,11 @@ export default function BrandForm({
       ? Number(maxPayout)
       : MAX_PAYOUT_DEFAULT;
   const capExample = payoutForViews(100000, capExampleRate, capExampleCap);
+  // Per-clip examples for the live estimate box: what ONE clip
+  // earns at 10k and 100k views at the entered rate (capped at
+  // the Max Payout Per Post).
+  const example10k = payoutForViews(10000, exampleRate, capExampleCap);
+  const example100k = payoutForViews(100000, exampleRate, capExampleCap);
 
   // Values shown on the pre-submit review panel (only reached
   // after validation passes, so budget / rate / min views are
@@ -648,7 +653,8 @@ export default function BrandForm({
               </p>
               <p className="mt-1 text-sm text-fg/70">
                 One rate for all platforms:{" "}
-                {fmtChoice(reviewRate)} per 1k views
+                {fmtChoice(reviewRate)} per 1,000 views — every 1,000
+                views on a clip earns {fmtChoice(reviewRate)}.
               </p>
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
@@ -876,11 +882,12 @@ export default function BrandForm({
             the same rate applies to TikTok, Instagram and YouTube
             equally. */}
         <label id="field-rate" className="block text-sm font-bold text-fg">
-          Rate Per 1000 Views (Your Choice)
-          <span className="mt-1 block text-xs font-medium text-fg/50">
-            One rate for all platforms — the same rate applies to
-            TikTok, Instagram and YouTube. Must be more than $0.
-            A higher rate tends to attract creators faster.
+          Rate per 1,000 views (USD)
+          <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
+            How much ONE creator earns for every 1,000 views on their
+            clip. Example: $2.00 per 1,000 views means a clip with
+            10,000 views earns $20.00 (up to the Max Payout Per Post).
+            The same rate applies on TikTok, Instagram and YouTube.
           </span>
           <input
             type="number"
@@ -1006,7 +1013,15 @@ export default function BrandForm({
         {fmtChoice(exampleBudget)} + Platform fee (15%):{" "}
         {fmtChoice(exampleFee)} = Total to send{" "}
         {fmtChoice(exampleTotal)} · Creators pool (full budget):{" "}
-        {fmtChoice(exampleBudget)}.
+        {fmtChoice(exampleBudget)}. At{" "}
+        {fmtChoice(Math.round(exampleRate * 100) / 100)} per 1,000
+        views: a clip with 10,000 views earns{" "}
+        {fmtChoice(example10k.earnings)} · a clip with 100,000 views
+        earns {fmtChoice(example100k.earnings)}
+        {example100k.capped
+          ? ` (capped at Max Payout ${fmtChoice(capExampleCap)})`
+          : ""}
+        .
       </div>
       {/* Bottom of the form, in order (item 5): Campaign Brief →
           Video Requirements → Google Drive Link → Thumbnail. */}
