@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -31,6 +31,29 @@ export default function SignupForm({ role }: { role: Role | null }) {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // Already signed in? (friend's brand test, 2026-11-11): the
+  // friend was logged in on his own phone and could not tell why
+  // signup "did nothing" for a second account. Say it plainly
+  // above the form — do NOT block signup and do NOT redirect.
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = getBrowserClient();
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled && data.user?.email) setSignedInEmail(data.user.email);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function signOutFirst() {
+    const supabase = getBrowserClient();
+    if (supabase) await supabase.auth.signOut();
+    setSignedInEmail(null);
+    router.refresh();
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -174,6 +197,20 @@ export default function SignupForm({ role }: { role: Role | null }) {
         <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
           Supabase is not configured yet — add NEXT_PUBLIC_SUPABASE_URL and
           NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local (see README).
+        </p>
+      )}
+      {signedInEmail && (
+        <p className="mt-4 rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
+          You are signed in as {signedInEmail}. To create a second
+          account, use a different email — or{" "}
+          <button
+            type="button"
+            onClick={() => void signOutFirst()}
+            className="font-bold text-lime underline hover:no-underline"
+          >
+            sign out
+          </button>{" "}
+          first.
         </p>
       )}
       <form
