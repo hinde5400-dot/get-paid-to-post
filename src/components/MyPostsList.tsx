@@ -177,6 +177,17 @@ export default function MyPostsList({
                   again.
                 </p>
               )}
+              {/* Active flag: the payout is PAUSED, not just under
+                  review. The creator must see the reason — a
+                  flagged clip used to look identical to an ordinary
+                  pending one. */}
+              {s.flag_reason && (
+                <p className="mt-3 rounded-xl bg-amber-500/15 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">
+                  ⚠ Flagged — payout paused: {s.flag_reason}. The admin
+                  is reviewing it. If you believe it is a mistake, you
+                  can appeal once via Discord support.
+                </p>
+              )}
               <div className="mt-4 grid grid-cols-4 gap-3 text-center">
                 <div className="rounded-xl bg-fg/5 py-2">
                   <p className="text-lg font-black text-fg">

@@ -55,6 +55,18 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "flag") {
+    // Flagging a REJECTED submission is meaningless: there is no
+    // payout to pause, so the flag row would sit in admin tooling
+    // as an open flag on a dead clip.
+    if ((submission as { status?: string }).status === "rejected") {
+      return NextResponse.json(
+        {
+          error:
+            "This submission is already rejected — there is no payout to pause.",
+        },
+        { status: 400 }
+      );
+    }
     const reason =
       typeof body.reason === "string" ? body.reason.trim() : "";
     if (!reason) {

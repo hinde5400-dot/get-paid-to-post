@@ -98,12 +98,21 @@ export async function POST(request: Request) {
       .update(patch)
       .eq("id", campaign.id);
     if (error && /started_at|ends_at/i.test(error.message)) {
-      // started_at / ends_at come from migration 0009, which may not
-      // have been run yet — retry without them rather than failing.
-      ({ error } = await supabase
-        .from("campaigns")
-        .update({ status: "live", is_funded: true })
-        .eq("id", campaign.id));
+      // started_at / ends_at come from migration 0009. The old
+      // code retried WITHOUT them and reported success — the
+      // campaign went live with no schedule, so a duration
+      // campaign never ended by time and burn-rate math fell back
+      // silently. Fail loudly instead: a campaign must never go
+      // live without its schedule. All migrations 0001–0034 are
+      // applied live, so missing columns mean something is
+      // genuinely wrong.
+      return NextResponse.json(
+        {
+          error:
+            "Campaign schedule columns are missing (migration 0009) — the campaign was NOT approved. Run the missing migration in Supabase first.",
+        },
+        { status: 503 }
+      );
     }
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

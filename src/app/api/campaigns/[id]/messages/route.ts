@@ -164,6 +164,16 @@ export async function POST(
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
     text = String(form.get("message") ?? "").trim();
+    // Validate the text BEFORE uploading anything: the old code
+    // uploaded the proof image first and only then rejected a
+    // >2000-char message — orphaning the file in storage with no
+    // DB row, and no hint to the brand that the upload happened.
+    if (text.length > 2000) {
+      return NextResponse.json(
+        { error: "Message must be 2000 characters or less." },
+        { status: 400 }
+      );
+    }
     const file = form.get("image");
     if (file && file instanceof File && file.size > 0) {
       const ext = IMAGE_EXTENSIONS[file.type];
@@ -230,6 +240,12 @@ export async function POST(
     .select("*")
     .single();
   if (error) {
+    // The message row failed after the image was already stored —
+    // delete the orphaned upload instead of leaving it in
+    // storage with no DB row pointing at it.
+    if (imagePath) {
+      await supabase.storage.from("brand-proofs").remove([imagePath]);
+    }
     if (tableMissing(error)) {
       return NextResponse.json(
         { error: "Messages are not set up yet (migration 0015). Please try again later." },
@@ -239,24 +255,28 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   // Notify the owner on Discord when the BRAND sends payment proof
-  // in this chat: a proof screenshot upload, or a Transaction ID
-  // pasted as a chat message. A TxID in chat text is recognised
-  // only by its shape — a 64-hex-char hash, with or without a 0x
-  // prefix, the shape of a TRC20/BEP20 transaction hash — so an
-  // ordinary word can never trigger it. The notification carries
-  // the TxID, the proof link and the full campaign details, because
-  // this is the moment Turn checks his wallet and approves.
+  // in this chat: a Transaction ID pasted in the message, or a
+  // proof screenshot uploaded after a TxID was already recorded
+  // on the payment page. The TxID is found ANYWHERE in the text —
+  // the old anchored regex only matched a message that WAS exactly
+  // the hash, so "TxID: <hash>" or the hash inside a sentence never
+  // alerted Turn at the exact moment he needs to check his wallet.
+  // And an image alone never fires a "payment proof" alert any
+  // more: without a TxID there is no payment to verify.
   // Fire-and-forget — never breaks the request; a no-op until Turn
   // creates the webhook. Same per-brand forum thread as the
   // campaign-created notification.
   if (sender === "brand") {
-    const txHashInText = /^(?:0x)?[0-9a-fA-F]{64}$/.test(text)
-      ? text
-      : null;
-    if (messageType === "image" || txHashInText) {
+    const txHashInText = text.match(/(?:0x)?[0-9a-fA-F]{64}/)?.[0] ?? null;
+    const txId =
+      txHashInText ??
+      (messageType === "image"
+        ? (campaign.payment_tx_id as string | null) ?? undefined
+        : undefined);
+    if (txId) {
       const messageId = (data as { id?: string } | null)?.id;
       void notifyPaymentProof(campaign, {
-        txId: txHashInText ?? campaign.payment_tx_id ?? undefined,
+        txId,
         proofUrl:
           messageType === "image" && messageId
             ? `${SITE_URL}/api/campaigns/${params.id}/messages/${messageId}/image`

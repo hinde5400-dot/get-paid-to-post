@@ -258,6 +258,12 @@ export interface Submission {
    *  approval time, used as the approval date in the post-end
    *  re-check view (P1-c). */
   updated_at?: string | null;
+  /** Active payout-pause flag (migration 0031): the reason the
+   *  admin flagged this clip, plus when. Only set while a flag is
+   *  open — the creator sees it on My Posts, so a paused payout
+   *  is never invisible to the person it affects. */
+  flag_reason?: string | null;
+  flagged_at?: string | null;
 }
 
 export interface Wallet {

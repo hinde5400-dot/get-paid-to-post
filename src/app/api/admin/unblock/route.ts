@@ -14,11 +14,11 @@ import { getProfile, isOwner } from "@/lib/auth";
  * Auth mirrors POST /api/admin/block exactly: 401 when not logged
  * in, 403 when not the owner, 400 when userId is missing.
  *
- * The creator_flags upsert runs FIRST on purpose: it needs the
- * unblocked_at column from migration 0027. If that fails, nothing
- * changes and the creator stays blocked (safe direction) instead
- * of ending up unblocked with a stale ban state that would break
- * the next auto-ban.
+ * Order: the users row is updated FIRST, and the ladder reset
+ * only runs after it succeeds. The old order stamped the reset
+ * first — if the unblock update then failed, the user stayed
+ * blocked while their bot-ladder history was already wiped: a
+ * half-applied unblock that looked like a failure.
  *
  * flagged_at is cleared too, not just banned_at: the ladder
  * restarts from zero, so the flag alert must be able to fire
@@ -48,6 +48,28 @@ export async function POST(request: Request) {
   if (!body.userId) {
     return NextResponse.json({ error: "userId is required." }, { status: 400 });
   }
+  // A Supabase update matching zero rows returns NO error, so
+  // verify the user exists first — otherwise a typo'd id reports
+  // a successful unblock that never happened.
+  const { data: target } = await supabase
+    .from("users")
+    .select("id")
+    .eq("id", body.userId)
+    .maybeSingle();
+  if (!target) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+  const { data: unblocked, error } = await supabase
+    .from("users")
+    .update({ is_blocked: false })
+    .eq("id", body.userId)
+    .select("id");
+  if (error || !unblocked || unblocked.length === 0) {
+    return NextResponse.json(
+      { error: error?.message ?? "Could not unblock this user." },
+      { status: 400 }
+    );
+  }
   const { error: flagError } = await supabase
     .from("creator_flags")
     .upsert(
@@ -61,14 +83,13 @@ export async function POST(request: Request) {
       { onConflict: "user_id" }
     );
   if (flagError) {
-    return NextResponse.json({ error: flagError.message }, { status: 400 });
-  }
-  const { error } = await supabase
-    .from("users")
-    .update({ is_blocked: false })
-    .eq("id", body.userId);
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    // The user IS unblocked; only the ladder reset failed. Say so
+    // plainly — the owner can re-run the unblock to retry the
+    // reset, and the user is not stuck blocked.
+    return NextResponse.json({
+      ok: true,
+      message: `Creator unblocked, but the bot-rejection ladder could not be reset (${flagError.message}). Re-run the unblock to retry the reset.`,
+    });
   }
   return NextResponse.json({
     ok: true,

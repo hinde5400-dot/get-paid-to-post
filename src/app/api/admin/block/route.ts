@@ -25,6 +25,25 @@ export async function POST(request: Request) {
   if (!body.userId) {
     return NextResponse.json({ error: "userId is required." }, { status: 400 });
   }
+  // The owner can never block himself — he plans to submit clips
+  // as a creator, and a self-block would lock the owner out.
+  if (body.userId === auth.user.id) {
+    return NextResponse.json(
+      { error: "You cannot block your own account." },
+      { status: 400 }
+    );
+  }
+  // A Supabase update matching zero rows returns NO error, so the
+  // old code reported "Creator blocked" for a typo'd id that was
+  // never blocked. Verify the user exists first.
+  const { data: target } = await supabase
+    .from("users")
+    .select("id")
+    .eq("id", body.userId)
+    .maybeSingle();
+  if (!target) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
   const { error } = await supabase
     .from("users")
     .update({ is_blocked: true })

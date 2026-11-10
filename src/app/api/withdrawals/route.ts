@@ -71,7 +71,11 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (amount < WITHDRAW_MIN) {
+  // Non-finite amounts ("abc", Infinity) used to sail past both
+  // guards: every comparison with NaN is false, so the outcome
+  // depended on how Supabase serialises NaN instead of a clean
+  // validation error.
+  if (!Number.isFinite(amount) || amount < WITHDRAW_MIN) {
     return NextResponse.json(
       { error: `Minimum withdrawal is $${WITHDRAW_MIN}` },
       { status: 400 }
@@ -94,30 +98,57 @@ export async function POST(request: Request) {
   }
   const fee = feeFor(amount);
   const final = finalFor(amount);
-  const { error: insError } = await supabase.from("withdrawals").insert({
-    user_id: auth.user.id,
-    amount,
-    fee,
-    final_amount: final,
-    method,
-    details,
-    status: "pending",
-  });
-  if (insError) {
-    return NextResponse.json({ error: insError.message }, { status: 400 });
+  const { data: inserted, error: insError } = await supabase
+    .from("withdrawals")
+    .insert({
+      user_id: auth.user.id,
+      amount,
+      fee,
+      final_amount: final,
+      method,
+      details,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (insError || !inserted) {
+    return NextResponse.json(
+      { error: insError?.message ?? "Could not create the withdrawal." },
+      { status: 400 }
+    );
   }
   if (wallet) {
-    await supabase
+    // Debit with optimistic concurrency: the update only matches
+    // when the balance is still exactly what was read above.
+    // Two concurrent requests both read the same balance — the
+    // second one's update matches zero rows instead of debiting
+    // the same money twice. Balances are numeric(12,2), so the
+    // equality is exact. A failed debit rolls the withdrawal row
+    // back — the old code left the row in place and reported
+    // success with the money never debited.
+    const { data: debited, error: debitError } = await supabase
       .from("wallets")
-      .update({
-        available_balance: available - amount,
-        withdrawn_total: Number(wallet.withdrawn_total ?? 0) + amount,
-      })
-      .eq("user_id", auth.user.id);
+      .update({ available_balance: available - amount })
+      .eq("user_id", auth.user.id)
+      .eq("available_balance", available)
+      .select("user_id");
+    if (debitError || !debited || debited.length === 0) {
+      await supabase
+        .from("withdrawals")
+        .delete()
+        .eq("id", (inserted as { id: string }).id);
+      return NextResponse.json(
+        {
+          error:
+            "Your balance changed while this request was processed — please try again. No withdrawal was created.",
+        },
+        { status: 409 }
+      );
+    }
   }
   return NextResponse.json({
     ok: true,
-    message: `Withdrawal requested — you will receive $${final.toFixed(2)} after the 5% fee.`,
+    message: `Withdrawal requested — you'll receive $${final.toFixed(2)} after the 5% fee if approved.`,
     finalAmount: final,
   });
 }

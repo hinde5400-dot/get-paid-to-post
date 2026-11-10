@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
+import { getProfile } from "@/lib/auth";
 
 // Campaign image upload (migration 0032): Brand Logo and Thumbnail
 // are REQUIRED file uploads on the /brands form (Turn's decision
@@ -36,6 +37,23 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
     return NextResponse.json({ error: "Please log in first." }, { status: 401 });
+  }
+  // Campaign images belong to brands: a blocked account or a
+  // random creator could otherwise store files in the public
+  // bucket with no campaign attached. (MIME-only validation stays
+  // as-is — a full signature sniff is a later hardening step.)
+  const profile = await getProfile(auth.user.id);
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
+  }
+  if (!profile || (profile.role !== "brand" && !profile.is_admin)) {
+    return NextResponse.json(
+      { error: "Only brand accounts can upload campaign images." },
+      { status: 403 }
+    );
   }
 
   const contentType = request.headers.get("content-type") ?? "";

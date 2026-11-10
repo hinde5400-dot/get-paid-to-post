@@ -352,7 +352,33 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map((row) => {
+  const rows = data as Record<string, unknown>[];
+  // Active flags (migration 0031): a flagged payout is paused, and
+  // the creator must see that on My Posts — the old code fetched
+  // submissions only, so a flagged clip looked like an ordinary
+  // "Under Review" with no hint anything was paused.
+  const flagMap = new Map<string, { reason: string; flagged_at: string }>();
+  if (rows.length > 0) {
+    try {
+      const { data: flags } = await supabase
+        .from("submission_flags")
+        .select("submission_id, reason, created_at")
+        .in(
+          "submission_id",
+          rows.map((r) => String(r.id))
+        )
+        .is("resolved_at", null);
+      for (const f of (flags ?? []) as Record<string, unknown>[]) {
+        flagMap.set(String(f.submission_id), {
+          reason: String(f.reason ?? ""),
+          flagged_at: String(f.created_at ?? ""),
+        });
+      }
+    } catch {
+      // Pre-migration 0031 — no flags exist, nothing to attach.
+    }
+  }
+  return rows.map((row) => {
     const s = mapSubmission(row);
     const camp = row.campaigns as {
       title?: string;
@@ -378,6 +404,11 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
     s.campaign_max_payout_per_creator = camp?.max_payout_per_creator ?? null;
     s.campaign_budget_left =
       camp?.budget_left == null ? undefined : Number(camp.budget_left);
+    const flag = flagMap.get(s.id);
+    if (flag) {
+      s.flag_reason = flag.reason;
+      s.flagged_at = flag.flagged_at;
+    }
     return s;
   });
 }
@@ -462,7 +493,14 @@ export async function releaseMaturedHolds(): Promise<void> {
   try {
     const { error } = await supabase.rpc("release_matured_holds");
     if (error) {
-      // Function missing (migration 0011 not run yet) — ignore.
+      // Function missing (migration 0011 not run yet): approved
+      // earnings would sit in Pending forever with nothing telling
+      // anyone why. Log loudly instead of silently returning —
+      // the server log is the only signal until the migration runs.
+      console.error(
+        "[releaseMaturedHolds] RPC failed — approved earnings may be stuck in Pending:",
+        error.message
+      );
       return;
     }
   } catch {

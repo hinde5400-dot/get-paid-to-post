@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
+import { getProfile } from "@/lib/auth";
 import {
   MAX_PAYOUT_DEFAULT,
   MAX_PAYOUT_MAX,
@@ -44,6 +45,28 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
     return NextResponse.json({ error: "Please log in first." }, { status: 401 });
+  }
+  // Only brands create campaigns, and a blocked account creates
+  // nothing — the block is supposed to stop all activity. (The
+  // submissions and withdrawals routes already check this; this
+  // route did not, so any logged-in creator — including a blocked
+  // one — could land pending campaigns in the owner's queue.)
+  const profile = await getProfile(auth.user.id);
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
+  }
+  // Only brand accounts (and the owner) create campaigns. A
+  // missing profile row cannot prove a brand role, so it is
+  // refused too — the message says how to fix it (sign up as a
+  // brand).
+  if (!profile || (profile.role !== "brand" && !profile.is_admin)) {
+    return NextResponse.json(
+      { error: "Only brand accounts can create campaigns — sign up as a brand first." },
+      { status: 403 }
+    );
   }
   // Best-effort rate limit (see lib/rate-limit.ts): 5 campaign
   // creates per minute per brand.
@@ -111,11 +134,45 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Text lengths: generous caps that stop absurd/accidental
+  // values (a 10 MB description, a 1e9 min-views campaign) while
+  // never binding a real brand.
+  if (brandName.length > 100) {
+    return NextResponse.json(
+      { error: "Brand name must be 100 characters or less." },
+      { status: 400 }
+    );
+  }
+  if (title.length > 120) {
+    return NextResponse.json(
+      { error: "Campaign title must be 120 characters or less." },
+      { status: 400 }
+    );
+  }
+  if (description.length > 5000) {
+    return NextResponse.json(
+      { error: "Campaign Brief must be 5,000 characters or less." },
+      { status: 400 }
+    );
+  }
+  if (requirements.length > 5000) {
+    return NextResponse.json(
+      { error: "Video requirements must be 5,000 characters or less." },
+      { status: 400 }
+    );
+  }
   // Category (P1-a): exactly one of the six — UGC, Clipping,
-  // Lifestyle, Entertainment, Gaming, Technology. Missing means the
-  // old form, so default to UGC; anything else is rejected.
+  // Lifestyle, Entertainment, Gaming, Technology. It is REQUIRED:
+  // silently defaulting a missing category to UGC hid a form bug
+  // and filed the campaign under the wrong category.
   const categoryRaw = String(body.category ?? "").trim();
-  const category = categoryRaw === "" ? "UGC" : categoryRaw;
+  const category = categoryRaw;
+  if (!category) {
+    return NextResponse.json(
+      { error: "This field is required: Category." },
+      { status: 400 }
+    );
+  }
   if (!isCampaignCategory(category)) {
     return NextResponse.json(
       {
@@ -124,11 +181,28 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Any budget above $0 — there is no minimum budget.
-  const budgetTotal = Number(body.budgetTotal ?? 0);
-  if (!Number.isFinite(budgetTotal) || budgetTotal <= 0) {
+  // Any budget above $0 — there is no minimum budget. But the
+  // budget is stored in cents: a sub-cent budget ($0.004) rounds
+  // to $0.00 and the campaign then pays $0 forever, with no error
+  // anywhere. Reject anything that rounds to $0. (No $1 floor:
+  // Turn decided any budget above $0 is accepted.)
+  const budgetTotalRaw = Number(body.budgetTotal ?? 0);
+  if (!Number.isFinite(budgetTotalRaw) || budgetTotalRaw <= 0) {
     return NextResponse.json(
       { error: "Error: Budget must be more than $0" },
+      { status: 400 }
+    );
+  }
+  const budgetTotal = Math.round(budgetTotalRaw * 100) / 100;
+  if (budgetTotal <= 0) {
+    return NextResponse.json(
+      { error: "Error: Budget is too small — after rounding it is $0.00." },
+      { status: 400 }
+    );
+  }
+  if (budgetTotal > 1_000_000) {
+    return NextResponse.json(
+      { error: "Error: Budget must be $1,000,000 or less." },
       { status: 400 }
     );
   }
@@ -210,6 +284,25 @@ export async function POST(request: Request) {
       );
     }
     rates[p] = Math.round(v * 100) / 100;
+    // A tiny rate ($0.001/1k) passes the > $0 check but rounds to
+    // $0.00 — the campaign then pays $0 forever, with no error
+    // anywhere. Reject anything that rounds to $0.
+    if (rates[p] <= 0) {
+      return NextResponse.json(
+        {
+          error: `Error: Rate for ${p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube"} is too small — after rounding it is $0.00 per 1k views.`,
+        },
+        { status: 400 }
+      );
+    }
+    if (rates[p] > 1000) {
+      return NextResponse.json(
+        {
+          error: `Error: Rate must be $1,000 or less per 1k views.`,
+        },
+        { status: 400 }
+      );
+    }
   }
   if (new Set(Object.values(rates)).size > 1) {
     return NextResponse.json(
@@ -234,6 +327,12 @@ export async function POST(request: Request) {
   if (!Number.isFinite(minViews) || minViews < 1000) {
     return NextResponse.json(
       { error: "Minimum views per clip must be at least 1,000" },
+      { status: 400 }
+    );
+  }
+  if (minViews > 1_000_000) {
+    return NextResponse.json(
+      { error: "Minimum views per clip must be 1,000,000 or less" },
       { status: 400 }
     );
   }
@@ -281,15 +380,23 @@ export async function POST(request: Request) {
   }
   // The logo/thumbnail URLs must live in our own campaign-images
   // bucket — a brand cannot point its card at an arbitrary image.
-  // (If the Supabase URL is not configured, only the shape check
-  // above applies — same defensive style as the rest of the app.)
+  // Fail CLOSED when the Supabase URL is not configured: the old
+  // code skipped the bucket check entirely in that case, so any
+  // https:// image URL passed as the "required upload".
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(
     /\/$/,
     ""
   );
-  const imagesPrefix = supabaseUrl
-    ? `${supabaseUrl}/storage/v1/object/public/campaign-images/`
-    : "";
+  if (!supabaseUrl) {
+    return NextResponse.json(
+      {
+        error:
+          "Campaign images are not set up yet — the site owner needs to configure storage first.",
+      },
+      { status: 503 }
+    );
+  }
+  const imagesPrefix = `${supabaseUrl}/storage/v1/object/public/campaign-images/`;
   for (const [label, url] of [
     ["Brand Logo", logoUrl],
     ["Thumbnail", thumbnailUrl],

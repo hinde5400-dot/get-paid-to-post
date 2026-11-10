@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { isValidTronTxId } from "@/lib/validate";
 import { getProfile, isOwner } from "@/lib/auth";
+import { getAdminUsdtWallet } from "@/lib/data";
 import { notifyPaymentProof } from "@/lib/notify";
 import type { NotifyCampaign } from "@/lib/notify";
 
@@ -32,7 +33,7 @@ export async function POST(
   const { data: campaign, error: campError } = await supabase
     .from("campaigns")
     .select(
-      "id, user_id, status, title, budget_total, brand_name, platform_fee, rates, view_bonus_per_1k, min_views, max_payout_per_post"
+      "id, user_id, status, title, budget_total, brand_name, platform_fee, rates, view_bonus_per_1k, min_views, max_payout_per_post, payment_tx_id"
     )
     .eq("id", params.id)
     .single();
@@ -54,6 +55,34 @@ export async function POST(
   if ((campaign as { status?: string }).status !== "pending") {
     return NextResponse.json(
       { error: "Only a pending campaign can record a payment." },
+      { status: 400 }
+    );
+  }
+  // No admin wallet, no payment: if Turn has not set his USDT
+  // wallet in /admin Settings, the brand could not have sent the
+  // budget anywhere — recording a "payment" here would be fiction.
+  // (Existence only is checked; the address value is never read
+  // into this route's logic or logs.)
+  const adminWallet = await getAdminUsdtWallet();
+  if (!adminWallet) {
+    return NextResponse.json(
+      {
+        error:
+          "The admin's payment wallet is not set up yet — please contact the admin on Discord before sending any payment.",
+      },
+      { status: 503 }
+    );
+  }
+  // A TxID already recorded cannot be silently overwritten: the
+  // brand could replace the TxID Turn already started verifying,
+  // with no history and no notice to the admin. Changing it needs
+  // the admin (Discord).
+  if ((campaign as { payment_tx_id?: string | null }).payment_tx_id) {
+    return NextResponse.json(
+      {
+        error:
+          "A Transaction ID was already submitted for this campaign — contact the admin on Discord to change it.",
+      },
       { status: 400 }
     );
   }
