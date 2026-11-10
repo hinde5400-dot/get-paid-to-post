@@ -72,12 +72,16 @@ export default function AdminCampaignCards({
   campaigns,
   statsByCampaign,
   hasProof,
+  hasMessages,
   budgetHistory,
 }: {
   campaigns: Campaign[];
   statsByCampaign: Record<string, CampaignCardStats>;
-  /** Campaign ids that have at least one brand message (proof). */
+  /** Campaign ids that have at least one real proof message. */
   hasProof: Record<string, boolean>;
+  /** Campaign ids that have at least one brand message (any kind)
+   *  — their button reads "Chat", not "Proof". */
+  hasMessages: Record<string, boolean>;
   budgetHistory: Record<string, BudgetHistoryEntry[]>;
 }) {
   if (campaigns.length === 0) {
@@ -95,6 +99,7 @@ export default function AdminCampaignCards({
           campaign={c}
           stats={statsByCampaign[c.id] ?? EMPTY_STATS}
           hasProof={Boolean(hasProof[c.id])}
+          hasMessages={Boolean(hasMessages[c.id])}
           history={budgetHistory[c.id] ?? []}
         />
       ))}
@@ -106,11 +111,13 @@ function AdminCampaignCard({
   campaign: c,
   stats,
   hasProof,
+  hasMessages,
   history,
 }: {
   campaign: Campaign;
   stats: CampaignCardStats;
   hasProof: boolean;
+  hasMessages: boolean;
   history: BudgetHistoryEntry[];
 }) {
   const router = useRouter();
@@ -322,10 +329,12 @@ function AdminCampaignCard({
           title={
             hasProof
               ? "Open this campaign's proof — its brand chat and payment proof"
-              : "This campaign has no brand messages yet"
+              : hasMessages
+                ? "Open this campaign's brand chat (no proof attached yet)"
+                : "This campaign has no brand messages yet"
           }
         >
-          {hasProof ? "Proof ↗" : "Proof — none yet"}
+          {hasProof ? "Proof ↗" : hasMessages ? "Chat ↗" : "Proof — none yet"}
         </a>
       </div>
 
