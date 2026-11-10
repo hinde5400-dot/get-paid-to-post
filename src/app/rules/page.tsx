@@ -220,7 +220,7 @@ export default function RulesPage() {
           <strong className="text-fg">Minimum withdrawal: $15.</strong>
         </Rule>
         <Rule>
-          Payouts are USDT only — USDT (TRC20) or USDT (BEP20). Bank,
+          Payouts are USDT only — USDT (TRC20). Bank,
           Wise, PayPal, JazzCash and Easypaisa are not offered.
         </Rule>
         <Rule>
@@ -259,7 +259,7 @@ export default function RulesPage() {
         </Rule>
         <Rule>
           <strong className="text-fg">Then payout.</strong> Payouts are
-          made manually — withdraw in USDT (TRC20 or BEP20) from $15.
+          made manually — withdraw in USDT (TRC20 only) from $15.
           From campaign end to payout:{" "}
           <strong className="text-fg">about 1 week in total</strong>.
         </Rule>

@@ -9,7 +9,7 @@ const STEPS = [
   { n: "4", t: "Make your clip", d: "Film vertical 9:16, add captions, and hook viewers in the first 3 seconds. Keep it original and on-brief." },
   { n: "5", t: "Post and submit", d: "Post on the campaign's platforms and submit the links as one bundle, with proof and a short note on how you made it. Submit your link within 30 minutes of posting — Instagram links are hand-checked by the admin." },
   { n: "6", t: "Wait for approval", d: "Submissions stay Pending at $0 until approved. Approved earnings move into a 72-hour hold starting at approval, then to your available balance." },
-  { n: "7", t: "Withdraw your earnings", d: "Withdraw from $15 in USDT (TRC20 or BEP20). A 5% fee applies at withdrawal." },
+  { n: "7", t: "Withdraw your earnings", d: "Withdraw from $15 in USDT (TRC20 only). A 5% fee applies at withdrawal." },
 ];
 
 export default async function HowItWorksPage() {
@@ -51,7 +51,7 @@ export default async function HowItWorksPage() {
           <li>• Submit your link within 30 minutes of posting — Instagram links are hand-checked by the admin (no automatic check yet).</li>
           <li>• Approved earnings sit in a 72-hour hold starting at approval, then become available.</li>
           <li>• Minimum withdrawal: $15. Withdrawal fee: 5%.</li>
-          <li>• Payouts: USDT (TRC20 or BEP20) only.</li>
+          <li>• Payouts: USDT (TRC20) only.</li>
           <li>• Brands fund every campaign upfront — any budget, set by the brand.</li>
           <li>• One clip per platform every 2 hours, across all campaigns on that platform — a rejected or duplicate submission does not start the cooldown. Up to 15 approved clips per platform. A rejected clip cannot be resubmitted — post a new clip.</li>
           <li>• Bot-view rejections add up: 6 = concern, 10 = flagged, one more bot-view rejection after the flag = the account is banned automatically. Every rejection shows its reason.</li>
@@ -68,7 +68,7 @@ export default async function HowItWorksPage() {
         </p>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• <strong className="text-fg">Campaign ends → 3-day re-check window.</strong> We review suspicious videos, and an already-approved video can still be rejected if fake or bot views show up.</li>
-          <li>• <strong className="text-fg">Then payout.</strong> Payouts are made manually — withdraw in USDT (TRC20 or BEP20) from $15. From campaign end to payout: about 1 week in total.</li>
+          <li>• <strong className="text-fg">Then payout.</strong> Payouts are made manually — withdraw in USDT (TRC20 only) from $15. From campaign end to payout: about 1 week in total.</li>
           <li>• <strong className="text-fg">Then auto-delete.</strong> The campaign, its proofs and its chat are deleted 1 day after the last hold matures, never earlier than 7 days after the campaign ends. Wallet and withdrawal records are never deleted.</li>
         </ul>
       </div>

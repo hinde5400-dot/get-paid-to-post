@@ -30,16 +30,14 @@ export const YOUTUBE_OAUTH_SCOPES =
 export const DISCORD_URL = "https://discord.gg/kyNcGQkE7y";
 export const DISCORD_BADGE = "Support Tickets, Announcements, and Community - All on Discord";
 
-// Withdrawals — USDT only (TRC20 / BEP20). Bank, Wise, PayPal,
-// JazzCash and Easypaisa are not offered for now.
-export const WITHDRAW_METHODS = [
-  { key: "usdt_trc20", label: "USDT (TRC20)" },
-  { key: "usdt_bep20", label: "USDT (BEP20)" },
-] as const;
-export type WithdrawMethod = (typeof WITHDRAW_METHODS)[number]["key"];
+// Withdrawals — USDT only, on the TRON network (TRC20). Bank, Wise,
+// PayPal, JazzCash and Easypaisa are not offered for now. (Turn's
+// decision 2026-11-11: TRC20 only — the second network option was
+// removed everywhere; no withdrawal on the other network ever
+// existed.)
+export type WithdrawMethod = "usdt_trc20";
 export const WITHDRAW_METHOD_LABELS: Record<string, string> = {
   usdt_trc20: "USDT (TRC20)",
-  usdt_bep20: "USDT (BEP20)",
   // Legacy rows from before the USDT-only change.
   usdt: "USDT",
   bank_transfer: "Bank Transfer",

@@ -86,7 +86,7 @@ export default function TermsPage() {
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• Minimum withdrawal is $15.</li>
           <li>• A 5% fee applies at withdrawal — the fee is rounded to the nearest cent, and you receive the amount after the fee, shown before you confirm.</li>
-          <li>• Payout methods: USDT (TRC20) and USDT (BEP20) only.</li>
+          <li>• Payout method: USDT (TRC20) only.</li>
           <li>• Payouts are processed by hand by the platform owner from the funded campaign budget. The site never sends money automatically.</li>
         </ul>
       </section>

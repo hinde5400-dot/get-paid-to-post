@@ -3,28 +3,20 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { feeFor, finalFor, formatUSD } from "@/lib/money";
-import { WITHDRAW_MIN, WITHDRAW_METHODS, type WithdrawMethod } from "@/lib/constants";
+import { WITHDRAW_MIN } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
 
-const METHOD_HINTS: Record<WithdrawMethod, string> = {
-  usdt_trc20: "Your TRC20 USDT wallet address (starts with T).",
-  usdt_bep20: "Your BEP20 USDT wallet address (starts with 0x).",
-};
+const METHOD_HINT = "Your TRC20 USDT wallet address (starts with T).";
 
-/** Basic USDT wallet address check — TRC20 is base58 starting with T,
- *  BEP20 is an Ethereum-style 0x address. */
-export function isValidUsdtAddress(method: WithdrawMethod, address: string) {
-  if (method === "usdt_trc20") return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
+/** TRC20 USDT wallet address check — base58, starts with T,
+ *  34 characters total. TRC20 is the only payout method. */
+export function isValidUsdtAddress(address: string) {
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
 }
 
-const ADDRESS_ERRORS: Record<WithdrawMethod, string> = {
-  usdt_trc20:
-    "Invalid USDT wallet address — TRC20 addresses start with T and are 34 characters.",
-  usdt_bep20:
-    "Invalid USDT wallet address — BEP20 addresses start with 0x and are 42 characters.",
-};
+const ADDRESS_ERROR =
+  "Invalid USDT wallet address — TRC20 addresses start with T and are 34 characters.";
 
 export default function WithdrawModal({
   available,
@@ -36,7 +28,6 @@ export default function WithdrawModal({
   const router = useRouter();
   const { showError, showSuccess } = useToast();
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<WithdrawMethod>("usdt_trc20");
   const [details, setDetails] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -63,7 +54,7 @@ export default function WithdrawModal({
       showError("Amount is more than your available balance.");
       return;
     }
-    if (!isValidUsdtAddress(method, address)) {
+    if (!isValidUsdtAddress(address)) {
       setAddressInvalid(true);
       showError("Invalid USDT wallet address");
       return;
@@ -73,7 +64,9 @@ export default function WithdrawModal({
       const res = await fetch("/api/withdrawals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amountNum, method, details: address }),
+        // TRC20 is the only payout method (Turn's decision
+        // 2026-11-11) — the server rejects anything else.
+        body: JSON.stringify({ amount: amountNum, method: "usdt_trc20", details: address }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Withdrawal failed.");
@@ -157,21 +150,7 @@ export default function WithdrawModal({
               </span>
             </label>
             <label className="mt-4 block text-sm font-bold text-fg">
-              Payout method
-              <select
-                value={method}
-                onChange={(e) => setMethod(e.target.value as WithdrawMethod)}
-                className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
-              >
-                {WITHDRAW_METHODS.map((m) => (
-                  <option key={m.key} value={m.key}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mt-4 block text-sm font-bold text-fg">
-              USDT Wallet Address
+              USDT Wallet Address (TRC20 only)
               <input
                 type="text"
                 value={details}
@@ -179,15 +158,13 @@ export default function WithdrawModal({
                   setDetails(e.target.value);
                   setAddressInvalid(false);
                 }}
-                placeholder={METHOD_HINTS[method]}
+                placeholder={METHOD_HINT}
                 autoComplete="off"
                 spellCheck={false}
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />
               <span className="mt-1 block text-xs font-medium text-fg/50">
-                {addressInvalid
-                  ? ADDRESS_ERRORS[method]
-                  : METHOD_HINTS[method]}
+                {addressInvalid ? ADDRESS_ERROR : METHOD_HINT}
               </span>
             </label>
 

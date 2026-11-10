@@ -105,7 +105,7 @@ export default function PricingPage() {
             • <strong className="text-fg">5% withdrawal fee.</strong>{" "}
             When you withdraw, the 5% fee is rounded to the nearest cent
             and you receive the amount after the fee, in USDT
-            (TRC20 or BEP20). Minimum withdrawal $15.
+            (TRC20 only). Minimum withdrawal $15.
           </li>
           <li>
             • <strong className="text-fg">72-hour hold.</strong>{" "}

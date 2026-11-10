@@ -32,7 +32,7 @@ function pendingExpiryText(createdAt?: string | null): string | null {
 const FAQS = [
   {
     q: "How do I get paid?",
-    a: "Pick a funded campaign, post your clip, and submit the link. Approved earnings go into a 72-hour hold, then move to your available balance. Withdraw from $15 in USDT (TRC20 or BEP20). A 5% fee applies at withdrawal.",
+    a: "Pick a funded campaign, post your clip, and submit the link. Approved earnings go into a 72-hour hold, then move to your available balance. Withdraw from $15 in USDT (TRC20 only). A 5% fee applies at withdrawal.",
   },
   {
     q: "When do I get paid after a campaign ends?",
@@ -499,7 +499,7 @@ export default async function HomePage() {
             { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. Then connect your TikTok and YouTube accounts and add your Instagram profile link." },
             { n: "2", t: "Pick a campaign", d: "Browse funded campaigns and choose one that fits your style. Check the brief, rate and rules first." },
             { n: "3", t: "Post your clip", d: "Film a vertical 9:16 clip with captions and a hook in the first 3 seconds. Post it, then submit the link." },
-            { n: "4", t: "Get paid per view", d: "Approved earnings sit in a 72-hour hold, then land in your wallet. Withdraw from $15 in USDT (TRC20 or BEP20)." },
+            { n: "4", t: "Get paid per view", d: "Approved earnings sit in a 72-hour hold, then land in your wallet. Withdraw from $15 in USDT (TRC20 only)." },
           ].map((s) => (
             <div
               key={s.n}

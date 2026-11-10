@@ -24,7 +24,7 @@ export default function AdminSettingsForm({
 
   async function save() {
     const address = wallet.trim();
-    if (!isValidUsdtAddress("usdt_trc20", address)) {
+    if (!isValidUsdtAddress(address)) {
       showError(
         "Invalid USDT wallet address — TRC20 addresses start with T and are 34 characters."
       );
