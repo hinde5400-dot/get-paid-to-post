@@ -97,7 +97,7 @@ export async function POST(request: Request) {
      *  (the site-wide floor, migration 0028); below 1,000 is rejected. */
     minViews?: number | string;
     budgetTotal?: number;
-    maxPayoutPerPost?: number;
+    maxPayoutPerPost?: number | string;
     description?: string;
     requirements?: string;
     briefUrl?: string | null;
@@ -235,7 +235,14 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const cap = Number(body.maxPayoutPerPost ?? MAX_PAYOUT_DEFAULT);
+  // Max Payout Per Post: blank (missing / "" / null) means the
+  // $100 default — the form starts blank now (friend's brand test,
+  // 2026-11-11). A filled value must be $10–$200.
+  const capRaw = body.maxPayoutPerPost;
+  const cap =
+    capRaw === null || capRaw === undefined || capRaw === ""
+      ? MAX_PAYOUT_DEFAULT
+      : Number(capRaw);
   if (!Number.isFinite(cap) || cap < MAX_PAYOUT_MIN || cap > MAX_PAYOUT_MAX) {
     return NextResponse.json(
       {

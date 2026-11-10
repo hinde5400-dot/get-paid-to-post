@@ -29,8 +29,8 @@ import {
  * one), ONE Rate per 1k views for ALL selected platforms (any rate
  * above $0 — your choice; the same rate applies to TikTok,
  * Instagram and YouTube equally), Total Budget (any amount above
- * $0 — your choice, no minimum), Max Payout Per Post (default
- * $100, $10–$200), Minimum views per clip (floor 1,000 — blank by
+ * $0 — your choice, no minimum), Max Payout Per Post (blank =
+ * $100 default, $10–$200), Minimum views per clip (floor 1,000 — blank by
  * default, blank = 1,000, values below 1,000 are rejected),
  * Campaign Brief (required, content instructions), Video
  * Requirements (required), Google Drive Link (required — a Drive
@@ -122,7 +122,11 @@ export default function BrandForm({
   // "e.g. 1000") — blank means the 1,000 floor applies.
   const [minViews, setMinViews] = useState("");
   const [budget, setBudget] = useState("");
-  const [maxPayout, setMaxPayout] = useState(String(MAX_PAYOUT_DEFAULT));
+  // Max Payout Per Post: BLANK by default — blank means the $100
+  // default applies (friend's brand test, 2026-11-11: the
+  // pre-filled 100 looked like a required budget). A filled value
+  // must be $10–$200.
+  const [maxPayout, setMaxPayout] = useState("");
   // Campaign Brief (item 5): the textarea that was "Campaign
   // Description" — same DB column (`description`), relabelled and
   // moved above Video Requirements. Required: creators need these
@@ -332,11 +336,15 @@ export default function BrandForm({
         "Minimum views per clip must be at least 1,000"
       );
     }
-    const capNum = Number(maxPayout);
+    // Max Payout Per Post: blank = $100 default; a filled value
+    // must be $10–$200.
+    const maxPayoutBlank = maxPayout.trim() === "";
+    const capNum = maxPayoutBlank ? MAX_PAYOUT_DEFAULT : Number(maxPayout);
     if (
-      !Number.isFinite(capNum) ||
-      capNum < MAX_PAYOUT_MIN ||
-      capNum > MAX_PAYOUT_MAX
+      !maxPayoutBlank &&
+      (!Number.isFinite(capNum) ||
+        capNum < MAX_PAYOUT_MIN ||
+        capNum > MAX_PAYOUT_MAX)
     ) {
       return fail(
         "maxPayout",
@@ -375,9 +383,12 @@ export default function BrandForm({
     // anyway" first (the button is disabled until then; this is a
     // backstop in case submit is triggered another way). Logo and
     // thumbnail are REQUIRED uploads, so they are never "unset
-    // optional" any more — only duration and min views are.
+    // optional" any more — only duration, min views and max payout
+    // are.
     const hasUnsetOptional =
-      durationDays === "" || minViews.trim() === "";
+      durationDays === "" ||
+      minViews.trim() === "" ||
+      maxPayout.trim() === "";
     if (hasUnsetOptional && !ackUnset) {
       showError("Please tick “I understand — submit anyway” to continue.");
       return;
@@ -563,6 +574,7 @@ export default function BrandForm({
   const reviewUnset = {
     duration: durationDays === "",
     minViews: reviewMinViewsBlank,
+    maxPayout: maxPayout.trim() === "",
   };
   const reviewHasUnset = Object.values(reviewUnset).some(Boolean);
   const reviewPlatformName = (p: Platform) =>
@@ -650,13 +662,26 @@ export default function BrandForm({
                 Creators pool (full budget): {fmtChoice(reviewBudget)}
               </p>
             </div>
-            <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
+            <div
+              className={`rounded-xl border px-4 py-3 ${
+                reviewUnset.maxPayout
+                  ? "border-amber-400/50 bg-amber-500/10"
+                  : "border-fg/10 bg-ink"
+              }`}
+            >
               <p className="text-xs font-bold text-fg/50">
                 Max Payout Per Post
               </p>
-              <p className="mt-0.5 text-sm font-semibold text-fg">
-                {fmtChoice(Number(maxPayout))}
-              </p>
+              {reviewUnset.maxPayout ? (
+                <p className="mt-0.5 text-sm font-semibold text-amber-200">
+                  Not set — $100 default applies (
+                  {fmtChoice(MAX_PAYOUT_DEFAULT)})
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm font-semibold text-fg">
+                  {fmtChoice(Number(maxPayout))}
+                </p>
+              )}
             </div>
             <div
               className={`rounded-xl border px-4 py-3 ${
@@ -897,7 +922,8 @@ export default function BrandForm({
           )}
         </label>
         <label id="field-maxPayout" className="block text-sm font-bold text-fg md:col-span-2">
-          Max Payout Per Post (USD)
+          Max Payout Per Post (USD){" "}
+          <span className="font-medium text-fg/50">(optional)</span>
           <input
             type="number"
             min={MAX_PAYOUT_MIN}
@@ -905,11 +931,12 @@ export default function BrandForm({
             step="1"
             value={maxPayout}
             onChange={(e) => setMaxPayout(e.target.value)}
-            placeholder="100"
+            placeholder="100 — default $100"
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
-            Creator will never earn more than this on one post, even if
+            Optional — leave blank for the $100 default. Creator will
+            never earn more than this on one post, even if
             views are higher. Example: at {fmtChoice(capExampleRate)} per
             1k views, a video with 100k views would earn{" "}
             {fmtChoice(capExample.uncapped)}
