@@ -5,11 +5,20 @@ import Link from "next/link";
  * Full Name and go to onboarding; brands sign up with Brand Name and
  * go straight to the campaign form. Used on the Home hero and on the
  * Signup page (before a role is picked).
+ *
+ * The WHOLE card is the link (friend's brand test, 2026-11-11):
+ * tapping the card body or title did nothing — only the small
+ * button worked — so the brand looked unclickable and the signup
+ * looped back to the role page. The button styling stays as the
+ * visual CTA inside the card (a span, not a nested link).
  */
 export default function RoleCards() {
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-3xl border border-lime/40 bg-card p-6 text-left">
+      <Link
+        href="/signup?role=creator"
+        className="block rounded-3xl border border-lime/40 bg-card p-6 text-left transition hover:border-lime"
+      >
         <p className="text-3xl" aria-hidden>
           🎬
         </p>
@@ -19,14 +28,14 @@ export default function RoleCards() {
         <p className="mt-1 text-sm leading-relaxed text-fg/60">
           Post clips, get paid per view.
         </p>
-        <Link
-          href="/signup?role=creator"
-          className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-black text-black transition hover:bg-limedark"
-        >
+        <span className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-black text-black transition hover:bg-limedark">
           Start Earning
-        </Link>
-      </div>
-      <div className="rounded-3xl border border-fg/10 bg-card p-6 text-left">
+        </span>
+      </Link>
+      <Link
+        href="/signup?role=brand"
+        className="block rounded-3xl border border-fg/10 bg-card p-6 text-left transition hover:border-red-400"
+      >
         <p className="text-3xl" aria-hidden>
           🏢
         </p>
@@ -36,13 +45,10 @@ export default function RoleCards() {
         <p className="mt-1 text-sm leading-relaxed text-fg/60">
           Launch a campaign, get real creators posting your clips.
         </p>
-        <Link
-          href="/signup?role=brand"
-          className="mt-4 inline-block rounded-full bg-red-500 px-5 py-2.5 text-sm font-black text-white transition hover:bg-red-600"
-        >
+        <span className="mt-4 inline-block rounded-full bg-red-500 px-5 py-2.5 text-sm font-black text-white transition hover:bg-red-600">
           Launch Campaign
-        </Link>
-      </div>
+        </span>
+      </Link>
     </div>
   );
 }

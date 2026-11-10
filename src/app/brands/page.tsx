@@ -31,6 +31,37 @@ export default async function BrandsPage() {
   // visitors and creators still see the full page as before.
   const isBrand = user !== null && canLaunch;
 
+  // The WHOLE card is the link (friend's brand test, 2026-11-11):
+  // tapping the card body or title did nothing — only the small
+  // button worked. The brand card's "See full pricing" link stays
+  // OUTSIDE the outer link (nested links are invalid HTML), as a
+  // separate line under the clickable area.
+  const brandCardInner = (
+    <>
+      <p className="text-3xl">🏢</p>
+      <h2 className="mt-2 text-xl font-extrabold text-fg">
+        I am a Brand
+      </h2>
+      <p className="mt-1 text-sm leading-relaxed text-fg/60">
+        Upload your brand and campaign below. Fund your chosen
+        budget upfront and pay only for verified views — plus a
+        15% platform fee on top of your budget, no hidden charges.
+      </p>
+    </>
+  );
+  const creatorCardInner = (
+    <>
+      <p className="text-3xl">🎬</p>
+      <h2 className="mt-2 text-xl font-extrabold text-fg">
+        I am a Creator
+      </h2>
+      <p className="mt-1 text-sm leading-relaxed text-fg/60">
+        Pick a funded campaign, make a clip per the brief, post it, and
+        get paid per view.
+      </p>
+    </>
+  );
+
   const roleSplit = (
     <section className="pt-4 text-center">
       <h1 className="font-display text-4xl font-black uppercase tracking-tight text-fg md:text-5xl">
@@ -42,48 +73,33 @@ export default async function BrandsPage() {
       </p>
       <div className="mx-auto mt-7 grid max-w-2xl gap-4 md:grid-cols-2">
         <div className="rounded-3xl border border-lime/40 bg-card p-6 text-left">
-          <p className="text-3xl">🏢</p>
-          <h2 className="mt-2 text-xl font-extrabold text-fg">
-            I am a Brand
-          </h2>
-          <p className="mt-1 text-sm leading-relaxed text-fg/60">
-            Upload your brand and campaign below. Fund your chosen
-            budget upfront and pay only for verified views — plus a
-            15% platform fee on top of your budget, no hidden charges.{" "}
+          {user ? (
+            <a href="#brand-form" className="block">
+              {brandCardInner}
+              <span className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink">
+                Create a campaign
+              </span>
+            </a>
+          ) : (
+            <Link href="/signup?role=brand" className="block">
+              {brandCardInner}
+              <span className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink">
+                Sign up as a brand
+              </span>
+            </Link>
+          )}
+          <p className="mt-3 text-sm">
             <Link href="/pricing" className="font-bold text-lime hover:underline">
               See full pricing →
             </Link>
           </p>
-          {user ? (
-            <a
-              href="#brand-form"
-              className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
-            >
-              Create a campaign
-            </a>
-          ) : (
-            <Link
-              href="/signup?role=brand"
-              className="mt-4 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-bold text-ink"
-            >
-              Sign up as a brand
-            </Link>
-          )}
         </div>
         <div className="rounded-3xl border border-fg/10 bg-card p-6 text-left">
-          <p className="text-3xl">🎬</p>
-          <h2 className="mt-2 text-xl font-extrabold text-fg">
-            I am a Creator
-          </h2>
-          <p className="mt-1 text-sm leading-relaxed text-fg/60">
-            Pick a funded campaign, make a clip per the brief, post it, and
-            get paid per view.
-          </p>
-          <Link
-            href="/campaigns"
-            className="mt-4 inline-block rounded-full border border-fg/25 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-lime"
-          >
-            Browse campaigns
+          <Link href="/campaigns" className="block">
+            {creatorCardInner}
+            <span className="mt-4 inline-block rounded-full border border-fg/25 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-lime">
+              Browse campaigns
+            </span>
           </Link>
         </div>
       </div>
