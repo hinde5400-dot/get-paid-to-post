@@ -898,9 +898,11 @@ export async function getCampaignBudgetHistory(
 }
 
 /** One row of the Win Board (Top Clippers): a creator's real
- *  earnings from approved clips only. */
+ *  earnings from approved clips only. There is deliberately NO
+ *  user_id here — the public leaderboard RPC (migration 0036)
+ *  returns aggregates only (display name, earnings, clip count,
+ *  views), never user ids, wallet data, or emails. */
 export interface TopClipperEntry {
-  user_id: string;
   name: string;
   earned: number;
   views: number;
@@ -913,13 +915,14 @@ export interface TopClipperEntry {
  * from the creator's own profile full_name; a missing name falls
  * back to "Creator".
  *
- * Honesty guard: submissions are readable only by their owner and
- * the admin (RLS: "submissions own read" + "admins read all"),
- * so a public query would only ever return the viewer's own rows
- * — never a real leaderboard. This function therefore returns []
- * for non-admins, and the Win Board shows the true zero state.
- * A public board needs a SECURITY DEFINER top_clippers RPC (a
- * future migration); until then only the owner sees real rows.
+ * Public board (migration 0036, Money P0-1): the rows come from
+ * the SECURITY DEFINER RPC get_public_leaderboard, which returns
+ * ONLY aggregate rows, so the board is real for every visitor —
+ * not just the owner. The old is_admin gate (which made the board
+ * show $0.00 / "nobody has earned anything" to every non-admin
+ * forever) is gone. Until 0036 is applied the RPC does not exist
+ * and this returns [] — the board then shows "unavailable", never
+ * a fake zero (see WinBoard).
  */
 async function topClippersFromRows(
   campaignId: string | null,
@@ -928,46 +931,17 @@ async function topClippersFromRows(
   try {
     const supabase = getServerClient();
     if (!supabase) return [];
-    const { data: isAdmin } = await supabase.rpc("is_admin");
-    if (isAdmin !== true) return [];
-    let query = supabase
-      .from("submissions")
-      .select("user_id, earnings, views")
-      .eq("status", "approved");
-    if (campaignId) query = query.eq("campaign_id", campaignId);
-    const { data: rows, error } = await query;
+    const { data: rows, error } = await supabase.rpc(
+      "get_public_leaderboard",
+      { p_campaign_id: campaignId }
+    );
     if (error || !rows) return [];
-    const byUser = new Map<
-      string,
-      { earned: number; views: number; clips: number }
-    >();
-    for (const r of rows as Record<string, unknown>[]) {
-      const uid = String(r.user_id ?? "");
-      if (!uid) continue;
-      const agg = byUser.get(uid) ?? { earned: 0, views: 0, clips: 0 };
-      agg.earned += Number(r.earnings ?? 0);
-      agg.views += Number(r.views ?? 0);
-      agg.clips += 1;
-      byUser.set(uid, agg);
-    }
-    if (byUser.size === 0) return [];
-    const ids = [...byUser.keys()];
-    const { data: users } = await supabase
-      .from("users")
-      .select("id, full_name")
-      .in("id", ids);
-    const names = new Map<string, string>();
-    for (const u of (users ?? []) as Record<string, unknown>[]) {
-      const name = String(u.full_name ?? "").trim();
-      if (name) names.set(String(u.id), name);
-    }
-    return [...byUser.entries()]
-      .map(([user_id, agg]) => ({
-        user_id,
-        name: names.get(user_id) ?? "Creator",
-        earned: Math.round(agg.earned * 100) / 100,
-        views: agg.views,
-        clips: agg.clips,
+    return (rows as Record<string, unknown>[])
+      .map((r) => ({
+        name: String(r.display_name ?? "").trim() || "Creator",
+        earned: Math.round(Number(r.total_earned ?? 0) * 100) / 100,
+        views: Number(r.total_views ?? 0),
+        clips: Number(r.approved_clips ?? 0),
       }))
       .sort((a, b) => b.earned - a.earned || b.views - a.views)
       .slice(0, Math.max(1, limit));
@@ -989,4 +963,24 @@ export async function getCampaignTopClippers(
   limit = 5
 ): Promise<TopClipperEntry[]> {
   return topClippersFromRows(campaignId, limit);
+}
+
+/**
+ * Total paid out so far — sum of final_amount over withdrawals
+ * the owner marked "paid" (migration 0036, get_total_paid_out).
+ * Returns null when the RPC is unavailable (migration not applied
+ * yet, or a database error) so the board never prints a fake
+ * $0.00; callers must hide the total line instead of guessing.
+ */
+export async function getTotalPaidOut(): Promise<number | null> {
+  try {
+    const supabase = getServerClient();
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc("get_total_paid_out");
+    if (error || data === null || data === undefined) return null;
+    const total = Number(data);
+    return Number.isFinite(total) ? Math.round(total * 100) / 100 : null;
+  } catch {
+    return null;
+  }
 }

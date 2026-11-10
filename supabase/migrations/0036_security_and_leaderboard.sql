@@ -80,9 +80,9 @@
 --     rejection_reason = 'duplicate' (and nothing else — zero
 --     earnings/views/likes/comments still required in both cases).
 --
--- Sections (4) and (5) below are appended in later commits of
--- this batch: (4) the public leaderboard RPCs (Money P0-1),
--- (5) the atomic campaign-budget RPCs (API P0-2 support).
+-- Sections (4) and (5) below: (4) the public leaderboard RPCs
+-- (Money P0-1), (5) the atomic campaign-budget RPCs (API P0-2
+-- support).
 --
 -- Run once in the Supabase SQL Editor. Do NOT edit old migrations.
 
@@ -283,3 +283,199 @@ create policy "submissions own insert" on public.submissions
       or (status = 'rejected' and rejection_reason = 'duplicate')
     )
   );
+
+-- ================================================================
+-- (4) Public leaderboard (Money P0-1).
+-- ================================================================
+--
+-- The Win Board showed $0.00 / "nobody has earned anything" to
+-- every non-admin forever, because topClippersFromRows returned []
+-- unless is_admin — submissions are RLS-readable only by their
+-- owner and the admin, so no public query could ever build a real
+-- board. These two SECURITY DEFINER functions return ONLY public
+-- aggregates, so they are safe to grant to anon + authenticated:
+-- no user ids, no wallet data, no emails, no per-clip rows.
+--   - get_public_leaderboard: one row per creator with approved
+--     earnings (total_earned > 0), ordered by total earned desc,
+--     top 10. p_campaign_id null = global board; set = that
+--     campaign's board. total_views is a summed aggregate, kept
+--     so the board can still show views per row.
+--   - get_total_paid_out: sum of final_amount over withdrawals
+--     the owner marked status = 'paid'. (Withdrawals are never
+--     deleted, so this stays true even after a campaign's
+--     submissions are auto-deleted — the board's "total paid"
+--     must NOT be derived from submissions.)
+
+create or replace function public.get_public_leaderboard(
+  p_campaign_id uuid default null
+)
+returns table (
+  display_name text,
+  total_earned numeric,
+  approved_clips integer,
+  total_views bigint
+)
+language sql security definer
+set search_path = public as $$
+  select
+    coalesce(nullif(btrim(u.full_name), ''), 'Creator') as display_name,
+    coalesce(sum(s.earnings), 0)::numeric as total_earned,
+    count(*)::integer as approved_clips,
+    coalesce(sum(s.views), 0)::bigint as total_views
+  from public.submissions s
+  join public.users u on u.id = s.user_id
+  where s.status = 'approved'
+    and (p_campaign_id is null or s.campaign_id = p_campaign_id)
+  group by s.user_id, u.full_name
+  having coalesce(sum(s.earnings), 0) > 0
+  order by total_earned desc, total_views desc
+  limit 10;
+$$;
+
+revoke execute on function public.get_public_leaderboard(uuid)
+  from public;
+grant execute on function public.get_public_leaderboard(uuid)
+  to anon, authenticated;
+
+create or replace function public.get_total_paid_out()
+returns numeric
+language sql security definer
+set search_path = public as $$
+  select coalesce(sum(final_amount), 0)::numeric
+  from public.withdrawals
+  where status = 'paid';
+$$;
+
+revoke execute on function public.get_total_paid_out()
+  from public;
+grant execute on function public.get_total_paid_out()
+  to anon, authenticated;
+
+-- ================================================================
+-- (5) Atomic campaign-budget RPCs (API P0-2 support).
+-- ================================================================
+--
+-- The admin review route updated budget_left / paid_out with a
+-- stale read + absolute write, so two concurrent approvals could
+-- double-spend the brand-funded budget. These two SECURITY
+-- DEFINER functions do the budget change as ONE atomic UPDATE
+-- with the guard in the WHERE clause, so the check and the write
+-- cannot race. The API worker calls them from the review and
+-- campaign-budget routes; the exact signatures below must not
+-- change. Both raise unless the caller is the admin (is_admin()),
+-- and both are granted to authenticated ONLY — never anon.
+--   - decrement_campaign_budget: moves p_amount from budget_left
+--     to paid_out in one step. A non-positive amount is not an
+--     error the caller should see as a crash: it returns
+--     (false, current budget_left, current paid_out), the same
+--     as an insufficient budget. A campaign that does not exist
+--     returns (false, null, null).
+--   - set_campaign_budget_total: changes the campaign's total
+--     budget while keeping the already-spent amount fixed, so
+--     budget_left moves by the same delta as the total. Refused
+--     (ok = false) when the new total is below what is already
+--     spent or not positive. Columns are budget_total /
+--     budget_left / paid_out (migration 0001).
+
+create or replace function public.decrement_campaign_budget(
+  p_campaign_id uuid,
+  p_amount numeric
+)
+returns table (
+  ok boolean,
+  new_budget_left numeric,
+  new_paid_out numeric
+)
+language plpgsql security definer
+set search_path = public as $$
+declare
+  v_left numeric;
+  v_paid numeric;
+begin
+  if not public.is_admin() then
+    raise exception 'decrement_campaign_budget: admin only';
+  end if;
+
+  update public.campaigns
+    set budget_left = budget_left - p_amount,
+        paid_out = paid_out + p_amount
+    where id = p_campaign_id
+      and p_amount is not null
+      and p_amount > 0
+      and budget_left >= p_amount;
+
+  if found then
+    select budget_left, paid_out into v_left, v_paid
+    from public.campaigns
+    where id = p_campaign_id;
+    return query select true, v_left, v_paid;
+    return;
+  end if;
+
+  select budget_left, paid_out into v_left, v_paid
+  from public.campaigns
+  where id = p_campaign_id;
+  if not found then
+    return query select false, null::numeric, null::numeric;
+    return;
+  end if;
+  return query select false, v_left, v_paid;
+end; $$;
+
+revoke execute on function public.decrement_campaign_budget(uuid, numeric)
+  from public;
+grant execute on function public.decrement_campaign_budget(uuid, numeric)
+  to authenticated;
+
+create or replace function public.set_campaign_budget_total(
+  p_campaign_id uuid,
+  p_new_total numeric
+)
+returns table (
+  ok boolean,
+  new_budget_left numeric,
+  new_budget_total numeric
+)
+language plpgsql security definer
+set search_path = public as $$
+declare
+  v_left numeric;
+  v_total numeric;
+begin
+  if not public.is_admin() then
+    raise exception 'set_campaign_budget_total: admin only';
+  end if;
+
+  -- SET expressions see the OLD row: budget_left moves by the
+  -- same delta as the total, so (budget_total - budget_left) —
+  -- the amount already spent — stays exactly fixed.
+  update public.campaigns
+    set budget_total = p_new_total,
+        budget_left = p_new_total - (budget_total - budget_left)
+    where id = p_campaign_id
+      and p_new_total is not null
+      and p_new_total > 0
+      and p_new_total >= (budget_total - budget_left);
+
+  if found then
+    select budget_left, budget_total into v_left, v_total
+    from public.campaigns
+    where id = p_campaign_id;
+    return query select true, v_left, v_total;
+    return;
+  end if;
+
+  select budget_left, budget_total into v_left, v_total
+  from public.campaigns
+  where id = p_campaign_id;
+  if not found then
+    return query select false, null::numeric, null::numeric;
+    return;
+  end if;
+  return query select false, v_left, v_total;
+end; $$;
+
+revoke execute on function public.set_campaign_budget_total(uuid, numeric)
+  from public;
+grant execute on function public.set_campaign_budget_total(uuid, numeric)
+  to authenticated;
