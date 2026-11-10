@@ -237,7 +237,8 @@ export async function getBrandCampaignStats(
     const { data, error } = await supabase
       .from("submissions")
       .select("views")
-      .eq("campaign_id", campaignId);
+      .eq("campaign_id", campaignId)
+      .eq("status", "approved");
     if (!error && data) {
       const rows = data as Record<string, unknown>[];
       if (rows.length > 0) {
@@ -313,14 +314,21 @@ export async function getCampaignStats(
   if (qError || !rows) return null;
   const list = rows as Record<string, unknown>[];
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const active30d = new Set(
+    list
+      .filter((r) => new Date(String(r.created_at)).getTime() >= cutoff)
+      .map((r) => String(r.user_id))
+  ).size;
   return {
     total: list.length,
     approved: list.filter((r) => r.status === "approved").length,
     members: new Set(list.map((r) => String(r.user_id))).size,
-    active30d: list.filter(
-      (r) => new Date(String(r.created_at)).getTime() >= cutoff
-    ).length,
-    total_views: list.reduce((s, r) => s + Number(r.views ?? 0), 0),
+    active30d,
+    // Approved views only — rejected / bot-view clips never count
+    // toward the views a brand judges the campaign by.
+    total_views: list
+      .filter((r) => r.status === "approved")
+      .reduce((s, r) => s + Number(r.views ?? 0), 0),
   };
 }
 

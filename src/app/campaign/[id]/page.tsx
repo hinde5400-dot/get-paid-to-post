@@ -418,7 +418,7 @@ export default async function CampaignDetailPage({
                 ],
                 ["Earn up to", `${formatUSD(campaign.max_payout_per_post)} per post`],
                 ["Creators", stats ? `${stats.members}` : "—"],
-                ["Posts in the last 30 days", stats ? `${stats.active30d}` : "—"],
+                ["Active creators (30 days)", stats ? `${stats.active30d}` : "—"],
                 ["Deadline", live || !campaign.ends_at ? deadline : "Ended"],
                 ["Budget time left", budgetTimeLeft ?? "—"],
                 ["Views tracked", `${campaign.views_tracked_days} days`],
