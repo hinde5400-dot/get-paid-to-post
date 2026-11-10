@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { getServerClient } from "@/lib/supabase/server";
+import { signInCronService } from "@/lib/supabase/cron-service";
 
 /**
  * GET/POST /api/cron/cleanup-ended-campaigns — the daily auto-delete
@@ -10,10 +11,20 @@ import { getServerClient } from "@/lib/supabase/server";
  *
  * Called by the GitHub Actions workflow (.github/workflows/
  * cleanup-ended-campaigns.yml, free on a public repo) once a day
- * with `Authorization: Bearer <CRON_SECRET>`. No user session is
- * needed — the route authenticates with the shared secret, and all
- * database access goes through SECURITY DEFINER functions (see
- * migrations 0023 and 0030). No service_role key is used anywhere.
+ * with `Authorization: Bearer <CRON_SECRET>`. The route
+ * authenticates with the shared secret AND signs in as the
+ * dedicated cron service account (CRON_SERVICE_EMAIL /
+ * CRON_SERVICE_PASSWORD — a normal creator-role user, not an
+ * admin) before any database or storage call, because migration
+ * 0036 revoked the anon grant on the cleanup RPCs and on the
+ * storage-policy predicate helpers. All database access goes
+ * through SECURITY DEFINER functions (see migrations 0023 and
+ * 0030). No service_role key is used anywhere.
+ *
+ * FAIL LOUD: when the service-account env vars are missing or the
+ * sign-in fails, the route returns 503 immediately — a run must
+ * never silently do nothing, and must never fall back to the anon
+ * key for the revoked RPCs.
  *
  * What it deletes, per ended campaign: the campaign row, its
  * submissions, its brand_messages (chat), its proof images in
@@ -149,6 +160,15 @@ async function handle(request: Request) {
       { error: "Supabase is not configured yet." },
       { status: 503 }
     );
+  }
+  // Migration 0036 revoked anon on the cleanup RPCs and the
+  // storage-policy predicate helpers — sign in as the dedicated
+  // cron service account first. Fail loud (503) on missing env
+  // vars or a failed sign-in; never fall back to anon.
+  const serviceError = await signInCronService(supabase);
+  if (serviceError) {
+    console.error("Cron service sign-in failed:", serviceError);
+    return NextResponse.json({ error: serviceError }, { status: 503 });
   }
 
   const { data: rows, error: listError } = await supabase.rpc(
