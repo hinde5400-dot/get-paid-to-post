@@ -71,6 +71,14 @@ export default function PaymentForm({
         <p className="mx-auto mt-3 max-w-md break-all rounded-xl bg-fg/5 px-4 py-3 font-mono text-xs text-fg">
           {txId.trim()}
         </p>
+        <a
+          href={`https://tronscan.org/#/transaction/${txId.trim()}`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-block text-sm font-bold text-lime hover:underline"
+        >
+          Verify on Tronscan ↗
+        </a>
       </div>
     );
   }
@@ -83,7 +91,17 @@ export default function PaymentForm({
           <span className="break-all font-mono font-bold text-fg">
             {existingTxId}
           </span>{" "}
-          — you can correct it below if it was wrong.
+          <a
+            href={`https://tronscan.org/#/transaction/${existingTxId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="font-bold text-lime hover:underline"
+          >
+            Verify on Tronscan ↗
+          </a>
+          <br />
+          You can correct it below until the admin approves it — paste
+          the right Transaction ID and submit again.
         </p>
       )}
       <label className="block text-sm font-bold text-fg">
@@ -108,6 +126,8 @@ export default function PaymentForm({
           <>
             <Spinner /> Loading...
           </>
+        ) : existingTxId ? (
+          "Update Transaction ID"
         ) : (
           "I Have Sent Payment"
         )}
