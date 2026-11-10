@@ -103,7 +103,8 @@ export default function PricingPage() {
           </li>
           <li>
             • <strong className="text-fg">5% withdrawal fee.</strong>{" "}
-            When you withdraw, you receive the amount × 0.95 in USDT
+            When you withdraw, the 5% fee is rounded to the nearest cent
+            and you receive the amount after the fee, in USDT
             (TRC20 or BEP20). Minimum withdrawal $15.
           </li>
           <li>
