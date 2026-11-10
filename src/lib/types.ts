@@ -252,6 +252,17 @@ export interface Submission {
   /** Campaign's per-creator $ cap (P1-b) — same, shown on the
    *  admin review row. null = no cap. */
   campaign_max_payout_per_creator?: number | null;
+  /** Campaign's remaining budget at read time (admin batch 2) —
+   *  caps the review card's estimated payout. */
+  campaign_budget_left?: number;
+  /** When the video itself was posted, from the platform API at
+   *  submit time (migration 0031, 30-minute submit rule). Null
+   *  when the API could not supply it. */
+  posted_at?: string | null;
+  /** True when no posted time could be fetched (e.g. Instagram
+   *  has no API access yet) — the admin checks the post time by
+   *  hand before approving (migration 0031). */
+  posted_time_unverified?: boolean;
   bundle_id: string;
   post_url: string;
   platform: Platform;

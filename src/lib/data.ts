@@ -88,6 +88,10 @@ function mapSubmission(row: Record<string, unknown>): Submission {
     rejection_reason: (row.rejection_reason as string | null) ?? null,
     hold_until: (row.hold_until as string | null) ?? null,
     views_refreshed_at: (row.views_refreshed_at as string | null) ?? null,
+    // Posted time (migration 0031, 30-minute submit rule): null
+    // on rows written before the migration.
+    posted_at: (row.posted_at as string | null) ?? null,
+    posted_time_unverified: Boolean(row.posted_time_unverified ?? false),
     how_made: String(row.how_made ?? ""),
     proof_screenshots: Array.isArray(row.proof_screenshots)
       ? (row.proof_screenshots as string[])
@@ -336,7 +340,7 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator)")
+    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error || !data) return [];
@@ -349,6 +353,7 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
       rates?: Record<string, unknown> | null;
       min_views?: number | null;
       max_payout_per_creator?: number | null;
+      budget_left?: number | null;
     } | null;
     s.campaign_title = camp?.title;
     // Platform-specific rate (P1-b): the rate for THIS clip's
@@ -363,6 +368,8 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
       Number(camp?.max_payout_per_post ?? 0) || undefined;
     s.campaign_min_views = camp?.min_views ?? null;
     s.campaign_max_payout_per_creator = camp?.max_payout_per_creator ?? null;
+    s.campaign_budget_left =
+      camp?.budget_left == null ? undefined : Number(camp.budget_left);
     return s;
   });
 }
@@ -373,7 +380,7 @@ export async function getAllSubmissions(): Promise<Submission[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator)")
+    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error || !data) return [];
@@ -386,6 +393,7 @@ export async function getAllSubmissions(): Promise<Submission[]> {
       rates?: Record<string, unknown> | null;
       min_views?: number | null;
       max_payout_per_creator?: number | null;
+      budget_left?: number | null;
     } | null;
     s.campaign_title = camp?.title;
     // Platform-specific rate (P1-b): the rate for THIS clip's
@@ -400,6 +408,8 @@ export async function getAllSubmissions(): Promise<Submission[]> {
       Number(camp?.max_payout_per_post ?? 0) || undefined;
     s.campaign_min_views = camp?.min_views ?? null;
     s.campaign_max_payout_per_creator = camp?.max_payout_per_creator ?? null;
+    s.campaign_budget_left =
+      camp?.budget_left == null ? undefined : Number(camp.budget_left);
     return s;
   });
 }
