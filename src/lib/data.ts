@@ -36,8 +36,11 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     description: String(row.description ?? ""),
     rules: (row.rules as string | null) ?? null,
     view_bonus_per_1k: Number(row.view_bonus_per_1k ?? 0),
-    // Per-platform rates (P1-b, migration 0025): {} on old rows —
-    // rateForPlatform() falls back to view_bonus_per_1k.
+    // Per-platform rates (P1-b, migration 0025) — LEGACY. The
+    // rates map is kept in the DB so old rows still parse, but
+    // every platform carries the same single rate
+    // (view_bonus_per_1k) and rateForPlatform() ignores this map
+    // entirely: ONE rate per 1,000 views for the whole campaign.
     rates: ratesFromRow(row),
     // Minimum views per clip (P1-b; floor 1,000, migration 0028):
     // default 1000, minimum 1000 — a brand may set a higher
@@ -150,12 +153,15 @@ export async function getCampaigns(): Promise<Campaign[]> {
       .eq("is_funded", true)
       .eq("status", "live")
       .order("created_at", { ascending: false });
-    if (!error && data) {
-      const now = Date.now();
-      return (data as Record<string, unknown>[])
-        .map(mapCampaign)
-        .filter((c) => isCampaignLive(c, now));
-    }
+    // Forms #26 contract: a database error THROWS instead of
+    // returning [] — [] means "no live campaigns", never "the
+    // load failed". Callers render an honest error state.
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Could not load campaigns.");
+    const now = Date.now();
+    return (data as Record<string, unknown>[])
+      .map(mapCampaign)
+      .filter((c) => isCampaignLive(c, now));
   }
   return [];
 }
@@ -179,9 +185,11 @@ export async function getDiscoverCampaigns(): Promise<Campaign[]> {
       .eq("is_funded", true)
       .eq("status", "live")
       .order("created_at", { ascending: false });
-    if (!error && data) {
-      return (data as Record<string, unknown>[]).map(mapCampaign);
-    }
+    // Forms #26 contract: throw on DB error, never [] (see
+    // getCampaigns).
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Could not load campaigns.");
+    return (data as Record<string, unknown>[]).map(mapCampaign);
   }
   return [];
 }
@@ -208,7 +216,10 @@ export async function getPendingCampaigns(): Promise<Campaign[]> {
     .select("*")
     .eq("status", "pending")
     .order("created_at", { ascending: true });
-  if (error || !data) return [];
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load pending campaigns.");
   return (data as Record<string, unknown>[]).map(mapCampaign);
 }
 
@@ -226,7 +237,10 @@ export async function getBrandCampaigns(userId: string): Promise<Campaign[]> {
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (error || !data) return [];
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load your campaigns.");
   return (data as Record<string, unknown>[]).map(mapCampaign);
 }
 
@@ -378,7 +392,10 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
     .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (error || !data) return [];
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load your submissions.");
   const rows = data as Record<string, unknown>[];
   // Active flags (migration 0031): a flagged payout is paused, and
   // the creator must see that on My Posts — the old code fetched
@@ -417,8 +434,11 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
       budget_left?: number | null;
     } | null;
     s.campaign_title = camp?.title;
-    // Platform-specific rate (P1-b): the rate for THIS clip's
-    // platform, falling back to the legacy single rate.
+    // Single rate (P1-b): ONE rate per 1,000 views for the whole
+    // campaign — rateForPlatform() returns the campaign's one
+    // rate (view_bonus_per_1k) for every platform and ignores the
+    // legacy per-platform `rates` map entirely. The old comment
+    // here said "platform-specific rate", which was stale.
     const legacyRate = Number(camp?.view_bonus_per_1k ?? 0);
     s.rate_per_1k =
       rateForPlatform(
@@ -440,16 +460,29 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
   });
 }
 
-/** All submissions, newest first — owner only. */
-export async function getAllSubmissions(): Promise<Submission[]> {
+/** All submissions, newest first — owner only. Paginated
+ *  (default page size 100): the old .limit(200) with no paging
+ *  silently dropped every submission past 200 from /admin review,
+ *  including still-pending ones that could then never be
+ *  approved or rejected. Pair with getSubmissionsCount() /
+ *  getSubmissionStatusCounts() so the UI always shows the total
+ *  and truncation is never silent. */
+export async function getAllSubmissions(
+  opts: { limit?: number; offset?: number } = {}
+): Promise<Submission[]> {
+  const limit = Math.max(1, Math.min(500, opts.limit ?? 100));
+  const offset = Math.max(0, opts.offset ?? 0);
   const supabase = getServerClient();
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("submissions")
     .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
     .order("created_at", { ascending: false })
-    .limit(200);
-  if (error || !data) return [];
+    .range(offset, offset + limit - 1);
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load submissions.");
   return (data as Record<string, unknown>[]).map((row) => {
     const s = mapSubmission(row);
     const camp = row.campaigns as {
@@ -462,8 +495,11 @@ export async function getAllSubmissions(): Promise<Submission[]> {
       budget_left?: number | null;
     } | null;
     s.campaign_title = camp?.title;
-    // Platform-specific rate (P1-b): the rate for THIS clip's
-    // platform, falling back to the legacy single rate.
+    // Single rate (P1-b): ONE rate per 1,000 views for the whole
+    // campaign — rateForPlatform() returns the campaign's one
+    // rate (view_bonus_per_1k) for every platform and ignores the
+    // legacy per-platform `rates` map entirely. The old comment
+    // here said "platform-specific rate", which was stale.
     const legacyRate = Number(camp?.view_bonus_per_1k ?? 0);
     s.rate_per_1k =
       rateForPlatform(
@@ -557,7 +593,10 @@ export async function getWithdrawals(userId: string): Promise<Withdrawal[]> {
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (error || !data) return [];
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load withdrawals.");
   return (data as Record<string, unknown>[]).map(mapWithdrawal);
 }
 
@@ -570,8 +609,93 @@ export async function getAllWithdrawals(): Promise<Withdrawal[]> {
     .select("*")
     .order("created_at", { ascending: false })
     .limit(200);
-  if (error || !data) return [];
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load withdrawals.");
   return (data as Record<string, unknown>[]).map(mapWithdrawal);
+}
+
+/**
+ * Exact counts for the paginated /admin lists, so the UI can say
+ * "showing X–Y of Z" and truncation is never silent. Head-only
+ * queries (no rows fetched). All throw on DB error, per the
+ * Forms #26 contract — a failed count is a failed load, not 0.
+ */
+export async function getSubmissionsCount(): Promise<number> {
+  const supabase = getServerClient();
+  if (!supabase) return 0;
+  const { count, error } = await supabase
+    .from("submissions")
+    .select("*", { count: "exact", head: true });
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/** Exact submission counts by status, for the /admin summary
+ *  boxes — computed from the whole table, not from the current
+ *  review-list page, so the headline numbers stay right when the
+ *  list is paged. */
+export async function getSubmissionStatusCounts(): Promise<{
+  pending: number;
+  approved: number;
+  rejected: number;
+  total: number;
+}> {
+  const supabase = getServerClient();
+  if (!supabase) return { pending: 0, approved: 0, rejected: 0, total: 0 };
+  const out = { pending: 0, approved: 0, rejected: 0, total: 0 };
+  for (const status of ["pending", "approved", "rejected"] as const) {
+    const { count, error } = await supabase
+      .from("submissions")
+      .select("*", { count: "exact", head: true })
+      .eq("status", status);
+    if (error) throw new Error(error.message);
+    out[status] = count ?? 0;
+  }
+  out.total = out.pending + out.approved + out.rejected;
+  return out;
+}
+
+/** Exact count of all brand messages, for the /admin inbox
+ *  "showing X–Y of Z". */
+export async function getBrandMessagesCount(): Promise<number> {
+  const supabase = getServerClient();
+  if (!supabase) return 0;
+  const { count, error } = await supabase
+    .from("brand_messages")
+    .select("*", { count: "exact", head: true });
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/** Exact count of unread brand messages, for the /admin inbox
+ *  badge — computed from the whole table, not the current page. */
+export async function getUnreadBrandMessagesCount(): Promise<number> {
+  const supabase = getServerClient();
+  if (!supabase) return 0;
+  const { count, error } = await supabase
+    .from("brand_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("is_read", false);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/** Exact count of 'bot views' rejection rows (all creators), for
+ *  the fraud view — pairs with getCreatorBotRejections(), whose
+ *  fetch is capped (see below), so the UI can say when rows were
+ *  left out. */
+export async function getBotRejectionRowCount(): Promise<number> {
+  const supabase = getServerClient();
+  if (!supabase) return 0;
+  const { count, error } = await supabase
+    .from("submissions")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "rejected")
+    .eq("rejection_reason", "bot views");
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 /**
@@ -672,51 +796,56 @@ export async function getCampaignRejectionReason(
  * chat thread. RLS (migration 0015) lets a brand read every message
  * on its own campaigns (its own and the admin's replies) and the
  * owner read all, so the caller must own the campaign or be the
- * owner. The new columns are selected explicitly, so this returns
- * [] when migration 0015 has not run yet.
+ * owner. Throws on DB error, per the Forms #26 contract (see
+ * getCampaigns) — callers that can live without the chat catch it.
  */
 export async function getCampaignMessages(
   campaignId: string
 ): Promise<BrandMessage[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from("brand_messages")
-      .select(
-        "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read"
-      )
-      .eq("campaign_id", campaignId)
-      .order("created_at", { ascending: true });
-    if (error || !data) return [];
-    return (data as Record<string, unknown>[]).map(mapBrandMessage);
-  } catch {
-    return [];
-  }
+  const { data, error } = await supabase
+    .from("brand_messages")
+    .select(
+      "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read"
+    )
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: true });
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns). Callers that can live without the chat
+  // (payment page, rejection-reason lookup) catch it themselves.
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load messages.");
+  return (data as Record<string, unknown>[]).map(mapBrandMessage);
 }
 
 /**
  * Every brand message, newest first — owner only (admin inbox).
  * Joins the campaign so each message shows its campaign title,
- * brand name and submitted Transaction ID. Returns [] when
- * migration 0015 has not run yet.
+ * brand name and submitted Transaction ID. Paginated (default
+ * page size 100): the old .limit(200) with no paging silently
+ * dropped the oldest brand threads from the admin inbox. Pair
+ * with getBrandMessagesCount() so the UI always shows the total.
  */
-export async function getBrandMessages(): Promise<BrandMessage[]> {
+export async function getBrandMessages(
+  opts: { limit?: number; offset?: number } = {}
+): Promise<BrandMessage[]> {
+  const limit = Math.max(1, Math.min(500, opts.limit ?? 100));
+  const offset = Math.max(0, opts.offset ?? 0);
   const supabase = getServerClient();
   if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from("brand_messages")
-      .select(
-        "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read, campaigns(title, brand_name, payment_tx_id)"
-      )
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error || !data) return [];
-    return (data as Record<string, unknown>[]).map(mapBrandMessage);
-  } catch {
-    return [];
-  }
+  const { data, error } = await supabase
+    .from("brand_messages")
+    .select(
+      "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read, campaigns(title, brand_name, payment_tx_id)"
+    )
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  // Forms #26 contract: throw on DB error, never [] (see
+  // getCampaigns).
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load brand messages.");
+  return (data as Record<string, unknown>[]).map(mapBrandMessage);
 }
 
 /**
@@ -752,25 +881,24 @@ export async function getCreatorBotRejections(): Promise<
 > {
   const supabase = getServerClient();
   if (!supabase) return [];
+  // Unblock timestamps (migration 0027), best-effort and in its
+  // own query so the counts below still work if 0027 has not
+  // been applied yet (no unblocked_at column) — then every
+  // rejection counts, as before.
+  const unblockedAtById = new Map<string, string>();
   try {
-    // Unblock timestamps (migration 0027), best-effort and in its
-    // own query so the counts below still work if 0027 has not
-    // been applied yet (no unblocked_at column) — then every
-    // rejection counts, as before.
-    const unblockedAtById = new Map<string, string>();
-    try {
-      const { data: unblocked } = await supabase
-        .from("creator_flags")
-        .select("user_id, unblocked_at");
-      for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
-        const userId = String(row.user_id ?? "");
-        if (userId && row.unblocked_at) {
-          unblockedAtById.set(userId, String(row.unblocked_at));
-        }
+    const { data: unblocked } = await supabase
+      .from("creator_flags")
+      .select("user_id, unblocked_at");
+    for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
+      const userId = String(row.user_id ?? "");
+      if (userId && row.unblocked_at) {
+        unblockedAtById.set(userId, String(row.unblocked_at));
       }
-    } catch {
-      // Migration 0027 not run yet — no ladder reset to apply.
     }
+  } catch {
+    // Migration 0027 not run yet — no ladder reset to apply.
+  }
 
     const { data, error } = await supabase
       .from("submissions")
@@ -778,8 +906,16 @@ export async function getCreatorBotRejections(): Promise<
       .eq("status", "rejected")
       .eq("rejection_reason", "bot views")
       .order("created_at", { ascending: false })
-      .limit(500);
-    if (error || !data) return [];
+      // P2-12: the old .limit(500) silently dropped creators past
+      // 500 bot-rejection rows. Raised to 2,000 and paired with
+      // getBotRejectionRowCount() — the fraud view shows the total
+      // and says when rows were left out instead of truncating
+      // silently.
+      .limit(2000);
+    // Forms #26 contract: throw on DB error, never [] (see
+    // getCampaigns).
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Could not load bot rejections.");
     const byUser = new Map<string, CreatorBotRejections>();
     for (const row of data as Record<string, unknown>[]) {
       const userId = String(row.user_id ?? "");
@@ -811,9 +947,6 @@ export async function getCreatorBotRejections(): Promise<
     return [...byUser.values()].sort(
       (a, b) => b.bot_rejections - a.bot_rejections
     );
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -840,47 +973,46 @@ export async function getCreatorFlags(): Promise<
 > {
   const supabase = getServerClient();
   if (!supabase) return {};
-  try {
-    const { data, error } = await supabase
-      .from("creator_flags")
-      .select("user_id, bot_rejections, flagged_at, banned_at");
-    if (error || !data) return {};
-    const out: Record<string, CreatorFlag> = {};
-    for (const row of data as Record<string, unknown>[]) {
-      const userId = String(row.user_id ?? "");
-      if (!userId) continue;
-      out[userId] = {
-        user_id: userId,
-        bot_rejections: Number(row.bot_rejections ?? 0),
-        flagged_at: (row.flagged_at as string | null) ?? null,
-        banned_at: (row.banned_at as string | null) ?? null,
-        unblocked_at: null,
-      };
-    }
-    try {
-      const { data: unblocked } = await supabase
-        .from("creator_flags")
-        .select("user_id, unblocked_at");
-      for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
-        const userId = String(row.user_id ?? "");
-        if (userId && out[userId]) {
-          out[userId].unblocked_at =
-            (row.unblocked_at as string | null) ?? null;
-        }
-      }
-    } catch {
-      // Migration 0027 not run yet — no unblocked_at to carry.
-    }
-    return out;
-  } catch {
-    return {};
+  const { data, error } = await supabase
+    .from("creator_flags")
+    .select("user_id, bot_rejections, flagged_at, banned_at");
+  // Forms #26 contract: throw on DB error, never {} (see
+  // getCampaigns) — a failed flag load is a failed load, not
+  // "no flags".
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load creator flags.");
+  const out: Record<string, CreatorFlag> = {};
+  for (const row of data as Record<string, unknown>[]) {
+    const userId = String(row.user_id ?? "");
+    if (!userId) continue;
+    out[userId] = {
+      user_id: userId,
+      bot_rejections: Number(row.bot_rejections ?? 0),
+      flagged_at: (row.flagged_at as string | null) ?? null,
+      banned_at: (row.banned_at as string | null) ?? null,
+      unblocked_at: null,
+    };
   }
+  try {
+    const { data: unblocked } = await supabase
+      .from("creator_flags")
+      .select("user_id, unblocked_at");
+    for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
+      const userId = String(row.user_id ?? "");
+      if (userId && out[userId]) {
+        out[userId].unblocked_at =
+          (row.unblocked_at as string | null) ?? null;
+      }
+    }
+  } catch {
+    // Migration 0027 not run yet — no unblocked_at to carry.
+  }
+  return out;
 }
 
 /** One active flag per submission (admin batch 2, migration 0031):
- *  reason + when it was flagged. Best-effort — returns {} when the
- *  table does not exist yet (migration not applied) so /admin still
- *  renders. */
+ *  reason + when it was flagged. Throws on DB error, per the
+ *  Forms #26 contract (see getCampaigns). */
 export type SubmissionFlag = { reason: string; flagged_at: string };
 
 export async function getSubmissionFlags(): Promise<
@@ -888,27 +1020,24 @@ export async function getSubmissionFlags(): Promise<
 > {
   const supabase = getServerClient();
   if (!supabase) return {};
-  try {
-    const { data, error } = await supabase
-      .from("submission_flags")
-      .select("submission_id, reason, created_at")
-      .is("resolved_at", null);
-    if (error || !data) return {};
-    const out: Record<string, SubmissionFlag> = {};
-    for (const row of data as {
-      submission_id: string;
-      reason: string;
-      created_at: string;
-    }[]) {
-      out[row.submission_id] = {
-        reason: row.reason,
-        flagged_at: row.created_at,
-      };
-    }
-    return out;
-  } catch {
-    return {};
+  const { data, error } = await supabase
+    .from("submission_flags")
+    .select("submission_id, reason, created_at")
+    .is("resolved_at", null);
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load submission flags.");
+  const out: Record<string, SubmissionFlag> = {};
+  for (const row of data as {
+    submission_id: string;
+    reason: string;
+    created_at: string;
+  }[]) {
+    out[row.submission_id] = {
+      reason: row.reason,
+      flagged_at: row.created_at,
+    };
   }
+  return out;
 }
 
 /** One row of the campaign budget edit trail (migration 0033):
@@ -925,45 +1054,41 @@ export interface BudgetHistoryEntry {
 }
 
 /** Budget edit history for a set of campaigns (admin campaign
- *  cards). Best-effort — returns {} when the table does not exist
- *  yet (migration not applied) so /admin still renders; the cards
- *  just show no history until then. */
+ *  cards). Throws on DB error, per the Forms #26 contract (see
+ *  getCampaigns). */
 export async function getCampaignBudgetHistory(
   campaignIds: string[]
 ): Promise<Record<string, BudgetHistoryEntry[]>> {
   if (campaignIds.length === 0) return {};
   const supabase = getServerClient();
   if (!supabase) return {};
-  try {
-    const { data, error } = await supabase
-      .from("campaign_budget_history")
-      .select(
-        "campaign_id, old_budget_total, new_budget_total, old_budget_left, new_budget_left, reason, created_at"
-      )
-      .in("campaign_id", campaignIds)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error || !data) return {};
-    const out: Record<string, BudgetHistoryEntry[]> = {};
-    for (const row of data as Record<string, unknown>[]) {
-      const campaignId = String(row.campaign_id ?? "");
-      if (!campaignId) continue;
-      const list = out[campaignId] ?? [];
-      list.push({
-        campaign_id: campaignId,
-        old_budget_total: Number(row.old_budget_total ?? 0),
-        new_budget_total: Number(row.new_budget_total ?? 0),
-        old_budget_left: Number(row.old_budget_left ?? 0),
-        new_budget_left: Number(row.new_budget_left ?? 0),
-        reason: String(row.reason ?? ""),
-        created_at: String(row.created_at ?? ""),
-      });
-      out[campaignId] = list;
-    }
-    return out;
-  } catch {
-    return {};
+  const { data, error } = await supabase
+    .from("campaign_budget_history")
+    .select(
+      "campaign_id, old_budget_total, new_budget_total, old_budget_left, new_budget_left, reason, created_at"
+    )
+    .in("campaign_id", campaignIds)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not load budget history.");
+  const out: Record<string, BudgetHistoryEntry[]> = {};
+  for (const row of data as Record<string, unknown>[]) {
+    const campaignId = String(row.campaign_id ?? "");
+    if (!campaignId) continue;
+    const list = out[campaignId] ?? [];
+    list.push({
+      campaign_id: campaignId,
+      old_budget_total: Number(row.old_budget_total ?? 0),
+      new_budget_total: Number(row.new_budget_total ?? 0),
+      old_budget_left: Number(row.old_budget_left ?? 0),
+      new_budget_left: Number(row.new_budget_left ?? 0),
+      reason: String(row.reason ?? ""),
+      created_at: String(row.created_at ?? ""),
+    });
+    out[campaignId] = list;
   }
+  return out;
 }
 
 /** One row of the Win Board (Top Clippers): a creator's real
