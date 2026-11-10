@@ -33,6 +33,47 @@ interface BundleBody {
   proofScreenshots?: string[];
 }
 
+/**
+ * Author handle from an Instagram Reel/post URL:
+ * instagram.com/<handle>/reel/<id> or /p/<id>. A bare
+ * instagram.com/reel/<id> link carries no handle (null) — the
+ * gate cannot check it, so it is allowed but flagged unverified.
+ */
+function instagramHandleFromUrl(raw: string): string | null {
+  try {
+    const u = new URL(
+      /^https?:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`
+    );
+    const segs = u.pathname.split("/").filter(Boolean);
+    if (segs.length >= 3 && (segs[1] === "reel" || segs[1] === "reels" || segs[1] === "p")) {
+      return segs[0].toLowerCase();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Handle from a stored Instagram profile link (instagram.com/<handle>). */
+function instagramHandleFromProfileLink(
+  raw: string | null | undefined
+): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(
+      /^https?:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`
+    );
+    const segs = u.pathname.split("/").filter(Boolean);
+    if (segs.length === 0) return null;
+    // A profile link is just the handle; a Reel/post link saved
+    // by mistake is not a profile link.
+    if (segs[0] === "reel" || segs[0] === "reels" || segs[0] === "p") return null;
+    return segs[0].toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   const supabase = getServerClient();
   if (!supabase) {
@@ -67,7 +108,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as BundleBody;
+  let body: BundleBody;
+  try {
+    body = (await request.json()) as BundleBody;
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request — the submission could not be read." },
+      { status: 400 }
+    );
+  }
   const { data: campaign, error: campError } = await supabase
     .from("campaigns")
     .select("*")
@@ -154,8 +203,49 @@ export async function POST(request: Request) {
   // the same video pasted under a different spelling is caught as
   // a duplicate. Resolution never blocks a submit — on any failure
   // the submitted URL is kept (see canonicalizePostUrl).
+  // NOTE: the Instagram handle is read from the RAW submitted URL
+  // before this loop — canonicalization drops the author segment
+  // (see canonical-url.ts), so after it there is no handle left
+  // to compare against the stored profile link.
+  const instagramRawUrl =
+    links.find((l) => l.platform === "instagram")?.url ?? null;
+  const instagramHandle = instagramRawUrl
+    ? instagramHandleFromUrl(instagramRawUrl)
+    : null;
   for (const l of links) {
     l.url = await canonicalizePostUrl(l.url, l.platform);
+  }
+
+  // Instagram ownership gate: Instagram has no API access, so the
+  // only ownership signal is the handle in the Reel URL compared
+  // with the Instagram profile link the creator saved in
+  // onboarding (users.instagram_url). No stored link → the creator
+  // must save one first. A mismatching handle → the Reel is not
+  // theirs. A URL with no extractable handle (instagram.com/reel/
+  // <id>) is allowed but flagged posted_time_unverified, as today
+  // — the admin hand-checks it.
+  const instagramLink = links.find((l) => l.platform === "instagram");
+  if (instagramLink) {
+    const storedInstagram = profile?.instagram_url ?? null;
+    const storedHandle = instagramHandleFromProfileLink(storedInstagram);
+    if (!storedInstagram || !storedHandle) {
+      return NextResponse.json(
+        {
+          error:
+            "Save your Instagram profile link in onboarding first — Instagram submissions are checked against the profile link you saved there.",
+        },
+        { status: 400 }
+      );
+    }
+    if (instagramHandle && instagramHandle !== storedHandle) {
+      return NextResponse.json(
+        {
+          error:
+            "This Reel is not from your linked Instagram profile — submit only Reels from the Instagram profile you linked in onboarding.",
+        },
+        { status: 400 }
+      );
+    }
   }
 
   // YouTube ownership gate (2026-11-09): a YouTube link only
@@ -187,27 +277,35 @@ export async function POST(request: Request) {
     }
     const details = await fetchYouTubeVideoDetails(youtubeLink.url);
     if ("error" in details) {
-      // Link problems block the submit; API problems do not.
+      // Link problems block the submit; API problems block it too
+      // (fail CLOSED): the YouTube ownership gate is the only
+      // control for channel ownership, so a submit we cannot
+      // verify must not slip through flagged unverified — during
+      // an outage a wrong-channel video would pass the gate.
       // "Video not found or not public" / "Could not read a video
       // ID" mean the link is wrong. "Could not reach YouTube" /
       // "YouTube API error" / missing API key mean YouTube itself
-      // failed — blocking every submit during an outage and
-      // blaming the creator's link would be the wrong error.
+      // failed — the creator is told plainly to try again, not
+      // blamed for their link.
       const apiFailed =
         details.error.startsWith("Could not reach YouTube") ||
         details.error.startsWith("YouTube API error") ||
         details.error.startsWith("YouTube API key is not set up");
-      if (!apiFailed) {
+      if (apiFailed) {
         return NextResponse.json(
           {
-            error: `Could not verify this YouTube video (${details.error}) — please check the link and try again.`,
+            error:
+              "Couldn't verify your YouTube channel — try again.",
           },
           { status: 400 }
         );
       }
-      // API failure: the gate is skipped — youtubePublishedAt
-      // stays null, so the clip is flagged unverified for the
-      // admin's hand-check (ownership + post time).
+      return NextResponse.json(
+        {
+          error: `Could not verify this YouTube video (${details.error}) — please check the link and try again.`,
+        },
+        { status: 400 }
+      );
     } else {
       if (details.channelId !== channelId) {
         return NextResponse.json(
@@ -300,6 +398,23 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+      if (
+        result.error.startsWith("Could not read a video ID") &&
+        /\/t\/[^/]+/.test(tiktokLink.url)
+      ) {
+        // A tiktok.com/t/ share link that could not be resolved
+        // server-side: say plainly it could not be verified,
+        // instead of "not a video link" — the link itself is a
+        // real TikTok share link, we just cannot read the video
+        // behind it. The creator pastes the full video link.
+        return NextResponse.json(
+          {
+            error:
+              "We couldn't verify this TikTok share link (tiktok.com/t/…) — please paste the full video link (tiktok.com/@you/video/…) instead.",
+          },
+          { status: 400 }
+        );
+      }
       // "TikTok could not be reached right now" / unreadable
       // video ID: the API failed, not the creator — allow the
       // submit flagged unverified for the admin's hand-check
@@ -385,9 +500,12 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Proof must be a real URL (image/screenshot link), not any string.
+  // Proof must be a real image/screenshot link, not any URL —
+  // and not the post link itself (checked against the submitted
+  // clip links).
+  const postUrls = links.map((l) => l.url);
   for (const p of proof) {
-    const proofCheck = validateProofUrl(p);
+    const proofCheck = validateProofUrl(p, postUrls);
     if (!proofCheck.ok) {
       return NextResponse.json(
         { error: proofCheck.error ?? "Proof must be a real link." },

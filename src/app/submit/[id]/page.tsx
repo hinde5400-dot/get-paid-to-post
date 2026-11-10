@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getCampaign, getUserSubmissions, isCampaignLive } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
+import { getServerClient } from "@/lib/supabase/server";
 import SubmitBundleForm, { type LastSubmission } from "@/components/SubmitBundleForm";
 import type { Platform } from "@/lib/types";
 
@@ -69,6 +70,11 @@ export default async function SubmitPage({
     }
     const latest = new Map<Platform, string>();
     for (const s of subs) {
+      // Cooldown counts only live submissions (pending or
+      // approved) — a rejected or duplicate submission does not
+      // start the 2-hour cooldown (same filter as the campaign
+      // detail page and the API).
+      if (s.status === "rejected") continue;
       const prev = latest.get(s.platform);
       if (!prev || s.created_at > prev) latest.set(s.platform, s.created_at);
     }
@@ -76,6 +82,34 @@ export default async function SubmitPage({
       platform,
       created_at,
     }));
+  }
+
+  // OAuth connection state, so the submit form can warn (not
+  // block) when TikTok/YouTube is not connected yet — the API is
+  // the enforcer, this is only the early warning. A failed lookup
+  // reads as "not connected" (the hint shows), never as connected.
+  let tiktokConnected: boolean | undefined;
+  let youtubeConnected: boolean | undefined;
+  if (user) {
+    const supabase = getServerClient();
+    if (supabase) {
+      const [{ data: tk }, { data: yt }] = await Promise.all([
+        supabase
+          .from("tiktok_connections")
+          .select("id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("youtube_connections")
+          .select("id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      tiktokConnected = Boolean(tk);
+      youtubeConnected = Boolean(yt);
+    }
   }
 
   return (
@@ -91,6 +125,8 @@ export default async function SubmitPage({
         lastByPlatform={lastByPlatform}
         isLoggedIn={Boolean(user)}
         approvedByPlatform={approvedByPlatform}
+        tiktokConnected={tiktokConnected}
+        youtubeConnected={youtubeConnected}
       />
     </div>
   );

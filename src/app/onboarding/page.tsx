@@ -174,8 +174,14 @@ export default function OnboardingPage() {
         setProfileExists(true);
       }
       setConnected((c) => ({ ...c, [key]: true }));
+      // Instagram has no login yet (/connect: "Coming soon"), so its
+      // toast must not promise a login verification that does not
+      // exist — the link stays unverified until Instagram login
+      // is ready.
       showSuccess(
-        `${platform.name} link added — not verified yet. Verify for real with login on the My accounts page.`
+        key === "instagram"
+          ? "Instagram link added — not verified yet. Instagram login isn't ready yet, so this link stays unverified for now."
+          : `${platform.name} link added — not verified yet. Verify for real with login on the My accounts page.`
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save link.";
@@ -256,7 +262,9 @@ export default function OnboardingPage() {
                 </span>
                 <span className="block text-xs text-fg/50">
                   {connected[key]
-                    ? "Link added (not verified) — you can update it anytime."
+                    ? key === "instagram"
+                      ? "Link added (not verified) — Instagram login isn't ready yet, so it stays unverified. You can update it anytime."
+                      : "Link added (not verified) — you can update it anytime."
                     : "Paste your profile link to add it."}
                 </span>
               </span>

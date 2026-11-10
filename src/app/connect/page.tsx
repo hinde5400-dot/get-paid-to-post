@@ -79,12 +79,16 @@ export default function ConnectPage() {
                 };
                 const refreshed = p.username ?? p.display_name;
                 if (refreshed) setTiktokConnected(refreshed);
-                else setTiktokConnected("connected");
+                // The profile re-fetch failed or returned no name:
+                // do NOT claim "Connected as @…" — the row is saved
+                // but unverified, and the creator finds out at
+                // submit. Say so plainly instead.
+                else setTiktokConnected("saved-unverified");
               } else {
-                setTiktokConnected("connected");
+                setTiktokConnected("saved-unverified");
               }
             } catch {
-              setTiktokConnected("connected");
+              setTiktokConnected("saved-unverified");
             }
           }
         }
@@ -124,12 +128,16 @@ export default function ConnectPage() {
                 };
                 const refreshed = p.channel_title ?? p.channel_handle;
                 if (refreshed) setYoutubeConnected(refreshed);
-                else setYoutubeConnected("connected");
+                // The profile re-fetch failed or returned no name:
+                // do NOT claim "Connected as …" — the row is saved
+                // but unverified, and the creator finds out at
+                // submit. Say so plainly instead.
+                else setYoutubeConnected("saved-unverified");
               } else {
-                setYoutubeConnected("connected");
+                setYoutubeConnected("saved-unverified");
               }
             } catch {
-              setYoutubeConnected("connected");
+              setYoutubeConnected("saved-unverified");
             }
           }
         }
@@ -264,8 +272,8 @@ export default function ConnectPage() {
         <h2 className="text-sm font-bold text-fg">Connect TikTok</h2>
         <p className="mt-1 text-sm text-fg/60">
           {tiktokConnected
-            ? tiktokConnected === "connected"
-              ? "Connected (account name unavailable). We use this only to verify your identity and read your own videos' view counts."
+            ? tiktokConnected === "saved-unverified"
+              ? "Saved — we couldn't confirm the account name, so verify it at submit: only videos from your own connected TikTok account count. We use this only to verify your identity and read your own videos' view counts."
               : `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with TikTok so we can verify your identity and read your own videos' view counts. We never post, edit or delete your videos."}
         </p>
@@ -315,8 +323,8 @@ export default function ConnectPage() {
         <h2 className="text-sm font-bold text-fg">Connect YouTube</h2>
         <p className="mt-1 text-sm text-fg/60">
           {youtubeConnected
-            ? youtubeConnected === "connected"
-              ? "Connected (channel name unavailable). We use this only to verify your identity and read your own videos' view counts."
+            ? youtubeConnected === "saved-unverified"
+              ? "Saved — we couldn't confirm the channel name, so verify it at submit: only videos from your own connected YouTube channel count. We use this only to verify your identity and read your own videos' view counts."
               : `Connected as ${youtubeConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with Google so we can verify your YouTube channel and read your own videos' view counts. Only videos from your connected channel count — we never post, edit or delete your videos."}
         </p>

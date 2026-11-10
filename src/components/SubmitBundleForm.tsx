@@ -42,6 +42,8 @@ export default function SubmitBundleForm({
   lastByPlatform,
   isLoggedIn,
   approvedByPlatform,
+  tiktokConnected,
+  youtubeConnected,
 }: {
   campaign: Campaign;
   lastByPlatform: LastSubmission[];
@@ -49,6 +51,11 @@ export default function SubmitBundleForm({
   /** Approved clips per platform for this creator on this campaign
    *  (P0 batch 2) — only approved counts, rejected clips don't. */
   approvedByPlatform: Partial<Record<Platform, number>>;
+  /** OAuth connection state (loaded by the submit pages).
+   *  undefined = unknown — the hint shows, never the reverse.
+   *  Warn only: the API enforces the connection, never the form. */
+  tiktokConnected?: boolean;
+  youtubeConnected?: boolean;
 }) {
   const [tiktok, setTiktok] = useState("");
   const [instagram, setInstagram] = useState("");
@@ -61,6 +68,9 @@ export default function SubmitBundleForm({
   const [success, setSuccess] = useState<{
     codes: string[];
     message: string;
+    /** One link in the bundle was a duplicate and was rejected,
+     *  while the other clip(s) were submitted fine. */
+    duplicateWarning?: boolean;
   } | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -170,7 +180,10 @@ export default function SubmitBundleForm({
       return;
     }
     for (const p of proofFilled) {
-      const proofCheck = validateProofUrl(p);
+      const proofCheck = validateProofUrl(
+        p,
+        links.map((l) => l.url)
+      );
       if (!proofCheck.ok) {
         showError(proofCheck.error ?? "Proof must be a real link.");
         return;
@@ -197,20 +210,26 @@ export default function SubmitBundleForm({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submission failed.");
-      // A duplicate is NOT a success: no chime, no celebration
-      // popup — the link was already submitted and got rejected.
-      if (data.duplicateWarning) {
-        showError(
-          data.message ??
-            "Submitted, but a duplicate link was detected and rejected as a duplicate."
-        );
-        return;
-      }
+      // A mixed bundle (one clean clip + one duplicate) is a
+      // PARTIAL success: the clean clip(s) are live under review
+      // with their codes, and the duplicate was rejected. Show
+      // BOTH — the success popup for the clean clip(s) AND the
+      // duplicate warning — never only an error, or the creator
+      // concludes the whole bundle failed and resubmits the good
+      // link into a confusing "already been submitted" error.
       playChime();
       setSuccess({
         codes: (data.codes as string[]) ?? [],
         message: data.message ?? "Your post was submitted!",
+        duplicateWarning: Boolean(data.duplicateWarning),
       });
+      // Clear the link/proof inputs so a resubmit after this
+      // success cannot produce a confusing "already been
+      // submitted" error.
+      setTiktok("");
+      setInstagram("");
+      setYoutube("");
+      setProof([""]);
     } catch (e) {
       showError(e instanceof Error ? e.message : "Submission failed.");
     } finally {
@@ -313,7 +332,24 @@ export default function SubmitBundleForm({
                 placeholder={input.placeholder}
                 className={inputCls}
               />
-              {p === "youtube" && (
+              {p === "tiktok" && tiktokConnected !== true && (
+                <span className="mt-1 block font-medium text-fg/50">
+                  Only videos from your connected TikTok account count —{" "}
+                  <Link href="/connect" className="font-bold text-lime hover:underline">
+                    connect your account
+                  </Link>{" "}
+                  first.
+                </span>
+              )}
+              {p === "instagram" && (
+                <span className="mt-1 block font-medium text-fg/50">
+                  Instagram links are hand-checked by the admin — post
+                  time and ownership can&apos;t be checked automatically
+                  yet. Submit only Reels from the Instagram profile you
+                  linked in onboarding.
+                </span>
+              )}
+              {p === "youtube" && youtubeConnected !== true && (
                 <span className="mt-1 block font-medium text-fg/50">
                   Only videos from your connected YouTube channel count —{" "}
                   <Link href="/connect" className="font-bold text-lime hover:underline">
@@ -349,7 +385,10 @@ export default function SubmitBundleForm({
           </p>
           <p className="mt-1 text-xs text-fg/50">
             Link to a screenshot of your live post or your editing project as
-            proof this is your own content. At least one is required.
+            proof this is your own content. At least one is required — a
+            direct image link (.png, .jpg, .webp, .gif) or a screenshot
+            link from Imgur, Lightshot (prnt.sc), ibb.co or postimages.
+            Google Drive links are not images.
           </p>
           {proof.map((p, i) => (
             <input
@@ -440,6 +479,13 @@ export default function SubmitBundleForm({
               it is approved — approved earnings then move into your 72-hour
               hold.
             </p>
+            {success.duplicateWarning && (
+              <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-left text-sm font-semibold leading-relaxed text-amber-200">
+                ⚠️ One link in this bundle was a duplicate and was
+                rejected — the clip(s) below are the ones that were
+                submitted and are now under review.
+              </p>
+            )}
             {success.codes.length > 0 && (
               <div className="mt-4 rounded-xl bg-fg/5 p-3 text-left text-xs text-fg/70">
                 <p className="font-bold text-fg">Submission IDs</p>
