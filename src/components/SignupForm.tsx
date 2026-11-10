@@ -119,8 +119,9 @@ export default function SignupForm({ role }: { role: Role | null }) {
           Join Get Paid To Post
         </h1>
         <p className="mx-auto mt-2 max-w-md text-center text-sm text-fg/60">
-          Pick your side — creator or brand. Email and password only — we
-          never ask for your phone, address, or extra details.
+          Pick your side — creator or brand. Email and password, or
+          continue with Google — we never ask for your phone, address,
+          or extra details.
         </p>
         <div className="mt-7">
           <RoleCards />
@@ -161,7 +162,8 @@ export default function SignupForm({ role }: { role: Role | null }) {
       </p>
       {role === "creator" && (
         <p className="mt-4 rounded-xl bg-fg/5 px-4 py-2.5 text-center text-xs leading-relaxed text-fg/60">
-          Payouts are for creators aged 18 and older.
+          Payouts are for creators aged 18 and older. By signing up you
+          confirm you are 18 or older to receive payouts.
         </p>
       )}
       {!isSupabaseConfigured && (

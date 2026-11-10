@@ -327,7 +327,7 @@ export default async function CampaignDetailPage({
               <div className="rounded-3xl border border-lime/40 bg-card p-6">
                 <h2 className="text-lg font-extrabold text-fg">How the payout works</h2>
                 <p className="mt-3 text-sm leading-relaxed text-fg/70">
-                  Your video got 50,000 views at{" "}
+                  Example: your video got 50,000 views at{" "}
                   {formatUSD(campaign.view_bonus_per_1k)}/1k ={" "}
                   {formatUSD(example.uncapped)} earned.
                   {example.capped

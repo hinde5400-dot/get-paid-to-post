@@ -13,9 +13,12 @@ export default function PrivacyPage() {
           (stored securely by our authentication provider). If you
           continue with Google, we receive your name and email from
           Google instead. After signup you can add your TikTok,
-          Instagram and YouTube profile links. When you submit a post,
-          we store the post links, your note on how you made it, and
-          your proof screenshot links.
+          Instagram and YouTube profile links. If you connect TikTok or
+          YouTube, we store your connected account name/channel and the
+          login tokens needed to read your own videos&apos; view counts
+          (tokens are stored encrypted). When you submit a post, we
+          store the post links, your note on how you made it, and your
+          proof screenshot links.
         </p>
       </section>
 
@@ -50,7 +53,8 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-extrabold text-fg">5. Your rights</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           You can update your profile links at any time from My Accounts, and
-          you can ask support to delete your account. Contact support through
+          you can contact support on Discord and the owner will delete
+          your account manually. Contact support through
           the Discord support page.
         </p>
       </section>

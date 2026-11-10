@@ -40,6 +40,10 @@ export default function WithdrawModal({
   const [details, setDetails] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  // The "Invalid address" hint shows only after a failed
+  // validation — before that the field shows the neutral format
+  // hint, not an error.
+  const [addressInvalid, setAddressInvalid] = useState(false);
 
   const amountNum = useMemo(() => Number(amount) || 0, [amount]);
   const fee = feeFor(amountNum);
@@ -60,6 +64,7 @@ export default function WithdrawModal({
       return;
     }
     if (!isValidUsdtAddress(method, address)) {
+      setAddressInvalid(true);
       showError("Invalid USDT wallet address");
       return;
     }
@@ -72,7 +77,9 @@ export default function WithdrawModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Withdrawal failed.");
-      showSuccess("Withdrawal request sent. Will be processed in 24-48 hours.");
+      showSuccess(
+        "Withdrawal request sent. The owner processes payouts manually from the funded campaign budget."
+      );
       setDone(true);
       router.refresh();
     } catch (e) {
@@ -101,12 +108,14 @@ export default function WithdrawModal({
             <p className="text-4xl">🎉</p>
             <p className="mt-3 text-lg font-bold text-fg">Withdrawal requested</p>
             <p className="mt-1 text-sm text-fg/60">
-              Withdrawal request sent. Will be processed in 24-48 hours.
+              Withdrawal request sent. The owner processes payouts
+              manually from the funded campaign budget.
             </p>
             <p className="mt-2 text-sm text-fg/60">
-              You will receive{" "}
+              Requested{" "}
               <span className="font-bold text-lime">{formatUSD(final)}</span>{" "}
-              in USDT.
+              in USDT (pending admin approval) — you&apos;ll receive it if
+              approved.
             </p>
             <button
               onClick={onClose}
@@ -166,18 +175,27 @@ export default function WithdrawModal({
               <input
                 type="text"
                 value={details}
-                onChange={(e) => setDetails(e.target.value)}
+                onChange={(e) => {
+                  setDetails(e.target.value);
+                  setAddressInvalid(false);
+                }}
                 placeholder={METHOD_HINTS[method]}
                 autoComplete="off"
                 spellCheck={false}
                 className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-3 text-fg outline-none focus:border-lime"
               />
               <span className="mt-1 block text-xs font-medium text-fg/50">
-                {ADDRESS_ERRORS[method]}
+                {addressInvalid
+                  ? ADDRESS_ERRORS[method]
+                  : METHOD_HINTS[method]}
               </span>
             </label>
 
-            {amountNum > 0 && (
+            {/* Fee preview — only for an amount that can actually be
+                submitted ($15 minimum, within the balance). Showing
+                a breakdown for $5 or above-balance amounts promised
+                a payout that would be rejected. */}
+            {amountNum >= WITHDRAW_MIN && amountNum <= available && (
               <div className="mt-4 rounded-xl bg-fg/5 p-4 text-sm text-fg/70">
                 <div className="flex justify-between">
                   <span>Amount</span>

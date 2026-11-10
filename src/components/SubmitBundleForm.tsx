@@ -130,7 +130,7 @@ export default function SubmitBundleForm({
       showError(
         minLinks === 1
           ? `Submit your ${platformNames} link.`
-          : `Submit at least ${minLinks} links on the campaign's platforms (${platformNames}) together — they are reviewed and paid as one bundle.`
+          : `Submit at least ${minLinks} links on the campaign's platforms (${platformNames}) together — each clip is then reviewed and paid on its own.`
       );
       return;
     }
@@ -228,8 +228,8 @@ export default function SubmitBundleForm({
         {allowedPlatforms.length === 1
           ? `Post on ${platformNames} and submit your link below — one post, reviewed and paid.`
           : allowedPlatforms.length === 2
-            ? `Post on ${platformNames} together — submit both links as one bundle, reviewed and paid together.`
-            : `Post on any 2 of ${platformNames} — submit the links as one bundle, reviewed and paid together.`}{" "}
+            ? `Post on ${platformNames} together — submit both links as one bundle; each clip is then reviewed and paid on its own.`
+            : `Post on any 2 of ${platformNames} — submit the links as one bundle; each clip is then reviewed and paid on its own.`}{" "}
         Up to 15 approved clips per platform — rejected clips
         don&apos;t count toward the limit, and a rejected clip cannot
         be resubmitted — post a new clip instead.

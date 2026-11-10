@@ -151,7 +151,7 @@ export default function CampaignDetailTabs({
             <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-fg/60">
               There is no live chat on the site. Join our Discord community
               to talk about this campaign, ask questions, and get support.
-              Submission status is always visible on My Posts and Earnings.
+              Submission status is always visible on My Posts.
             </p>
             <div className="mx-auto mt-5 max-w-sm">
               <DiscordButton />
@@ -177,7 +177,7 @@ export default function CampaignDetailTabs({
             </p>
             <p className="mt-1 text-xs font-semibold text-fg/50">
               {stats
-                ? `${stats.active30d} Active Today`
+                ? `${stats.active30d} active creators (30 days)`
                 : "Join free — no follower minimum"}
             </p>
           </div>

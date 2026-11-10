@@ -132,7 +132,7 @@ export default async function BrandsPage() {
         <li>• Real creators, no follower minimum.</li>
         <li>• You pay only for verified views — never per post alone.</li>
         <li>• Every campaign budget is funded upfront.</li>
-        <li>• Every clip comes with proof, so you can see what ran.</li>
+        <li>• Every clip comes with proof, reviewed by the admin before it is approved.</li>
         <li>• Unspent budget stays yours.</li>
       </ul>
     </section>
@@ -151,9 +151,8 @@ export default async function BrandsPage() {
         charge you for views that were not verified.
       </p>
       <ul className="mt-4 space-y-2 text-sm leading-relaxed text-fg/70">
-        <li>• Budgets are kept separate from operating money.</li>
+        <li>• Your budget is tracked per campaign and only spent on approved views — ask the admin on Discord for a payout record for your campaign.</li>
         <li>• Payouts go only to approved views, from your funded budget.</li>
-        <li>• Every payout is recorded and can be shown to you.</li>
         <li>• Fake engagement will lead to the creator&apos;s account being strictly blocked or banned.</li>
       </ul>
     </section>
@@ -169,7 +168,6 @@ export default async function BrandsPage() {
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         {[
-          "No Gambling, No Betting",
           "100% Funded Campaigns Only - Campaign goes live only after payment received",
           "Secure Payments via USDT - 15% platform fee on top, no other charges",
         ].map((badge) => (

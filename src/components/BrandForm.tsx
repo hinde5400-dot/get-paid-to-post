@@ -759,7 +759,7 @@ export default function BrandForm({
           <span className="mt-1 block text-xs font-medium text-fg/50">
             One rate for all platforms — the same rate applies to
             TikTok, Instagram and YouTube. Must be more than $0.
-            Higher rate = more creators will join fast.
+            A higher rate tends to attract creators faster.
           </span>
           <input
             type="number"
@@ -876,8 +876,10 @@ export default function BrandForm({
         Example (estimate, at{" "}
         {fmtChoice(Math.round(exampleRate * 100) / 100)} per 1k on all
         platforms): If you set a budget of{" "}
-        {fmtChoice(exampleBudget)}, you will get approx{" "}
-        {exampleViews.toLocaleString("en-US")} views. Budget{" "}
+        {fmtChoice(exampleBudget)}, your budget could pay for up to
+        approx{" "}
+        {exampleViews.toLocaleString("en-US")} views. Views aren&apos;t
+        guaranteed, and the per-post cap changes the total. Budget{" "}
         {fmtChoice(exampleBudget)} + Platform fee (15%):{" "}
         {fmtChoice(exampleFee)} = Total to send{" "}
         {fmtChoice(exampleTotal)} · Creators pool (full budget):{" "}

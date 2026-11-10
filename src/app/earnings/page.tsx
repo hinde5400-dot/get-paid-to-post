@@ -80,7 +80,7 @@ export default async function EarningsPage() {
           <li>• Withdrawal fee: 5% — the fee is rounded to the nearest cent, and you receive the amount after the fee.</li>
           <li>• Methods: USDT (TRC20) and USDT (BEP20) only.</li>
           <li>• Approved earnings are held for {HOLD_HOURS} hours before they become available.</li>
-          <li>• Payouts are processed by the platform owner from the funded campaign budget, within 24-48 hours.</li>
+          <li>• Payouts are processed manually by the platform owner from the funded campaign budget.</li>
         </ul>
       </div>
 
@@ -118,9 +118,11 @@ export default async function EarningsPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       <span className="font-bold text-fg">{formatUSD(w.amount)}</span>{" "}
-                      <span className="text-xs text-fg/50">
-                        → {formatUSD(w.final_amount)} after fee
-                      </span>
+                      {w.status !== "rejected" && (
+                        <span className="text-xs text-fg/50">
+                          → {formatUSD(w.final_amount)} after fee
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 text-fg/80">
                       {WITHDRAW_METHOD_LABELS[w.method] ?? w.method}

@@ -106,8 +106,8 @@ export default function RulesPage() {
         </Rule>
         <Rule>
           <strong className="text-fg">Payouts are for creators aged 18 or older.</strong>{" "}
-          If you are under 18 you may still browse campaigns, but your
-          earnings cannot be withdrawn until you turn 18.
+          By signing up you confirm you are 18 or older to receive
+          payouts.
         </Rule>
         <Rule>
           Creators never pay anything to join, post, or earn.
@@ -134,7 +134,7 @@ export default function RulesPage() {
       <Section id="submitting" n="3" title="Submitting clips">
         <Rule>
           Submit any 2 of TikTok, Instagram and YouTube together as one
-          bundle — the links in a bundle are reviewed and paid together.
+          bundle — each clip is then reviewed and paid on its own.
         </Rule>
         <Rule>
           Proof is required: at least one originality-proof screenshot
@@ -191,9 +191,11 @@ export default function RulesPage() {
           remaining budget. A viral clip never pays more than the cap.
         </Rule>
         <Rule>
-          Views are tracked for 14 days, and only verified views count —
-          views the platform owner has checked and confirmed as real
-          views from real people.
+          Views are tracked while your clip is pending, for up to 14
+          days after you submit, and only verified views count — views
+          the platform owner has checked and confirmed as real views
+          from real people. Once approved, earnings are fixed on the
+          views at approval — later views don&apos;t add earnings.
         </Rule>
         <Rule>
           Every clip needs at least{" "}
@@ -209,14 +211,9 @@ export default function RulesPage() {
 
       <Section id="fees" n="5" title="Fees & withdrawals">
         <Rule>
-          <strong className="text-fg">Platform fee: 15%.</strong> The brand
-          pays it on top of the campaign budget — the brand sends budget +
-          15%, and the campaign runs on the full budget. Creators never
-          pay the platform fee.
-        </Rule>
-        <Rule>
-          <strong className="text-fg">Withdrawal fee: 5%.</strong> You
-          receive the amount you withdraw × 0.95.
+          <strong className="text-fg">Withdrawal fee: 5%.</strong> The
+          5% fee is rounded to the nearest cent — you receive the
+          amount after the fee.
         </Rule>
         <Rule>
           <strong className="text-fg">Minimum withdrawal: $15.</strong>
@@ -306,8 +303,8 @@ export default function RulesPage() {
           If your submission is rejected or your account is flagged and
           you believe it is a mistake, you can{" "}
           <strong className="text-fg">appeal once through Discord support</strong>.
-          A person will review your appeal and reply within{" "}
-          <strong className="text-fg">10 business days</strong>.
+          A person will review your appeal. We aim to reply within 10
+          business days.
         </Rule>
       </Section>
 
@@ -326,9 +323,9 @@ export default function RulesPage() {
         <Rule>
           Your budget is funded before your campaign goes live. We never
           spend your budget on anything else, and we never charge you for
-          views that were not verified. Budgets are kept separate from
-          operating money, and every payout is recorded and can be shown
-          to you.
+          views that were not verified. Your budget is tracked per
+          campaign and only spent on approved views — ask the admin on
+          Discord for a payout record for your campaign.
         </Rule>
         <Rule>
           Clips are rejected against the requirements you stated in
@@ -338,9 +335,9 @@ export default function RulesPage() {
           the video rules.
         </Rule>
         <Rule>
-          Unspent budget stays yours: it is refunded within{" "}
-          <strong className="text-fg">5–7 business days</strong> of your
-          request.
+          Unspent budget stays yours: ask for a refund through Discord
+          support — the owner sends it manually in USDT. We aim to send
+          it within 5–7 business days of your request.
         </Rule>
         <Rule>
           Once a published clip is approved, you may repost and use it to
@@ -358,7 +355,7 @@ export default function RulesPage() {
         </Rule>
         <Rule>
           <strong className="text-fg">
-            1 day after payout is complete, the campaign is automatically
+            Once settlement is complete, the campaign is automatically
             deleted
           </strong>{" "}
           — its record, its proofs and its chat, all of it. Nothing is

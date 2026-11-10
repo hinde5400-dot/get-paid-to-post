@@ -59,10 +59,8 @@ export default function TermsPage() {
           everything posted from your account. One account per person.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
-          Payouts are for creators aged 18 or older. You must be at least
-          18 years old to receive a payout; if you are under 18 you may
-          still browse campaigns, but your earnings cannot be withdrawn
-          until you turn 18.
+          Payouts are for creators aged 18 or older. By signing up you
+          confirm you are 18 or older to receive payouts.
         </p>
       </section>
 
@@ -72,7 +70,7 @@ export default function TermsPage() {
           <li>• Clips must be vertical 9:16, with captions and a hook in the first 3 seconds.</li>
           <li>• Only TikTok, Instagram and YouTube links are accepted.</li>
           <li>• Submit your link within 30 minutes of posting the video — a link posted more than 30 minutes earlier is not accepted. Instagram links are hand-checked by the admin (no automatic check yet).</li>
-          <li>• You are paid per verified view only — there is no base pay per post. Earnings are the smaller of (views / 1,000 × the campaign&apos;s rate per 1,000 views), the campaign maximum per post, and the remaining campaign budget. Views are tracked for 14 days. The campaign sets one rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube.</li>
+          <li>• You are paid per verified view only — there is no base pay per post. Earnings are the smaller of (views / 1,000 × the campaign&apos;s rate per 1,000 views), the campaign maximum per post, and the remaining campaign budget. Views are tracked while your clip is pending, for up to 14 days after you submit. Once approved, earnings are fixed on the views at approval — later views don&apos;t add earnings. The campaign sets one rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube.</li>
           <li>• A clip needs at least 1,000 views to earn — a clip below 1,000 views cannot be approved. A brand may set a higher minimum for its campaign.</li>
           <li>• Maximum payout per post: set by the brand between $10 and $200; $100 when the brand does not set one.</li>
           <li>• Every clip needs at least 1% engagement — (likes + comments) / views. Shares and saves never count. A clip below 1% cannot be approved.</li>
@@ -102,11 +100,13 @@ export default function TermsPage() {
           platform fee is charged on top of the budget: the brand sends
           budget + 15%, and the campaign runs on the full budget. Brands
           pay only for verified views. Unspent budget stays the
-          brand&apos;s: it is refunded within 5–7 business days of the
-          request. A campaign that stays pending without payment expires
-          after 7 days. One day after payout finishes, the campaign, its
-          proofs and its chat are deleted automatically; money records
-          (wallets, withdrawals) are never deleted.
+          brand&apos;s: ask for a refund through Discord support — the
+          owner sends it manually in USDT. We aim to send it within 5–7
+          business days of your request. A campaign that stays pending
+          without payment expires after 7 days. Once settlement is
+          complete, the campaign, its proofs and its chat are deleted
+          automatically — never earlier than 7 days after the campaign
+          ended; money records (wallets, withdrawals) are never deleted.
         </p>
         <h3 className="mt-4 text-sm font-extrabold text-fg">
           How brand funds are protected
@@ -115,10 +115,10 @@ export default function TermsPage() {
           Your budget is funded before your campaign goes live. Creators
           are paid only for verified views at the rate you set — never for
           promises. We never spend your budget on anything else, and we
-          never charge you for views that were not verified. Budgets are
-          kept separate from operating money, and every payout is
-          recorded and can be shown to you. Any budget left unspent when
-          your campaign ends remains yours.
+          never charge you for views that were not verified. Your budget
+          is tracked per campaign and only spent on approved views — ask
+          the admin on Discord for a payout record for your campaign. Any
+          budget left unspent when your campaign ends remains yours.
         </p>
       </section>
 
@@ -140,8 +140,8 @@ export default function TermsPage() {
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           If your submission is rejected or your account is flagged for
           fake engagement and you believe it is a mistake, you can appeal
-          once through Discord support. A person will review your appeal
-          and reply within 10 business days.
+          once through Discord support. A person will review your appeal.
+          We aim to reply within 10 business days.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           If a submission is rejected after it was approved, its

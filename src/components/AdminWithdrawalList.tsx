@@ -12,7 +12,7 @@ export type WithdrawalWithCreator = Withdrawal & { creator_email: string };
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-300",
   approved: "bg-sky-500/15 text-sky-300",
-  paid: "bg-red-500/15 text-red-300",
+  paid: "bg-lime/15 text-lime",
   rejected: "bg-red-500/15 text-red-300",
 };
 

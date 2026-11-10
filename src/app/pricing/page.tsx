@@ -45,7 +45,8 @@ export default function PricingPage() {
           <li>
             • <strong className="text-fg">Unspent budget stays yours.</strong>{" "}
             Any budget left when your campaign ends is returned to you
-            on request, within 5–7 business days.
+            on request — the owner sends it manually in USDT, and we aim
+            to send it within 5–7 business days of your request.
           </li>
           <li>
             • <strong className="text-fg">No subscription, no setup fee.</strong>{" "}
@@ -130,8 +131,9 @@ export default function PricingPage() {
           are paid only for verified views at the rate you set — never
           for promises. {BRAND_NAME} never spends your budget on anything
           else, and never charges you for views that were not verified.
-          Budgets are kept separate from operating money, and every
-          payout is recorded and can be shown to you.
+          Your budget is tracked per campaign and only spent on approved
+          views — ask the admin on Discord for a payout record for your
+          campaign.
         </p>
       </section>
     </div>

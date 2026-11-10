@@ -44,7 +44,7 @@ const FAQS = [
   },
   {
     q: "How much can I earn per post?",
-    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. The campaign sets ONE rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube. A clip needs at least 1,000 views to earn — clips below 1,000 views cannot be approved. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked for 14 days.",
+    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. The campaign sets ONE rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube. A clip needs at least 1,000 views to earn — clips below 1,000 views cannot be approved. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked while your clip is pending, for up to 14 days after you submit. Once approved, earnings are fixed on the views at approval — later views don't add earnings.",
   },
   {
     q: "What are the video rules?",
@@ -68,7 +68,7 @@ const FAQS = [
   },
   {
     q: "What if my clip is rejected by mistake?",
-    a: "You can appeal once through Discord support. A person will review your appeal and reply within 10 business days. If a submission is rejected after it was approved, its earnings are reversed — taken back from your Pending Balance first, then from your Withdrawable Balance — and returned to the campaign budget. Only amounts already withdrawn (paid out) cannot be reversed.",
+    a: "You can appeal once through Discord support. A person will review your appeal. We aim to reply within 10 business days. If a submission is rejected after it was approved, its earnings are reversed — taken back from your Pending Balance first, then from your Withdrawable Balance — and returned to the campaign budget. Only amounts already withdrawn (paid out) cannot be reversed.",
   },
   {
     q: "What happens after a campaign ends?",

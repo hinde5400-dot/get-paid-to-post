@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 
 const STEPS = [
   { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. No phone, no address, no extra details." },
-  { n: "2", t: "Connect your profiles", d: "Add your TikTok, Instagram and YouTube profile links so your clips can be matched to you." },
+  { n: "2", t: "Connect your profiles", d: "Connect your TikTok and YouTube accounts (Instagram connects later) so your clips can be matched to you." },
   { n: "3", t: "Pick a funded campaign", d: "Browse live campaigns, read the brief and the rate, and choose one that fits your style." },
   { n: "4", t: "Make your clip", d: "Film vertical 9:16, add captions, and hook viewers in the first 3 seconds. Keep it original and on-brief." },
   { n: "5", t: "Post and submit", d: "Post on the campaign's platforms and submit the links as one bundle, with proof and a short note on how you made it. Submit your link within 30 minutes of posting — Instagram links are hand-checked by the admin." },

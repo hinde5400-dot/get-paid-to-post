@@ -79,12 +79,12 @@ export default function ConnectPage() {
                 };
                 const refreshed = p.username ?? p.display_name;
                 if (refreshed) setTiktokConnected(refreshed);
-                else setTiktokConnected("your TikTok account");
+                else setTiktokConnected("connected");
               } else {
-                setTiktokConnected("your TikTok account");
+                setTiktokConnected("connected");
               }
             } catch {
-              setTiktokConnected("your TikTok account");
+              setTiktokConnected("connected");
             }
           }
         }
@@ -124,12 +124,12 @@ export default function ConnectPage() {
                 };
                 const refreshed = p.channel_title ?? p.channel_handle;
                 if (refreshed) setYoutubeConnected(refreshed);
-                else setYoutubeConnected("your YouTube channel");
+                else setYoutubeConnected("connected");
               } else {
-                setYoutubeConnected("your YouTube channel");
+                setYoutubeConnected("connected");
               }
             } catch {
-              setYoutubeConnected("your YouTube channel");
+              setYoutubeConnected("connected");
             }
           }
         }
@@ -230,10 +230,11 @@ export default function ConnectPage() {
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
       <p className="mt-2 text-sm text-fg/60">
-        Step 2 — connect your TikTok, Instagram and YouTube accounts so
-        your submitted clips can be matched to you. Only videos from
-        your own connected accounts count — a link to someone
-        else&apos;s video will not earn.
+        Step 2 — connect your TikTok and YouTube accounts so your
+        submitted clips can be matched to you. Only videos from your
+        own connected TikTok and YouTube accounts count — a link to
+        someone else&apos;s video will not earn. (Instagram connects
+        later.)
       </p>
       {tiktokStatus && (
         <p
@@ -263,8 +264,8 @@ export default function ConnectPage() {
         <h2 className="text-sm font-bold text-fg">Connect TikTok</h2>
         <p className="mt-1 text-sm text-fg/60">
           {tiktokConnected
-            ? tiktokConnected === "your TikTok account"
-              ? "Connected as your TikTok account. We use this only to verify your identity and read your own videos' view counts."
+            ? tiktokConnected === "connected"
+              ? "Connected (account name unavailable). We use this only to verify your identity and read your own videos' view counts."
               : `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with TikTok so we can verify your identity and read your own videos' view counts. We never post, edit or delete your videos."}
         </p>
@@ -300,6 +301,10 @@ export default function ConnectPage() {
           your own Reels&apos; view counts. We never post, edit or delete
           your videos.
         </p>
+        <p className="mt-2 text-sm font-semibold text-fg/60">
+          Instagram login isn&apos;t ready yet — connect it here once
+          it&apos;s live.
+        </p>
         <span className="mt-4 inline-block cursor-not-allowed rounded-full bg-fg/10 px-6 py-3 text-sm font-bold text-fg/40">
           Coming soon
         </span>
@@ -310,8 +315,8 @@ export default function ConnectPage() {
         <h2 className="text-sm font-bold text-fg">Connect YouTube</h2>
         <p className="mt-1 text-sm text-fg/60">
           {youtubeConnected
-            ? youtubeConnected === "your YouTube channel"
-              ? "Connected as your YouTube channel. We use this only to verify your identity and read your own videos' view counts."
+            ? youtubeConnected === "connected"
+              ? "Connected (channel name unavailable). We use this only to verify your identity and read your own videos' view counts."
               : `Connected as ${youtubeConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with Google so we can verify your YouTube channel and read your own videos' view counts. Only videos from your connected channel count — we never post, edit or delete your videos."}
         </p>

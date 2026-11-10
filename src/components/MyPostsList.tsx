@@ -103,8 +103,8 @@ export default function MyPostsList({
         <div className="mt-6 rounded-2xl border border-fg/10 bg-card p-8 text-center">
           <p className="text-lg font-bold text-fg">No posts here yet</p>
           <p className="mt-2 text-sm text-fg/60">
-            Pick a campaign, post your clip, and submit it here to start
-            earning per view.
+            Pick a campaign, post your clip, and submit the link from
+            the campaign page to start earning per view.
           </p>
           <Link
             href="/campaigns"
@@ -260,8 +260,9 @@ export default function MyPostsList({
                 </button>
                 {s.hold_until && s.status === "approved" && (
                   <span>
-                    Hold releases{" "}
-                    {new Date(s.hold_until).toLocaleString("en-US")}
+                    {new Date(s.hold_until).getTime() <= Date.now()
+                      ? "Hold released — available to withdraw"
+                      : `Hold releases ${new Date(s.hold_until).toLocaleString("en-US")}`}
                   </span>
                 )}
                 <span>
@@ -322,7 +323,11 @@ export default function MyPostsList({
                       )}
                     </div>
                     <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
-                      Completed
+                      {h.status === "ended"
+                        ? "Ended"
+                        : h.status === "completed"
+                          ? "Completed"
+                          : h.status.charAt(0).toUpperCase() + h.status.slice(1)}
                     </span>
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-3 text-center">
