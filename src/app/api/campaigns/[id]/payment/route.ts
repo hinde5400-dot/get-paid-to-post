@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { isValidTronTxId } from "@/lib/validate";
 import { getProfile, isOwner } from "@/lib/auth";
-import { getAdminUsdtWallet } from "@/lib/data";
+import { getAdminUsdtWallet, isExpiredUnpaidPending } from "@/lib/data";
 import { notifyPaymentProof } from "@/lib/notify";
+import { rateLimit } from "@/lib/rate-limit";
 import type { NotifyCampaign } from "@/lib/notify";
 
 /**
@@ -13,6 +14,17 @@ import type { NotifyCampaign } from "@/lib/notify";
  * pending. The RLS trigger (migration 0013) enforces the same rule
  * at the database level: a brand may change nothing but the
  * payment_tx_id of their own pending campaign.
+ *
+ * A TxID may be CORRECTED while the campaign is still pending and
+ * not yet approved: the form says so, so the API allows replacing
+ * the stored TxID (validated as 64-hex, same as the first submit)
+ * and the admin card shows the current one. Once the campaign is
+ * live / approved / rejected, the TxID is frozen.
+ *
+ * Guards: 7-day expiry (migration 0030 — an unpaid pending
+ * campaign cannot record a payment after it expired), TxID
+ * uniqueness across campaigns (one real payment cannot "fund"
+ * two campaigns), and a 10/min rate limit.
  */
 export async function POST(
   request: Request,
@@ -33,7 +45,7 @@ export async function POST(
   const { data: campaign, error: campError } = await supabase
     .from("campaigns")
     .select(
-      "id, user_id, status, title, budget_total, brand_name, platform_fee, rates, view_bonus_per_1k, min_views, max_payout_per_post, payment_tx_id"
+      "id, user_id, status, title, budget_total, brand_name, platform_fee, rates, view_bonus_per_1k, min_views, max_payout_per_post, payment_tx_id, created_at"
     )
     .eq("id", params.id)
     .single();
@@ -52,9 +64,37 @@ export async function POST(
       { status: 404 }
     );
   }
+  // A blocked account records no payment.
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
+  }
   if ((campaign as { status?: string }).status !== "pending") {
     return NextResponse.json(
       { error: "Only a pending campaign can record a payment." },
+      { status: 400 }
+    );
+  }
+  // 7-day expiry (migration 0030): an unpaid pending campaign
+  // cannot record a payment once it is 7+ days old — the daily
+  // cron deletes it, and this check closes the gap between
+  // creation+7d and the next cron run.
+  if (
+    isExpiredUnpaidPending(
+      campaign as {
+        status?: string | null;
+        payment_tx_id?: string | null;
+        created_at?: string | null;
+      }
+    )
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "This campaign expired unpaid — unpaid pending campaigns expire 7 days after they are created. Create a new campaign to pay again.",
+      },
       { status: 400 }
     );
   }
@@ -73,21 +113,28 @@ export async function POST(
       { status: 503 }
     );
   }
-  // A TxID already recorded cannot be silently overwritten: the
-  // brand could replace the TxID Turn already started verifying,
-  // with no history and no notice to the admin. Changing it needs
-  // the admin (Discord).
-  if ((campaign as { payment_tx_id?: string | null }).payment_tx_id) {
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 payment
+  // submissions per minute per user per campaign.
+  const rl = rateLimit(`payment:${auth.user.id}:${params.id}`, 10, 60_000);
+  if (!rl.ok) {
     return NextResponse.json(
       {
-        error:
-          "A Transaction ID was already submitted for this campaign — contact the admin on Discord to change it.",
+        error: `Too many payment attempts — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
       },
-      { status: 400 }
+      { status: 429 }
     );
   }
 
-  const body = (await request.json()) as { txId?: string };
+  let body: { txId?: string };
+  try {
+    body = (await request.json()) as { txId?: string };
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request — send a valid JSON body." },
+      { status: 400 }
+    );
+  }
   const txId = String(body.txId ?? "").trim();
   // A TRON transaction ID is exactly 64 hex characters. The old
   // check (8–128 chars, no whitespace) accepted any string — a
@@ -101,10 +148,39 @@ export async function POST(
       { status: 400 }
     );
   }
+  // Hex is case-insensitive: store the TxID lowercase so the
+  // uniqueness check below (and the admin's wallet check) compare
+  // one canonical spelling.
+  const txIdLower = txId.toLowerCase();
+  // One real payment cannot "fund" two campaigns: the same TxID
+  // on any OTHER campaign is rejected. (No unique DB constraint
+  // exists on payment_tx_id, so this is enforced here and at
+  // approve time.) The check is case-insensitive — ilike, because
+  // hex has no LIKE wildcards in it.
+  const { data: txClash } = await supabase
+    .from("campaigns")
+    .select("id")
+    .ilike("payment_tx_id", txIdLower)
+    .neq("id", params.id)
+    .limit(1);
+  if (txClash && txClash.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "This Transaction ID was already used on another campaign — one payment cannot fund two campaigns.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const previousTxId = String(
+    (campaign as { payment_tx_id?: string | null }).payment_tx_id ?? ""
+  ).trim();
+  const isCorrection = Boolean(previousTxId) && previousTxId.toLowerCase() !== txIdLower;
 
   const { error } = await supabase
     .from("campaigns")
-    .update({ payment_tx_id: txId })
+    .update({ payment_tx_id: txIdLower })
     .eq("id", params.id);
   if (error) {
     const msg = /payment_tx_id/i.test(error.message)
@@ -115,13 +191,16 @@ export async function POST(
   // Notify the owner on Discord (Item 11b) — full campaign details
   // + TxID, fire-and-forget. A Discord failure never breaks the
   // brand's request; no webhook is configured yet, so this is a
-  // silent no-op until Turn creates one.
+  // silent no-op until Turn creates one. A correction notifies
+  // again, so the admin never verifies a stale TxID.
   void notifyPaymentProof(campaign as unknown as NotifyCampaign, {
-    txId,
+    txId: txIdLower,
   });
   return NextResponse.json({
     ok: true,
-    message:
-      "Payment submitted. The admin will verify it and your campaign will go live once payment is verified.",
+    corrected: isCorrection,
+    message: isCorrection
+      ? "Transaction ID updated. The admin will verify the new one and your campaign will go live once payment is verified."
+      : "Payment submitted. The admin will verify it and your campaign will go live once payment is verified.",
   });
 }

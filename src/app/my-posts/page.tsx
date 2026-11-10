@@ -44,28 +44,43 @@ async function getUserCampaignHistory(
 export default async function MyPostsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  // The data getters THROW on a Supabase error (throw-contract,
-  // decided by the coordinator) instead of returning [] — so a
-  // failed load renders the honest error state below, never an
-  // empty "No posts here yet".
-  let submissions: Awaited<ReturnType<typeof getUserSubmissions>>;
-  let pastCampaigns: CampaignHistoryRow[];
+
+  // Forms #26: a failed load renders an honest error state, never
+  // the empty "no posts" state. getUserSubmissions THROWS on DB
+  // error; the campaign-history lookup is best-effort and still
+  // returns [] on failure, so it never triggers the error state.
+  let submissions: Awaited<ReturnType<typeof getUserSubmissions>> = [];
+  let loadError = false;
   try {
-    [submissions, pastCampaigns] = await Promise.all([
-      getUserSubmissions(user.id),
-      getUserCampaignHistory(user.id),
-    ]);
+    submissions = await getUserSubmissions(user.id);
   } catch {
+    loadError = true;
+  }
+  const pastCampaigns = await getUserCampaignHistory(user.id);
+  if (loadError) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">My Posts</h1>
-        </div>
-        <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
-          <p className="text-lg font-bold text-fg">Couldn&apos;t load your posts</p>
           <p className="mt-2 text-sm text-fg/60">
-            Couldn&apos;t load your posts — please try again.
+            Every clip you submitted, with views, likes and earnings. Metrics
+            update every 3 hours.
           </p>
+        </div>
+        <div className="rounded-3xl border border-red-500/40 bg-card p-8 text-center">
+          <p className="text-lg font-black text-fg">
+            Couldn&apos;t load your posts
+          </p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+            Your posts could not be loaded — please try again. Your data
+            is safe; this is a loading problem, not an empty list.
+          </p>
+          <a
+            href="/my-posts"
+            className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+          >
+            Try again
+          </a>
         </div>
       </div>
     );

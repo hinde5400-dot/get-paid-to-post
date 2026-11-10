@@ -4,6 +4,25 @@ import { getProfile, isOwner } from "@/lib/auth";
 import { SITE_URL } from "@/lib/constants";
 import { notifyPaymentProof } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
+import { imageBytesMatchMime } from "@/lib/image-validation";
+import { isValidTronTxId } from "@/lib/validate";
+
+/**
+ * Find a TRON Transaction ID inside a chat message — exactly the
+ * same definition as isValidTronTxId (exactly 64 hex chars, no 0x
+ * prefix): the 64 hex chars must NOT be part of a longer hex
+ * string and must NOT be prefixed with 0x. A 0x-prefixed hash is
+ * an Ethereum-style hash, not a TRON TxID, and a 64-hex substring
+ * of a longer blob is not a TxID either — neither fires a payment
+ * proof alert.
+ */
+function findTronTxId(text: string): string | null {
+  const m = text.match(
+    /(?<![0-9a-fA-F])(?<!0x)([0-9a-fA-F]{64})(?![0-9a-fA-F])/
+  );
+  const candidate = m?.[1] ?? null;
+  return candidate && isValidTronTxId(candidate) ? candidate : null;
+}
 
 /**
  * Private two-way brand <-> admin chat for one campaign (migration
@@ -91,6 +110,15 @@ export async function GET(
   if (!auth.user) {
     return NextResponse.json({ error: "Please log in first." }, { status: 401 });
   }
+  // A blocked account reads nothing here — the block is supposed
+  // to stop all activity, including brand chat.
+  const profile = await getProfile(auth.user.id);
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
+  }
   const campaign = await loadCampaign(supabase, params.id);
   if (!campaign) {
     return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
@@ -137,6 +165,15 @@ export async function POST(
   if (!(await canAccess(supabase, campaign, auth.user.id))) {
     return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
   }
+  const profile = await getProfile(auth.user.id);
+  // A blocked account sends nothing here — the block is supposed
+  // to stop all activity, including brand chat and proof uploads.
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
+  }
   // Best-effort rate limit (see lib/rate-limit.ts): 20 chat
   // messages per minute per user per campaign.
   const rl = rateLimit(
@@ -153,7 +190,6 @@ export async function POST(
       { status: 429 }
     );
   }
-  const profile = await getProfile(auth.user.id);
   const sender = isOwner(profile) ? "admin" : "brand";
 
   let text = "";
@@ -186,6 +222,20 @@ export async function POST(
       if (file.size > MAX_IMAGE_BYTES) {
         return NextResponse.json(
           { error: "Proof image must be 5 MB or smaller." },
+          { status: 400 }
+        );
+      }
+      // Magic-byte sniff: file.type is client-supplied, so a
+      // renamed non-image with a spoofed MIME must not reach the
+      // proofs bucket. The bytes must be a real image of the
+      // claimed type.
+      const proofBytes = new Uint8Array(await file.arrayBuffer());
+      if (!imageBytesMatchMime(proofBytes, file.type)) {
+        return NextResponse.json(
+          {
+            error:
+              "That file is not a real image — its contents do not match its type. Upload an actual screenshot (JPEG, PNG, WebP or GIF).",
+          },
           { status: 400 }
         );
       }
@@ -262,12 +312,15 @@ export async function POST(
   // the hash, so "TxID: <hash>" or the hash inside a sentence never
   // alerted Turn at the exact moment he needs to check his wallet.
   // And an image alone never fires a "payment proof" alert any
-  // more: without a TxID there is no payment to verify.
+  // more: without a TxID there is no payment to verify. The match
+  // uses the same definition as isValidTronTxId (exactly 64 hex,
+  // no 0x prefix, not part of a longer hex string) — see
+  // findTronTxId above.
   // Fire-and-forget — never breaks the request; a no-op until Turn
   // creates the webhook. Same per-brand forum thread as the
   // campaign-created notification.
   if (sender === "brand") {
-    const txHashInText = text.match(/(?:0x)?[0-9a-fA-F]{64}/)?.[0] ?? null;
+    const txHashInText = findTronTxId(text);
     const txId =
       txHashInText ??
       (messageType === "image"
@@ -305,6 +358,29 @@ export async function PATCH(
   const profile = await getProfile(auth.user.id);
   if (!isOwner(profile)) {
     return NextResponse.json({ error: "Admin only." }, { status: 403 });
+  }
+  // A blocked owner account marks nothing read.
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 20 mark-read
+  // calls per minute per admin per campaign.
+  const rl = rateLimit(
+    `messages-read:${auth.user.id}:${params.id}`,
+    20,
+    60_000
+  );
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
+    );
   }
   const body = (await request.json().catch(() => ({}))) as {
     markRead?: boolean;

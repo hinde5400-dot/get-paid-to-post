@@ -44,10 +44,24 @@ export default function AdminReviewList({
    *  payout is paused until the admin Approves, Rejects or
    *  Unflags it. */
   flags = {},
+  /** Pagination: total submissions across ALL pages (from an
+   *  exact count query) and the current page / page size. The
+   *  list pages newest-first; without the total, submissions past
+   *  the page would vanish silently. */
+  total = null,
+  page = 1,
+  pageSize = 100,
+  /** Creators' linked Instagram profile URLs (users.instagram_url,
+   *  pasted at onboarding) — for the Instagram hand-check below. */
+  instagramUrls = {},
 }: {
   submissions: AdminSubmission[];
   botCounts?: Record<string, number>;
   flags?: Record<string, { reason: string; flagged_at: string }>;
+  total?: number | null;
+  page?: number;
+  pageSize?: number;
+  instagramUrls?: Record<string, string>;
 }) {
   const router = useRouter();
   const [views, setViews] = useState<Record<string, string>>({});
@@ -285,6 +299,13 @@ export default function AdminReviewList({
       </div>
     );
   }
+
+  // Pagination footer: "Showing X–Y of Z" so the admin always
+  // knows when older submissions live on another page.
+  const totalCount = total ?? submissions.length;
+  const showingFrom = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showingTo = Math.min(page * pageSize, totalCount);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return (
     <div className="space-y-4">
@@ -582,6 +603,43 @@ export default function AdminReviewList({
             ) : null}
           </div>
 
+          {/* Instagram has no verifiable data: no API, no
+              ownership gate, no posted time — the stored row says
+              only "posted_time_unverified". Say so plainly, with
+              the hand-check the admin must actually do and the
+              creator's linked Instagram profile to check the
+              author against. */}
+          {s.platform === "instagram" && s.status === "pending" && (
+            <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
+              <p className="font-bold">
+                Instagram — posted time and ownership NOT verified
+                automatically.
+              </p>
+              <p className="mt-1">
+                Hand-check: open the Reel link, confirm the author
+                matches the creator&apos;s linked Instagram profile
+                and the post time is within 30 minutes.
+              </p>
+              {instagramUrls[s.user_id] ? (
+                <p className="mt-1">
+                  Linked Instagram profile:{" "}
+                  <a
+                    href={instagramUrls[s.user_id]}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="break-all font-bold underline"
+                  >
+                    {instagramUrls[s.user_id]}
+                  </a>
+                </p>
+              ) : (
+                <p className="mt-1 font-semibold">
+                  No Instagram profile link saved for this creator.
+                </p>
+              )}
+            </div>
+          )}
+
           {s.status === "rejected" && s.rejection_reason && (
             <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
               Rejected: {s.rejection_reason}
@@ -599,8 +657,9 @@ export default function AdminReviewList({
                 </p>
                 <p className="mt-0.5">{flags[s.id].reason}</p>
                 <p className="mt-0.5 text-xs text-amber-200/70">
-                  One appeal per flag via Discord. Approve, Reject or
-                  Unflag to decide.
+                  If you think this flag was wrong, appeal through
+                  Discord support. Approve, Reject or Unflag to
+                  decide.
                 </p>
                 <button
                   type="button"
@@ -730,6 +789,42 @@ export default function AdminReviewList({
           </div>
         </article>
       ))}
+      {/* Pagination: Prev / Next + "showing X of Y". Plain links
+          (no router hooks) — the admin page reads reviewPage from
+          the URL. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fg/10 bg-card px-5 py-3">
+        <p className="text-sm text-fg/60">
+          Showing {showingFrom}–{showingTo} of {totalCount} submission
+          {totalCount === 1 ? "" : "s"}
+          {totalPages > 1 ? ` (page ${page} of ${totalPages})` : ""}
+        </p>
+        <div className="flex gap-2">
+          {page > 1 ? (
+            <a
+              href={`?reviewPage=${page - 1}`}
+              className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
+            >
+              ← Prev
+            </a>
+          ) : (
+            <span className="cursor-not-allowed rounded-full border border-fg/10 px-4 py-2 text-sm font-bold text-fg/30">
+              ← Prev
+            </span>
+          )}
+          {page < totalPages ? (
+            <a
+              href={`?reviewPage=${page + 1}`}
+              className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
+            >
+              Next →
+            </a>
+          ) : (
+            <span className="cursor-not-allowed rounded-full border border-fg/10 px-4 py-2 text-sm font-bold text-fg/30">
+              Next →
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

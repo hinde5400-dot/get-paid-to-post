@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { BrandMessage } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
@@ -15,41 +15,34 @@ function imageUrl(campaignId: string, messageId: string) {
  * the campaign's Transaction ID, and the full two-way conversation
  * (brand messages and admin replies, oldest first), with proof
  * screenshots shown inline. The admin replies in the thread itself.
- * Unread messages are highlighted; viewing the inbox marks them read.
+ *
+ * Threads start collapsed. Opening a thread marks ITS messages
+ * read — and only on PATCH success, never optimistically and never
+ * for threads the admin never opened. (The old code marked every
+ * unread message read on inbox mount, even unopened threads, and
+ * set local is_read even when the PATCH failed.)
+ *
+ * Paginated: the inbox pages newest-first (props total/page/
+ * pageSize) with "showing X–Y of Z", so old threads never vanish
+ * silently.
  */
 export default function AdminMessagesList({
   messages: initial,
+  total = null,
+  page = 1,
+  pageSize = 100,
 }: {
   messages: BrandMessage[];
+  total?: number | null;
+  page?: number;
+  pageSize?: number;
 }) {
   const { showError, showSuccess } = useToast();
   const [messages, setMessages] = useState<BrandMessage[]>(initial);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState<Record<string, boolean>>({});
-  const markedRef = useRef(false);
-
-  // Viewing the inbox marks its unread messages as read.
-  useEffect(() => {
-    if (markedRef.current) return;
-    markedRef.current = true;
-    const unreadCampaigns = [
-      ...new Set(
-        initial.filter((m) => !m.is_read).map((m) => m.campaign_id)
-      ),
-    ];
-    if (unreadCampaigns.length === 0) return;
-    void Promise.all(
-      unreadCampaigns.map((campaignId) =>
-        fetch(`/api/campaigns/${campaignId}/messages`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ markRead: true }),
-        }).catch(() => undefined)
-      )
-    ).then(() => {
-      setMessages((prev) => prev.map((m) => ({ ...m, is_read: true })));
-    });
-  }, [initial]);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [marking, setMarking] = useState<Record<string, boolean>>({});
 
   const threads = useMemo(() => {
     const byCampaign = new Map<string, BrandMessage[]>();
@@ -107,7 +100,46 @@ export default function AdminMessagesList({
     }
   }
 
-  if (threads.length === 0) {
+  // Opening a thread marks ITS messages read — only this thread,
+  // and only when the PATCH succeeds. A failed PATCH keeps the
+  // unread badge and shows an error; local is_read is never set
+  // optimistically.
+  async function toggleThread(campaignId: string) {
+    const willOpen = !open[campaignId];
+    setOpen((prev) => ({ ...prev, [campaignId]: willOpen }));
+    if (!willOpen || marking[campaignId]) return;
+    const thread = threads.find((t) => t.campaignId === campaignId);
+    if (!thread || thread.messages.every((m) => m.is_read)) return;
+    setMarking((prev) => ({ ...prev, [campaignId]: true }));
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/messages`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markRead: true }),
+      });
+      if (!res.ok) throw new Error("Could not mark messages as read.");
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.campaign_id === campaignId ? { ...m, is_read: true } : m
+        )
+      );
+    } catch (err) {
+      showError(
+        err instanceof Error
+          ? err.message
+          : "Could not mark messages as read."
+      );
+    } finally {
+      setMarking((prev) => ({ ...prev, [campaignId]: false }));
+    }
+  }
+
+  const totalCount = total ?? messages.length;
+  const showingFrom = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showingTo = Math.min(page * pageSize, totalCount);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  if (threads.length === 0 && totalCount === 0) {
     return (
       <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center text-sm text-fg/60">
         No brand messages yet.
@@ -122,6 +154,8 @@ export default function AdminMessagesList({
         const unread = thread.filter((m) => !m.is_read).length;
         const draft = drafts[campaignId] ?? "";
         const busy = sending[campaignId] ?? false;
+        const isOpen = Boolean(open[campaignId]);
+        const last = thread[thread.length - 1];
         return (
           <div
             key={campaignId}
@@ -130,7 +164,11 @@ export default function AdminMessagesList({
               unread > 0 ? "border-red-500/50" : "border-fg/10"
             }`}
           >
-            <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void toggleThread(campaignId)}
+              className="flex w-full flex-wrap items-center gap-2 text-left"
+            >
               <p className="min-w-0 flex-1 truncate font-display text-base font-black tracking-tight text-fg">
                 {first?.campaign_title ?? "Campaign"}
               </p>
@@ -139,11 +177,22 @@ export default function AdminMessagesList({
                   {unread} New
                 </span>
               )}
-            </div>
+              <span className="shrink-0 rounded-full border border-fg/20 px-3 py-1 text-xs font-bold text-fg">
+                {isOpen ? "Close ↑" : "Open thread ↓"}
+              </span>
+            </button>
             <p className="mt-1 truncate text-sm text-fg/60">
               {first?.brand_name ?? "Brand"}
+              {last ? (
+                <span className="text-fg/40">
+                  {" · "}
+                  {new Date(last.created_at).toLocaleString("en-US")}
+                </span>
+              ) : null}
             </p>
 
+            {isOpen && (
+              <>
             <div className="mt-3 rounded-xl bg-fg/5 px-4 py-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
                 Transaction ID
@@ -238,9 +287,46 @@ export default function AdminMessagesList({
                 )}
               </button>
             </div>
+              </>
+            )}
           </div>
         );
       })}
+      {/* Pagination: Prev / Next + "showing X of Y". Plain links —
+          the admin page reads inboxPage from the URL. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fg/10 bg-card px-5 py-3">
+        <p className="text-sm text-fg/60">
+          Showing {showingFrom}–{showingTo} of {totalCount} message
+          {totalCount === 1 ? "" : "s"}
+          {totalPages > 1 ? ` (page ${page} of ${totalPages})` : ""}
+        </p>
+        <div className="flex gap-2">
+          {page > 1 ? (
+            <a
+              href={`?inboxPage=${page - 1}`}
+              className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
+            >
+              ← Prev
+            </a>
+          ) : (
+            <span className="cursor-not-allowed rounded-full border border-fg/10 px-4 py-2 text-sm font-bold text-fg/30">
+              ← Prev
+            </span>
+          )}
+          {page < totalPages ? (
+            <a
+              href={`?inboxPage=${page + 1}`}
+              className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
+            >
+              Next →
+            </a>
+          ) : (
+            <span className="cursor-not-allowed rounded-full border border-fg/10 px-4 py-2 text-sm font-bold text-fg/30">
+              Next →
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

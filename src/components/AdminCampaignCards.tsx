@@ -72,12 +72,16 @@ export default function AdminCampaignCards({
   campaigns,
   statsByCampaign,
   hasProof,
+  hasMessages,
   budgetHistory,
 }: {
   campaigns: Campaign[];
   statsByCampaign: Record<string, CampaignCardStats>;
-  /** Campaign ids that have at least one brand message (proof). */
+  /** Campaign ids that have at least one real proof message. */
   hasProof: Record<string, boolean>;
+  /** Campaign ids that have at least one brand message (any kind)
+   *  — their button reads "Chat", not "Proof". */
+  hasMessages: Record<string, boolean>;
   budgetHistory: Record<string, BudgetHistoryEntry[]>;
 }) {
   if (campaigns.length === 0) {
@@ -95,6 +99,7 @@ export default function AdminCampaignCards({
           campaign={c}
           stats={statsByCampaign[c.id] ?? EMPTY_STATS}
           hasProof={Boolean(hasProof[c.id])}
+          hasMessages={Boolean(hasMessages[c.id])}
           history={budgetHistory[c.id] ?? []}
         />
       ))}
@@ -106,11 +111,13 @@ function AdminCampaignCard({
   campaign: c,
   stats,
   hasProof,
+  hasMessages,
   history,
 }: {
   campaign: Campaign;
   stats: CampaignCardStats;
   hasProof: boolean;
+  hasMessages: boolean;
   history: BudgetHistoryEntry[];
 }) {
   const router = useRouter();
@@ -125,9 +132,28 @@ function AdminCampaignCard({
   const [saving, setSaving] = useState(false);
   const [postsOpen, setPostsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Approve / Reject confirm state: approve/reject are one-tap
+  // and irreversible (no un-approve; a rejected campaign never
+  // shows anywhere), so both go through a confirm step first.
+  // Reject also REQUIRES a reason (≤200 chars), which the brand
+  // sees. The approve panel carries the underfunding checkbox
+  // only when the flag below applies.
+  const [confirming, setConfirming] = useState<"approve" | "reject" | null>(
+    null
+  );
+  const [rejectReason, setRejectReason] = useState("");
+  const [confirmUnderfunded, setConfirmUnderfunded] = useState(false);
 
   const status = campaignStatus(c);
   const isPending = c.status === "pending";
+  // Budget edited while a payment was on file: the TxID may
+  // verify a SMALLER amount than the current budget. Exact
+  // ordering cannot be proven from the stored data (no TxID
+  // timestamp), so ANY budget edit on file while a TxID is
+  // recorded raises the flag — the admin must confirm the extra
+  // budget + 15% fee arrived before approving.
+  const underfundedFlag =
+    isPending && history.length > 0 && Boolean(c.payment_tx_id);
   const usedPct = budgetUsedPct(c.budget_total, c.budget_left);
   // Spent = total − left (same definition as the budget edit
   // API). A negative left (over-spent) counts as fully spent.
@@ -153,7 +179,14 @@ function AdminCampaignCard({
       ? newTotalParsed - spent
       : null;
 
-  async function act(action: "approve" | "reject") {
+  async function act(
+    action: "approve" | "reject",
+    opts: { reason?: string; confirmUnderfunded?: boolean } = {}
+  ) {
+    if (action === "reject" && !(opts.reason ?? "").trim()) {
+      showError("Give a reason for rejecting this campaign.");
+      return;
+    }
     setBusyId(c.id);
     setBusyAction(action);
     // Same 30s abort as the old pending list: a stalled mobile
@@ -164,16 +197,47 @@ function AdminCampaignCard({
       const res = await fetch("/api/admin/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId: c.id, action }),
+        body: JSON.stringify({
+          campaignId: c.id,
+          action,
+          ...(opts.reason ? { reason: opts.reason.trim() } : {}),
+          ...(opts.confirmUnderfunded
+            ? { confirmUnderfunded: true }
+            : {}),
+        }),
         signal: controller.signal,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Action failed.");
+      if (!res.ok) {
+        // The budget was edited while a payment was on file and
+        // the admin has not confirmed the extra money arrived:
+        // open the approve confirm panel (with the checkbox)
+        // instead of just a toast, so the decision stays in
+        // front of them.
+        if (
+          action === "approve" &&
+          (data as { underfundedRisk?: boolean }).underfundedRisk
+        ) {
+          setConfirming("approve");
+          showError(
+            (data as { error?: string }).error ||
+              "Budget was changed after this payment was submitted."
+          );
+          return;
+        }
+        throw new Error(data.error || "Action failed.");
+      }
       showSuccess(
         action === "approve"
           ? "Campaign approved — it is now live."
           : "Campaign rejected."
       );
+      if ((data as { chatWarning?: string }).chatWarning) {
+        showError((data as { chatWarning: string }).chatWarning);
+      }
+      setConfirming(null);
+      setRejectReason("");
+      setConfirmUnderfunded(false);
       router.refresh();
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -265,10 +329,12 @@ function AdminCampaignCard({
           title={
             hasProof
               ? "Open this campaign's proof — its brand chat and payment proof"
-              : "This campaign has no brand messages yet"
+              : hasMessages
+                ? "Open this campaign's brand chat (no proof attached yet)"
+                : "This campaign has no brand messages yet"
           }
         >
-          {hasProof ? "Proof ↗" : "Proof — none yet"}
+          {hasProof ? "Proof ↗" : hasMessages ? "Chat ↗" : "Proof — none yet"}
         </a>
       </div>
 
@@ -454,10 +520,12 @@ function AdminCampaignCard({
         )}
       </div>
 
-      {/* Payment status — the proof the budget was sent (pending
-          campaigns). Approve only after the budget actually
-          reached the owner. */}
-      {isPending && (
+      {/* Payment status — the proof the budget was sent.
+          Approve only after the budget actually reached the
+          owner. Shown on pending AND live cards: once live, the
+          TxID is the audit trail for what was verified, not
+          something to dig out of the chat thread. */}
+      {(isPending || c.status === "live") && (
         <div
           className={`mt-3 rounded-xl px-4 py-3 ${
             c.payment_tx_id
@@ -484,6 +552,14 @@ function AdminCampaignCard({
               >
                 Verify on Tronscan ↗
               </a>
+              {underfundedFlag && (
+                <p className="mt-2 text-xs font-bold leading-relaxed text-amber-300">
+                  ⚠ This campaign&apos;s budget was edited while a
+                  payment was on file — the TxID may predate the
+                  edit. Verify the extra budget + 15% fee was
+                  received before approving.
+                </p>
+              )}
             </>
           ) : (
             <>
@@ -519,14 +595,31 @@ function AdminCampaignCard({
       )}
 
       {/* Actions: approve/reject for pending campaigns, budget
-          edit for every card. */}
+          edit for every card. Approve and Reject are irreversible
+          (no un-approve; a rejected campaign never shows
+          anywhere), so both confirm first — approve with a
+          window.confirm, or the inline panel when the budget-edit
+          flag applies (it needs the checkbox); reject always with
+          the inline panel, because it needs a reason. */}
       <div className="mt-4 flex flex-wrap gap-2">
         {isPending && (
           <>
             <button
               type="button"
               disabled={busyId === c.id}
-              onClick={() => void act("approve")}
+              onClick={() => {
+                if (underfundedFlag) {
+                  setConfirming("approve");
+                  return;
+                }
+                if (
+                  window.confirm(
+                    "Approve this campaign? It goes live on Discover right away. This cannot be undone — there is no un-approve."
+                  )
+                ) {
+                  void act("approve");
+                }
+              }}
               className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-500 py-2.5 text-sm font-black text-white transition hover:bg-red-600 disabled:opacity-40"
             >
               {busyId === c.id && busyAction === "approve" ? (
@@ -540,7 +633,7 @@ function AdminCampaignCard({
             <button
               type="button"
               disabled={busyId === c.id}
-              onClick={() => void act("reject")}
+              onClick={() => setConfirming("reject")}
               className="flex flex-1 items-center justify-center gap-2 rounded-full border border-red-400/40 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
             >
               {busyId === c.id && busyAction === "reject" ? (
@@ -564,6 +657,127 @@ function AdminCampaignCard({
           {editOpen ? "Close budget edit" : "Edit budget"}
         </button>
       </div>
+
+      {/* Approve / Reject confirm panel. Approve is one tap away
+          from live on Discover and cannot be undone; reject hides
+          the campaign forever and the brand sees the reason. */}
+      {confirming && (
+        <div className="mt-4 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4">
+          {confirming === "approve" ? (
+            <>
+              <p className="text-sm font-black text-amber-200">
+                Approve this campaign — go live?
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-fg/70">
+                This puts the campaign live on Discover right away.
+                There is no un-approve.
+              </p>
+              {underfundedFlag && (
+                <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-sm font-bold text-amber-200">
+                  <input
+                    type="checkbox"
+                    checked={confirmUnderfunded}
+                    onChange={(e) =>
+                      setConfirmUnderfunded(e.target.checked)
+                    }
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-[#C6FF00]"
+                  />
+                  This campaign&apos;s budget was edited while a
+                  payment was on file — I verified the extra budget +
+                  15% fee was received.
+                </label>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={
+                    busyId === c.id ||
+                    (underfundedFlag && !confirmUnderfunded)
+                  }
+                  onClick={() => {
+                    setConfirming(null);
+                    void act("approve", { confirmUnderfunded });
+                  }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-500 py-2.5 text-sm font-black text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {busyId === c.id && busyAction === "approve" ? (
+                    <>
+                      <Spinner /> Loading...
+                    </>
+                  ) : (
+                    "Confirm approve"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === c.id}
+                  onClick={() => {
+                    setConfirming(null);
+                    setConfirmUnderfunded(false);
+                  }}
+                  className="rounded-full border border-fg/15 px-5 py-2.5 text-sm font-bold text-fg transition hover:bg-fg/5 disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-black text-amber-200">
+                Reject this campaign?
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-fg/70">
+                Rejecting hides it forever — it is never shown
+                anywhere. The brand sees your reason on its dashboard
+                and payment page.
+              </p>
+              <label className="mt-3 block text-xs font-bold text-fg/60">
+                Reason (required, max 200 characters)
+                <input
+                  type="text"
+                  value={rejectReason}
+                  maxLength={200}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder='e.g. "Budget was never sent" or "Brief breaks the rules"'
+                  className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-2.5 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
+                />
+              </label>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={
+                    busyId === c.id || !rejectReason.trim()
+                  }
+                  onClick={() => {
+                    setConfirming(null);
+                    void act("reject", { reason: rejectReason.trim() });
+                  }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-500 py-2.5 text-sm font-black text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {busyId === c.id && busyAction === "reject" ? (
+                    <>
+                      <Spinner /> Loading...
+                    </>
+                  ) : (
+                    "Confirm reject"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === c.id}
+                  onClick={() => {
+                    setConfirming(null);
+                    setRejectReason("");
+                  }}
+                  className="rounded-full border border-fg/15 px-5 py-2.5 text-sm font-bold text-fg transition hover:bg-fg/5 disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Budget edit panel. Money never moves here: an increase
           only works if the brand already sent the extra budget +

@@ -68,10 +68,15 @@ export default function BrandForm({
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
     null
   );
-  // Already-uploaded images, kept so a retry never uploads the same
-  // file twice: if the thumbnail upload or the campaign POST fails
-  // after the logo uploaded, the next submit reuses the stored URL
-  // instead of uploading again — no orphaned file, no re-picking.
+  // Already-uploaded images, kept so a retry usually never
+  // uploads the same file twice: if the thumbnail upload or the
+  // campaign POST fails after the logo uploaded, the next submit
+  // reuses the stored URL instead of uploading again. That does
+  // NOT guarantee no orphaned file: if attempt 1 stored the
+  // object but its response was lost, the retry uploads a second
+  // object and the first is orphaned, and changing the file after
+  // a successful upload orphans the first upload too. The daily
+  // orphan sweep deletes images that end up unreferenced.
   const [uploaded, setUploaded] = useState<{
     logo?: { file: File; url: string };
     thumbnail?: { file: File; url: string };
@@ -155,6 +160,32 @@ export default function BrandForm({
     return false;
   }
 
+  // Map a server 400 message back to its form field, so a
+  // server-side cap (brand name 100, title 120, brief /
+  // requirements 5,000 chars, rate ≤ $1,000/1k, budget ≤
+  // $1,000,000) highlights the field and scrolls to it exactly
+  // like the client errors above — never a bare toast. Matches
+  // the messages in POST /api/campaigns. Returns null when the
+  // message names no field (upload / network errors).
+  function serverErrorField(message: string): string | null {
+    const m = message.toLowerCase();
+    if (m.includes("brand name")) return "brandName";
+    if (m.includes("brand logo")) return "logoUrl";
+    if (m.includes("campaign title")) return "title";
+    if (m.includes("category")) return "category";
+    if (m.includes("campaign brief")) return "brief";
+    if (m.includes("video requirements")) return "requirements";
+    if (m.includes("select at least one platform")) return "platforms";
+    if (m.includes("max payout")) return "maxPayout";
+    if (m.includes("minimum views")) return "minViews";
+    if (m.includes("rate")) return "rate";
+    if (m.includes("budget")) return "budget";
+    if (m.includes("google drive")) return "driveUrl";
+    if (m.includes("thumbnail")) return "thumbnailUrl";
+    if (m.includes("duration")) return "duration";
+    return null;
+  }
+
   function togglePlatform(p: Platform) {
     setPlatforms((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
@@ -180,9 +211,11 @@ export default function BrandForm({
 
   // Upload with one retry, reusing an already-uploaded URL for the
   // same file: a failed thumbnail upload or a failed campaign POST
-  // must not orphan the first image or force the brand to re-pick
-  // both files. (The daily orphan sweep still deletes any image
-  // that ends up unreferenced after a day.)
+  // must not force the brand to re-pick both files. It does not
+  // guarantee no orphan: if an upload stored the object but its
+  // response was lost, the retry creates a second object and the
+  // first is orphaned — the daily orphan sweep deletes
+  // unreferenced images after a day.
   async function uploadImageReuse(
     file: File,
     kind: "logo" | "thumbnail"
@@ -329,7 +362,9 @@ export default function BrandForm({
       // brand that goes "Back to edit" never uploads anything),
       // then create the campaign with the returned storage URLs.
       // Each upload retries once; an already-uploaded file is
-      // reused, so a failure never orphans the first image.
+      // reused, so a retry usually never re-uploads. An ambiguous
+      // failure (object stored, response lost) can still orphan
+      // an image — the daily orphan sweep cleans those up.
       const logoUrl = await uploadImageReuse(logo, "logo");
       const thumbnailUrl = await uploadImageReuse(thumbnail, "thumbnail");
       const res = await fetch("/api/campaigns", {
@@ -373,9 +408,21 @@ export default function BrandForm({
       // brand sends the budget in USDT on the payment page.
       if (data.id) router.push(`/brands/payment/${data.id}`);
     } catch (err) {
-      showError(
-        err instanceof Error ? err.message : "Could not save the campaign."
-      );
+      const msg =
+        err instanceof Error ? err.message : "Could not save the campaign.";
+      // A server-side failure (e.g. a length/rate/budget cap) maps
+      // to its field and scrolls to it — the bare toast alone
+      // never says which field failed. The review panel is closed
+      // first so the field is visible again. The already-uploaded
+      // images are reused on retry (uploaded state is untouched),
+      // so fixing the field and resubmitting never re-uploads.
+      const field = serverErrorField(msg);
+      if (field) {
+        setReviewing(false);
+        fail(field, msg);
+      } else {
+        showError(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -471,8 +518,6 @@ export default function BrandForm({
   const reviewHasUnset = Object.values(reviewUnset).some(Boolean);
   const reviewPlatformName = (p: Platform) =>
     p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube";
-  const reviewTrunc = (s: string) =>
-    s.length > 200 ? `${s.slice(0, 200)}…` : s;
 
   return (
     <form
@@ -627,14 +672,14 @@ export default function BrandForm({
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
               <p className="text-xs font-bold text-fg/50">Campaign Brief</p>
-              <p className="mt-0.5 whitespace-pre-wrap text-sm text-fg/80">
-                {reviewTrunc(brief.trim())}
+              <p className="mt-0.5 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm text-fg/80">
+                {brief.trim()}
               </p>
             </div>
             <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
               <p className="text-xs font-bold text-fg/50">Video Requirements</p>
-              <p className="mt-0.5 whitespace-pre-wrap text-sm text-fg/80">
-                {reviewTrunc(requirements.trim())}
+              <p className="mt-0.5 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm text-fg/80">
+                {requirements.trim()}
               </p>
             </div>
           </div>
@@ -657,6 +702,7 @@ export default function BrandForm({
           Brand Name
           <input
             value={brandName}
+            maxLength={100}
             onChange={(e) => setBrandName(e.target.value)}
             placeholder="Your brand"
             className={inputCls}
@@ -680,6 +726,7 @@ export default function BrandForm({
           Campaign Title
           <input
             value={title}
+            maxLength={120}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Show Your Energy"
             className={inputCls}
@@ -898,6 +945,7 @@ export default function BrandForm({
         <textarea
           rows={7}
           value={brief}
+          maxLength={5000}
           onChange={(e) => setBrief(e.target.value)}
           placeholder={`Example — write your brief in four short parts:
 
@@ -923,6 +971,7 @@ CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 f
         <textarea
           rows={4}
           value={requirements}
+          maxLength={5000}
           onChange={(e) => setRequirements(e.target.value)}
           placeholder="e.g. Hook in the first 3 seconds. Show the product clearly in the first 5 seconds. Vertical 9:16, captions on screen. No competitor logos. End with the CTA: try [Brand] today."
           className={`${inputCls} resize-none`}

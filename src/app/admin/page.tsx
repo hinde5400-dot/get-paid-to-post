@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import type { Campaign } from "@/lib/types";
-import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, isCampaignSettling, campaignStatus } from "@/lib/data";
+import type { BrandMessage, Campaign } from "@/lib/types";
+import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, getSubmissionStatusCounts, getBrandMessagesCount, getUnreadBrandMessagesCount, getBotRejectionRowCount, isCampaignSettling, campaignStatus } from "@/lib/data";
 import { fraudStatus } from "@/lib/fraud";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -17,7 +17,11 @@ import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
 import AdminSettingsForm from "@/components/AdminSettingsForm";
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams?: { reviewPage?: string; inboxPage?: string };
+}) {
   if (!isSupabaseConfigured) {
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-fg/10 bg-card p-8 text-center">
@@ -44,32 +48,84 @@ export default async function AdminPage() {
     );
   }
 
-  const submissions = await getAllSubmissions();
-  const pendingCampaigns = await getPendingCampaigns();
-  const withdrawals = await getAllWithdrawals();
-  const adminWallet = await getAdminUsdtWallet();
-  const brandMessages = await getBrandMessages();
-  const botRows = await getCreatorBotRejections();
-  const creatorFlags = await getCreatorFlags();
-  const submissionFlags = await getSubmissionFlags();
-  const discoverCampaigns = await getDiscoverCampaigns();
+  // Pagination (Brand P1-7): the review list and the inbox page
+  // newest-first, 100 rows per page, with exact totals so nothing
+  // vanishes silently. Page numbers come from the URL
+  // (?reviewPage= / ?inboxPage=).
+  const REVIEW_PAGE_SIZE = 100;
+  const INBOX_PAGE_SIZE = 100;
+  const reviewPage = Math.max(
+    1,
+    Number(searchParams?.reviewPage ?? 1) || 1
+  );
+  const inboxPage = Math.max(1, Number(searchParams?.inboxPage ?? 1) || 1);
+
+  // Forms #26: a failed load renders an honest error state, never
+  // an empty admin view. The list getters THROW on DB error.
+  let submissions: Awaited<ReturnType<typeof getAllSubmissions>> = [];
+  let statusCounts = { pending: 0, approved: 0, rejected: 0, total: 0 };
+  let pendingCampaigns: Awaited<ReturnType<typeof getPendingCampaigns>> =
+    [];
+  let withdrawals: Awaited<ReturnType<typeof getAllWithdrawals>> = [];
+  let adminWallet: string | null = null;
+  let brandMessages: Awaited<ReturnType<typeof getBrandMessages>> = [];
+  let messagesTotal = 0;
+  let unreadMessages = 0;
+  let botRows: Awaited<ReturnType<typeof getCreatorBotRejections>> = [];
+  let botRowTotal = 0;
+  let creatorFlags: Awaited<ReturnType<typeof getCreatorFlags>> = {};
+  let submissionFlags: Awaited<ReturnType<typeof getSubmissionFlags>> = {};
+  let discoverCampaigns: Awaited<ReturnType<typeof getDiscoverCampaigns>> =
+    [];
+  let loadError = false;
+  try {
+    submissions = await getAllSubmissions({
+      limit: REVIEW_PAGE_SIZE,
+      offset: (reviewPage - 1) * REVIEW_PAGE_SIZE,
+    });
+    statusCounts = await getSubmissionStatusCounts();
+    pendingCampaigns = await getPendingCampaigns();
+    withdrawals = await getAllWithdrawals();
+    adminWallet = await getAdminUsdtWallet();
+    brandMessages = await getBrandMessages({
+      limit: INBOX_PAGE_SIZE,
+      offset: (inboxPage - 1) * INBOX_PAGE_SIZE,
+    });
+    messagesTotal = await getBrandMessagesCount();
+    unreadMessages = await getUnreadBrandMessagesCount();
+    botRows = await getCreatorBotRejections();
+    botRowTotal = await getBotRejectionRowCount();
+    creatorFlags = await getCreatorFlags();
+    submissionFlags = await getSubmissionFlags();
+    discoverCampaigns = await getDiscoverCampaigns();
+  } catch {
+    loadError = true;
+  }
+  if (loadError) {
+    return <AdminLoadError />;
+  }
 
   // Creator emails + blocked state for the review and fraud lists
-  // (owner can read all users).
+  // (owner can read all users), plus the linked Instagram profile
+  // URL (users.instagram_url, pasted at onboarding) for the
+  // Instagram hand-check on review cards.
   const supabase = getServerClient();
   const emailById = new Map<string, string>();
   const blockedById = new Map<string, boolean>();
+  const instagramById = new Map<string, string>();
   if (supabase) {
     const { data } = await supabase
       .from("users")
-      .select("id, email, is_blocked");
+      .select("id, email, is_blocked, instagram_url");
     for (const row of (data ?? []) as {
       id: string;
       email: string;
       is_blocked?: boolean;
+      instagram_url?: string | null;
     }[]) {
       emailById.set(row.id, row.email);
       blockedById.set(row.id, Boolean(row.is_blocked));
+      if (row.instagram_url) instagramById.set(row.id, row.instagram_url);
     }
   }
 
@@ -78,9 +134,12 @@ export default async function AdminPage() {
     creator_email: emailById.get(s.user_id) ?? s.user_id.slice(0, 8),
   }));
 
-  const pending = items.filter((s) => s.status === "pending").length;
-  const approvedCount = items.filter((s) => s.status === "approved").length;
-  const rejectedCount = items.filter((s) => s.status === "rejected").length;
+  // Headline counts come from exact count queries over the whole
+  // table, not from the current review-list page — the numbers
+  // stay right when the list is paged.
+  const pending = statusCounts.pending;
+  const approvedCount = statusCounts.approved;
+  const rejectedCount = statusCounts.rejected;
   const pendingWithdrawals = withdrawals.filter(
     (w) => w.status === "pending"
   ).length;
@@ -143,17 +202,36 @@ export default async function AdminPage() {
     });
   }
 
-  // Which campaigns have proof — at least one brand message in
-  // their chat thread. The Proof button on a card jumps to that
-  // campaign's thread; a campaign with no messages yet links to
-  // the inbox instead.
+  // Which campaigns have proof — a message that IS a proof, not
+  // just any message: an image/proof upload, or a message
+  // containing a Transaction ID (exactly 64 hex chars, bounded —
+  // the same definition as isValidTronTxId). A plain "hello" text
+  // used to light up the "Proof ↗" button; now it shows "Chat".
+  // Computed from the current inbox page only (see the note on
+  // page-scoped sections below).
+  function isProofMessage(m: BrandMessage): boolean {
+    if (m.message_type === "image" || m.image_path || m.proof_url)
+      return true;
+    return /(?<![0-9a-fA-F])(?<!0x)[0-9a-fA-F]{64}(?![0-9a-fA-F])/.test(
+      m.message
+    );
+  }
   const hasProof: Record<string, boolean> = {};
-  for (const m of brandMessages) hasProof[m.campaign_id] = true;
+  const hasMessages: Record<string, boolean> = {};
+  for (const m of brandMessages) {
+    hasMessages[m.campaign_id] = true;
+    if (isProofMessage(m)) hasProof[m.campaign_id] = true;
+  }
 
-  const budgetHistory = await getCampaignBudgetHistory(
-    cardCampaigns.map((c) => c.id)
-  );
-  const unreadMessages = brandMessages.filter((m) => !m.is_read).length;
+  let budgetHistory: Awaited<ReturnType<typeof getCampaignBudgetHistory>> =
+    {};
+  try {
+    budgetHistory = await getCampaignBudgetHistory(
+      cardCampaigns.map((c) => c.id)
+    );
+  } catch {
+    return <AdminLoadError />;
+  }
   const withdrawalItems: WithdrawalWithCreator[] = withdrawals.map((w) => ({
     ...w,
     creator_email: emailById.get(w.user_id) ?? w.user_id.slice(0, 8),
@@ -367,7 +445,7 @@ export default async function AdminPage() {
           automatically once the hold ends.
         </p>
         <p className="mt-2 inline-block rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
-          {pending} pending · {items.length} total submissions
+          {pending} pending · {statusCounts.total} total submissions
         </p>
       </div>
 
@@ -458,6 +536,7 @@ export default async function AdminPage() {
             campaigns={cardCampaigns}
             statsByCampaign={statsByCampaign}
             hasProof={hasProof}
+            hasMessages={hasMessages}
             budgetHistory={budgetHistory}
           />
         </div>
@@ -472,17 +551,17 @@ export default async function AdminPage() {
             Brand messages
           </h2>
           <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
-            {unreadMessages} unread · {brandMessages.length} total
+            {unreadMessages} unread · {messagesTotal} total
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
           Private two-way chat with brands — payment confirmations and
           proof screenshots, attached to their campaign. Reply to a
           brand right here in the thread; brands can also reach you on
-          Discord. Viewing this inbox marks messages as read.
+          Discord. Open a thread to read it — opening a thread marks its messages as read.
         </p>
         <div className="mt-4">
-          <AdminMessagesList messages={brandMessages} />
+          <AdminMessagesList messages={brandMessages} total={messagesTotal} page={inboxPage} pageSize={INBOX_PAGE_SIZE} />
         </div>
       </section>
 
@@ -567,7 +646,9 @@ export default async function AdminPage() {
           </h2>
           <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
             {fraudCreators.length} creator
-            {fraudCreators.length === 1 ? "" : "s"} in fraud watch
+            {fraudCreators.length === 1 ? "" : "s"} in fraud watch ·{" "}
+            {botRowTotal} bot rejection{botRowTotal === 1 ? "" : "s"} counted
+            {botRowTotal > 2000 ? " (showing first 2,000 rows)" : ""}
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
@@ -575,8 +656,8 @@ export default async function AdminPage() {
           watch their next submissions. 10 is a flag, and one more bot
           rejection after the flag bans them automatically. You also get
           a Discord alert at 6, 10, and when an auto-ban happens.
-          Botting means a permanent ban, with one appeal via Discord
-          (Terms §8).
+          Botting means a permanent ban — if you think a flag was
+          wrong, appeal through Discord support (Terms §8).
         </p>
         <div className="mt-4">
           <AdminFraudList creators={fraudCreators} />
@@ -587,8 +668,24 @@ export default async function AdminPage() {
         <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
           Submission review
         </h2>
+        {statusCounts.total > REVIEW_PAGE_SIZE && (
+          <p className="mt-2 max-w-2xl rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
+            Showing page {reviewPage} of the review list — the
+            Campaigns stats, Payouts, Creators and Re-check sections
+            above and below reflect the submissions on this page
+            only. Page through the list to reach older submissions.
+          </p>
+        )}
         <div className="mt-4">
-          <AdminReviewList submissions={items} botCounts={botCounts} flags={submissionFlags} />
+          <AdminReviewList
+            submissions={items}
+            botCounts={botCounts}
+            flags={submissionFlags}
+            total={statusCounts.total}
+            page={reviewPage}
+            pageSize={REVIEW_PAGE_SIZE}
+            instagramUrls={Object.fromEntries(instagramById)}
+          />
         </div>
       </section>
 
@@ -624,6 +721,29 @@ export default async function AdminPage() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+/** Honest load-failure state for /admin (Forms #26): a failed
+ *  data load is a loading problem, never an empty admin view. */
+function AdminLoadError() {
+  return (
+    <div className="mx-auto max-w-lg rounded-3xl border border-red-500/40 bg-card p-8 text-center">
+      <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">
+        Admin Review
+      </h1>
+      <p className="mt-3 text-sm leading-relaxed text-fg/60">
+        Couldn&apos;t load the admin page — please try again. Your
+        data is safe; this is a loading problem, not an empty admin
+        view.
+      </p>
+      <a
+        href="/admin"
+        className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+      >
+        Try again
+      </a>
     </div>
   );
 }

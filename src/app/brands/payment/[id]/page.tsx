@@ -1,8 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getCampaign, getAdminUsdtWallet, getCampaignMessages } from "@/lib/data";
+import {
+  getCampaign,
+  getAdminUsdtWallet,
+  getCampaignMessages,
+  getCampaignRejectionReason,
+} from "@/lib/data";
 import { formatUSD } from "@/lib/money";
+import type { BrandMessage } from "@/lib/types";
 import PaymentForm from "@/components/PaymentForm";
 import BrandMessageForm from "@/components/BrandMessageForm";
 import CopyButton from "@/components/CopyButton";
@@ -29,12 +35,22 @@ export default async function BrandPaymentPage({
   if (!ownsIt && !isOwner(profile)) notFound();
 
   const wallet = await getAdminUsdtWallet();
-  const messages = await getCampaignMessages(campaign.id);
+  // The chat is best-effort here: a failed message load must not
+  // take down the payment page — it shows an honest note in the
+  // chat area instead (getCampaignMessages THROWS on DB error,
+  // Forms #26 contract).
+  let messages: BrandMessage[] = [];
+  let messagesError = false;
+  try {
+    messages = await getCampaignMessages(campaign.id);
+  } catch {
+    messagesError = true;
+  }
 
   if (campaign.status === "live") {
     return (
-      <div className="mx-auto max-w-lg space-y-6 text-center">
-        <div className="rounded-3xl border border-lime/40 bg-card p-8">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="rounded-3xl border border-lime/40 bg-card p-8 text-center">
           <p className="text-4xl">🎉</p>
           <h1 className="mt-3 text-xl font-black text-fg">
             Your campaign is already live
@@ -50,26 +66,50 @@ export default async function BrandPaymentPage({
             View campaign
           </Link>
         </div>
+        <BrandChat
+          campaignId={campaign.id}
+          messages={messages}
+          messagesError={messagesError}
+          viewerIsAdmin={isOwner(profile)}
+          brandName={campaign.brand_name}
+        />
       </div>
     );
   }
 
   if (campaign.status === "rejected") {
+    // The rejection reason lives in the brand chat thread (the
+    // admin posts it there on reject).
+    const rejectionReason = await getCampaignRejectionReason(campaign.id);
     return (
-      <div className="mx-auto max-w-lg space-y-6 text-center">
-        <div className="rounded-3xl border border-fg/10 bg-card p-8">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="rounded-3xl border border-fg/10 bg-card p-8 text-center">
           <h1 className="text-xl font-black text-fg">
             This campaign was rejected
           </h1>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
-            The admin did not approve &ldquo;{campaign.title}&rdquo;. If
-            you already sent the budget, contact the admin on Discord
-            about your refund.
+            The admin did not approve &ldquo;{campaign.title}&rdquo;.
+            {rejectionReason ? (
+              <>
+                {" "}
+                Reason:{" "}
+                <span className="font-bold text-fg">{rejectionReason}</span>
+              </>
+            ) : null}{" "}
+            If you already sent the budget, contact the admin on
+            Discord about your refund.
           </p>
           <div className="mx-auto mt-5 max-w-sm">
             <DiscordButton />
           </div>
         </div>
+        <BrandChat
+          campaignId={campaign.id}
+          messages={messages}
+          messagesError={messagesError}
+          viewerIsAdmin={isOwner(profile)}
+          brandName={campaign.brand_name}
+        />
       </div>
     );
   }
@@ -188,43 +228,80 @@ export default async function BrandPaymentPage({
         </p>
       </div>
 
-      {/* Private chat with the admin — text messages and direct
-          proof screenshot uploads, locked to this campaign. Wide,
-          WhatsApp-style thread: tall scrollable message area with
-          the brand's messages on the right and admin replies on
-          the left. */}
-      <div
-        id="brand-chat"
-        className="scroll-mt-6 overflow-hidden rounded-3xl border border-fg/10 bg-card"
-      >
-        <div className="flex items-center gap-3 border-b border-fg/10 px-5 py-4 md:px-6">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-lime text-lg font-black text-black">
-            A
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-lg font-black leading-tight text-fg">
-              Chat with the admin / Send proof
-            </h2>
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-fg/50">
-              <span className="h-2 w-2 rounded-full bg-lime" />
-              Private — only you and the admin can see this chat
-            </p>
-          </div>
-        </div>
-        <p className="px-5 pt-4 text-sm leading-relaxed text-fg/60 md:px-6">
-          Tell the admin you sent the budget and upload your payment
-          screenshot here as proof. The admin can reply to you in this
-          chat.
-        </p>
-        <div className="px-5 pb-5 pt-4 md:px-6 md:pb-6">
-          <BrandMessageForm
-            campaignId={campaign.id}
-            initialMessages={messages}
-            viewerIsAdmin={isOwner(profile)}
-            brandName={campaign.brand_name}
-          />
+      <BrandChat
+        campaignId={campaign.id}
+        messages={messages}
+        messagesError={messagesError}
+        viewerIsAdmin={isOwner(profile)}
+        brandName={campaign.brand_name}
+      />
+    </div>
+  );
+}
+
+/**
+ * Private chat with the admin — text messages and direct proof
+ * screenshot uploads, locked to this campaign. Wide,
+ * WhatsApp-style thread: tall scrollable message area with the
+ * brand's messages on the right and admin replies on the left.
+ * Rendered on the pending page AND on the live / rejected pages:
+ * a brand may also follow up after the campaign goes live, and a
+ * rejected brand still needs to reach the admin (e.g. about a
+ * refund) — the old live/rejected branches returned early with
+ * no chat at all.
+ */
+function BrandChat({
+  campaignId,
+  messages,
+  messagesError,
+  viewerIsAdmin,
+  brandName,
+}: {
+  campaignId: string;
+  messages: BrandMessage[];
+  messagesError: boolean;
+  viewerIsAdmin: boolean;
+  brandName: string;
+}) {
+  return (
+    <div
+      id="brand-chat"
+      className="scroll-mt-6 overflow-hidden rounded-3xl border border-fg/10 bg-card"
+    >
+      <div className="flex items-center gap-3 border-b border-fg/10 px-5 py-4 md:px-6">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-lime text-lg font-black text-black">
+          A
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-lg font-black leading-tight text-fg">
+            Chat with the admin / Send proof
+          </h2>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-fg/50">
+            <span className="h-2 w-2 rounded-full bg-lime" />
+            Private — only you and the admin can see this chat
+          </p>
         </div>
       </div>
+      <p className="px-5 pt-4 text-sm leading-relaxed text-fg/60 md:px-6">
+        Tell the admin you sent the budget and upload your payment
+        screenshot here as proof. The admin can reply to you in this
+        chat.
+      </p>
+      {messagesError ? (
+        <p className="px-5 pb-5 pt-4 text-sm font-semibold text-red-300 md:px-6 md:pb-6">
+          Couldn&apos;t load the chat — please refresh the page and try
+          again.
+        </p>
+      ) : (
+        <div className="px-5 pb-5 pt-4 md:px-6 md:pb-6">
+          <BrandMessageForm
+            campaignId={campaignId}
+            initialMessages={messages}
+            viewerIsAdmin={viewerIsAdmin}
+            brandName={brandName}
+          />
+        </div>
+      )}
     </div>
   );
 }
