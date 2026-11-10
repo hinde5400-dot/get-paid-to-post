@@ -11,7 +11,7 @@ import { formatUSD } from "@/lib/money";
 import type { BrandMessage } from "@/lib/types";
 import PaymentForm from "@/components/PaymentForm";
 import BrandMessageForm from "@/components/BrandMessageForm";
-import CopyButton from "@/components/CopyButton";
+import CopyButton, { CopyableText } from "@/components/CopyButton";
 import DiscordButton from "@/components/DiscordButton";
 
 /**
@@ -181,9 +181,15 @@ export default async function BrandPaymentPage({
             </p>
             {wallet ? (
               <div className="mt-2 flex items-start justify-between gap-3">
-                <p className="break-all font-mono text-sm font-bold text-fg">
+                {/* Tapping the address itself copies it too — the
+                    Copy button is not the only way (friend's brand
+                    test, 2026-11-11: the button was never reached). */}
+                <CopyableText
+                  text={wallet}
+                  className="min-w-0 break-all text-left font-mono text-sm font-bold text-fg"
+                >
                   {wallet}
-                </p>
+                </CopyableText>
                 <CopyButton text={wallet} label="Copy" />
               </div>
             ) : (
