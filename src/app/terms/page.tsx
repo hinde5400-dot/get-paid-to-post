@@ -54,7 +54,7 @@ export default function TermsPage() {
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">3. Accounts</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
-          You sign up with email and password, or continue with Google.
+          You sign up with email and password.
           You are responsible for keeping your password safe and for
           everything posted from your account. One account per person.
         </p>

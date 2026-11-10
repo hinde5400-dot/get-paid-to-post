@@ -3,7 +3,7 @@ import { BRAND_NAME } from "@/lib/constants";
 import { getCurrentUser } from "@/lib/auth";
 
 const STEPS = [
-  { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. No phone, no address, no extra details." },
+  { n: "1", t: "Sign up free", d: "Create your account with email and password. No phone, no address, no extra details." },
   { n: "2", t: "Connect your profiles", d: "Connect your TikTok and YouTube accounts (Instagram connects later) so your clips can be matched to you." },
   { n: "3", t: "Pick a funded campaign", d: "Browse live campaigns, read the brief and the rate, and choose one that fits your style." },
   { n: "4", t: "Make your clip", d: "Film vertical 9:16, add captions, and hook viewers in the first 3 seconds. Keep it original and on-brief." },
