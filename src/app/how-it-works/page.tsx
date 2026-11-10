@@ -55,21 +55,21 @@ export default async function HowItWorksPage() {
           <li>• Brands fund every campaign upfront — any budget, set by the brand.</li>
           <li>• One clip per platform every 2 hours, across all campaigns on that platform — a rejected or duplicate submission does not start the cooldown. Up to 15 approved clips per platform. A rejected clip cannot be resubmitted — post a new clip.</li>
           <li>• Bot-view rejections add up: 6 = concern, 10 = flagged, one more bot-view rejection after the flag = the account is banned automatically. Every rejection shows its reason.</li>
-          <li>• One day after payout finishes, the campaign, its proofs and its chat are deleted. Your earnings history stays in your account.</li>
+          <li>• The campaign, its proofs and its chat are deleted 1 day after the last hold matures, never earlier than 7 days after the campaign ends. Wallet and withdrawal records are never deleted.</li>
         </ul>
       </div>
 
       <div className="rounded-3xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">When do I get paid?</h2>
         <p className="mt-3 text-sm leading-relaxed text-fg/70">
-          Approved earnings go into a 72-hour hold as soon as they are
-          approved, during the campaign. After a campaign ends, the
-          settlement timeline is:
+          Approved earnings enter a 72-hour hold as soon as they are
+          approved — even while the campaign is still running. After a
+          campaign ends, the settlement timeline is:
         </p>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• <strong className="text-fg">Campaign ends → 3-day re-check window.</strong> We review suspicious videos, and an already-approved video can still be rejected if fake or bot views show up.</li>
-          <li>• <strong className="text-fg">Then the 72-hour payment hold.</strong> The hold on your earnings finishes and they become available to withdraw.</li>
-          <li>• <strong className="text-fg">Then payout.</strong> Withdraw in USDT (TRC20 or BEP20) from $15. From campaign end to payout: about 1 week in total.</li>
+          <li>• <strong className="text-fg">Then payout.</strong> Payouts are made manually — withdraw in USDT (TRC20 or BEP20) from $15. From campaign end to payout: about 1 week in total.</li>
+          <li>• <strong className="text-fg">Then auto-delete.</strong> The campaign, its proofs and its chat are deleted 1 day after the last hold matures, never earlier than 7 days after the campaign ends. Wallet and withdrawal records are never deleted.</li>
         </ul>
       </div>
 

@@ -133,8 +133,9 @@ export default function RulesPage() {
 
       <Section id="submitting" n="3" title="Submitting clips">
         <Rule>
-          Submit any 2 of TikTok, Instagram and YouTube together as one
-          bundle — each clip is then reviewed and paid on its own.
+          Submit up to 2 of TikTok, Instagram and YouTube together as one
+          bundle (a single-platform campaign needs only 1 link) — each clip
+          is then reviewed and paid on its own.
         </Rule>
         <Rule>
           Proof is required: at least one originality-proof screenshot
@@ -250,19 +251,22 @@ export default function RulesPage() {
           still be rejected if fake or bot views show up.
         </Rule>
         <Rule>
-          <strong className="text-fg">Then the 72-hour payment hold.</strong>{" "}
-          The hold on your earnings finishes and they become available to
-          withdraw.
+          <strong className="text-fg">The 72-hour hold starts at approval.</strong>{" "}
+          Approved earnings enter a 72-hour hold as soon as they are
+          approved — even while the campaign is still running — so by the
+          time the campaign ends, most holds have already matured. The
+          hold does not start after the campaign ends.
         </Rule>
         <Rule>
-          <strong className="text-fg">Then payout.</strong> Withdraw in
-          USDT (TRC20 or BEP20) from $15. From campaign end to payout:{" "}
+          <strong className="text-fg">Then payout.</strong> Payouts are
+          made manually — withdraw in USDT (TRC20 or BEP20) from $15.
+          From campaign end to payout:{" "}
           <strong className="text-fg">about 1 week in total</strong>.
         </Rule>
         <Rule>
-          One day after payout finishes, the campaign, its proofs and
-          its chat are deleted automatically. Your earnings history
-          stays in your account.
+          The campaign, its proofs and its chat are deleted 1 day after
+          the last hold matures, never earlier than 7 days after the
+          campaign ends. Wallet and withdrawal records are never deleted.
         </Rule>
       </Section>
 
@@ -300,11 +304,9 @@ export default function RulesPage() {
           clawed back.
         </Rule>
         <Rule>
-          If your submission is rejected or your account is flagged and
-          you believe it is a mistake, you can{" "}
-          <strong className="text-fg">appeal once through Discord support</strong>.
-          A person will review your appeal. We aim to reply within 10
-          business days.
+          If you think a rejection or flag was wrong, appeal through
+          Discord support. A person will review your appeal. We aim to
+          reply within 10 business days.
         </Rule>
       </Section>
 
@@ -355,8 +357,8 @@ export default function RulesPage() {
         </Rule>
         <Rule>
           <strong className="text-fg">
-            Once settlement is complete, the campaign is automatically
-            deleted
+            The campaign is automatically deleted 1 day after the last
+            hold matures
           </strong>{" "}
           — its record, its proofs and its chat, all of it. Nothing is
           deleted earlier than 7 days after the campaign ended. Your

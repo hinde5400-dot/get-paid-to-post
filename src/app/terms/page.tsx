@@ -103,10 +103,10 @@ export default function TermsPage() {
           brand&apos;s: ask for a refund through Discord support — the
           owner sends it manually in USDT. We aim to send it within 5–7
           business days of your request. A campaign that stays pending
-          without payment expires after 7 days. Once settlement is
-          complete, the campaign, its proofs and its chat are deleted
-          automatically — never earlier than 7 days after the campaign
-          ended; money records (wallets, withdrawals) are never deleted.
+          without payment expires after 7 days. The campaign, its proofs
+          and its chat are deleted 1 day after the last hold matures —
+          never earlier than 7 days after the campaign ended; money
+          records (wallets, withdrawals) are never deleted.
         </p>
         <h3 className="mt-4 text-sm font-extrabold text-fg">
           How brand funds are protected
@@ -138,10 +138,9 @@ export default function TermsPage() {
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">8. Appeals and reversals</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
-          If your submission is rejected or your account is flagged for
-          fake engagement and you believe it is a mistake, you can appeal
-          once through Discord support. A person will review your appeal.
-          We aim to reply within 10 business days.
+          If you think a rejection or flag was wrong, appeal through
+          Discord support. A person will review your appeal. We aim to
+          reply within 10 business days.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           If a submission is rejected after it was approved, its
