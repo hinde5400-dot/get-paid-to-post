@@ -53,7 +53,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as BudgetEditBody;
+  let body: BudgetEditBody;
+  try {
+    body = (await request.json()) as BudgetEditBody;
+  } catch {
+    return NextResponse.json(
+      { error: "Request body must be valid JSON." },
+      { status: 400 }
+    );
+  }
   const reason = String(body.reason ?? "").trim();
   if (!reason) {
     return NextResponse.json(
@@ -151,31 +159,101 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: historyError.message }, { status: 400 });
   }
 
-  const { error: updateError } = await supabase
-    .from("campaigns")
-    .update({
-      budget_total: newTotal,
-      budget_left: newLeft,
-      // 15% platform fee, recomputed from the NEW total — never
-      // the stale fee from the old budget.
-      platform_fee: platformFeeFor(newTotal),
-    })
-    .eq("id", row.id);
-  if (updateError) {
-    // The budget did not change — remove the history row we just
-    // wrote so the trail never records an edit that did not happen.
-    await supabase
+  // P0-2: atomic budget-total set (migration 0036). The old code
+  // computed spent from a read, then wrote budget_total /
+  // budget_left absolutely — racing a concurrent approve, which
+  // could then be overwritten or leave paid_out inconsistent.
+  // The RPC sets the total inside the database (spent is read
+  // there, under the same lock) and refuses (ok: false) when the
+  // new total is below what is already spent. Never fall back to
+  // the absolute write.
+  const {
+    data: budgetRows,
+    error: budgetRpcError,
+  } = await supabase.rpc("set_campaign_budget_total", {
+    p_campaign_id: row.id,
+    p_new_total: newTotal,
+  });
+  if (budgetRpcError) {
+    // Function missing = migration 0036 not applied yet. Remove
+    // the history row (the edit did not happen) and say so.
+    const { error: rollbackError } = await supabase
       .from("campaign_budget_history")
       .delete()
       .eq("id", (historyRow as { id: string } | null)?.id ?? "");
-    return NextResponse.json({ error: updateError.message }, { status: 400 });
+    if (rollbackError) {
+      console.error(
+        "[admin/campaign-budget] could not roll back history row after missing-0036 RPC failure:",
+        rollbackError.message
+      );
+    }
+    return NextResponse.json(
+      {
+        error:
+          "Budget could not be updated atomically — run migration 0036 in Supabase first, then retry. Nothing was changed.",
+      },
+      { status: 500 }
+    );
+  }
+  const budgetResult = (budgetRows as
+    | { ok: boolean; new_budget_left: number; new_budget_total: number }[]
+    | null)?.[0];
+  if (!budgetResult?.ok) {
+    // New total below spent (spent may have grown since the read
+    // above). Remove the history row — the edit did not happen.
+    const { error: rollbackError } = await supabase
+      .from("campaign_budget_history")
+      .delete()
+      .eq("id", (historyRow as { id: string } | null)?.id ?? "");
+    if (rollbackError) {
+      console.error(
+        "[admin/campaign-budget] could not roll back history row after rejected budget edit:",
+        rollbackError.message
+      );
+    }
+    return NextResponse.json(
+      {
+        error: `New budget cannot be below what is already spent ($${spent.toFixed(2)}).`,
+      },
+      { status: 400 }
+    );
+  }
+  const finalLeft = Number(budgetResult.new_budget_left ?? newLeft);
+  const finalTotal = Number(budgetResult.new_budget_total ?? newTotal);
+
+  // platform_fee is not owned by the RPC: recompute it from the
+  // new total (15% of it — never the stale fee from the old
+  // budget). If this fails, the budget already changed, so the
+  // history row is removed (as before) and the owner is told the
+  // fee may be stale.
+  const { error: feeError } = await supabase
+    .from("campaigns")
+    .update({ platform_fee: platformFeeFor(finalTotal) })
+    .eq("id", row.id);
+  if (feeError) {
+    const { error: rollbackError } = await supabase
+      .from("campaign_budget_history")
+      .delete()
+      .eq("id", (historyRow as { id: string } | null)?.id ?? "");
+    if (rollbackError) {
+      console.error(
+        "[admin/campaign-budget] could not roll back history row after platform-fee update failure:",
+        rollbackError.message
+      );
+    }
+    return NextResponse.json(
+      {
+        error: `Budget total was updated, but the 15% platform fee could not be recomputed (${feeError.message}). Fix the fee in /admin — the budget is now $${finalTotal.toFixed(2)}.`,
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({
     ok: true,
-    message: `Budget updated to $${newTotal.toFixed(2)} ($${newLeft.toFixed(2)} left). Platform fee is now $${platformFeeFor(newTotal).toFixed(2)} (15% of the new budget).`,
-    budget_total: newTotal,
-    budget_left: newLeft,
-    platform_fee: platformFeeFor(newTotal),
+    message: `Budget updated to $${finalTotal.toFixed(2)} ($${finalLeft.toFixed(2)} left). Platform fee is now $${platformFeeFor(finalTotal).toFixed(2)} (15% of the new budget).`,
+    budget_total: finalTotal,
+    budget_left: finalLeft,
+    platform_fee: platformFeeFor(finalTotal),
   });
 }
