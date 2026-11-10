@@ -3,13 +3,12 @@ import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import BrandForm from "@/components/BrandForm";
 
 const FUNDING_STEPS = [
-  { n: "1", t: "Create your campaign", d: "Fill in the form below: brand, logo, title, rate per 1K views, budget and brief." },
-  { n: "2", t: "Your campaign is saved as pending", d: "Nothing goes live yet. After you submit, send your budget in USDT on the payment page — the admin reviews it and it goes live only after payment is verified." },
-  { n: "3", t: "Set your rate and budget", d: "You choose any rate and any budget — no minimums. Higher rate = more creators join fast." },
-  { n: "4", t: "Fund the budget in USDT", d: "Send your budget in USDT (TRC20) to the admin wallet and paste your Transaction ID on the payment page." },
-  { n: "5", t: "Campaign goes live", d: "Once payment is verified, your campaign opens to creators on TikTok, Instagram and YouTube." },
-  { n: "6", t: "Creators post and submit", d: "Creators post short vertical clips, submit their links, and earn per view." },
-  { n: "7", t: "You pay only for verified views", d: "Approved views are paid from your funded budget. Unspent budget stays yours." },
+  { n: "1", t: "Create your campaign", d: "Fill in the form below: brand, logo, title, rate per 1K views, budget and brief. You set your own rate and budget — any amount above $0, no minimums." },
+  { n: "2", t: "Your campaign is saved as pending", d: "Nothing goes live yet. Unpaid pending campaigns expire after 7 days — send your payment within 7 days. Chatting alone does not count as payment." },
+  { n: "3", t: "Fund the budget in USDT", d: "Send your budget plus the 15% platform fee in USDT (TRC20) to the admin wallet and paste your Transaction ID on the payment page." },
+  { n: "4", t: "Campaign goes live", d: "Once payment is verified, your campaign opens to creators on TikTok, Instagram and YouTube." },
+  { n: "5", t: "Creators post and submit", d: "Creators post short vertical clips, submit their links, and earn per view." },
+  { n: "6", t: "You pay only for verified views", d: "Approved views are paid from your funded budget. Unspent budget stays yours." },
 ];
 
 export default async function BrandsPage() {
@@ -49,7 +48,11 @@ export default async function BrandsPage() {
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-fg/60">
             Upload your brand and campaign below. Fund your chosen
-            budget upfront and pay only for verified views.
+            budget upfront and pay only for verified views — plus a
+            15% platform fee on top of your budget, no hidden charges.{" "}
+            <Link href="/pricing" className="font-bold text-lime hover:underline">
+              See full pricing →
+            </Link>
           </p>
           {user ? (
             <a
@@ -90,7 +93,7 @@ export default async function BrandsPage() {
   const howFunding = (
     <section>
       <h2 className="mb-6 text-center text-2xl font-extrabold text-fg">
-        How Funding Works — 7 steps
+        How Funding Works — 6 steps
       </h2>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {FUNDING_STEPS.map((s) => (
@@ -161,14 +164,14 @@ export default async function BrandsPage() {
       <p className="text-sm leading-relaxed text-fg/80">
         We are a professional creator marketplace. All campaigns are
         funded before going live. Creators are paid for real verified
-        views only. Your brand link is 100% safe to check on VirusTotal
+        views only. You can check our domain on VirusTotal
         / Google Safe Browsing.
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         {[
           "No Gambling, No Betting",
           "100% Funded Campaigns Only - Campaign goes live only after payment received",
-          "Secure Payments via USDT - No card, no hidden charges",
+          "Secure Payments via USDT - 15% platform fee on top, no other charges",
         ].map((badge) => (
           <span
             key={badge}
@@ -178,6 +181,11 @@ export default async function BrandsPage() {
           </span>
         ))}
       </div>
+      <p className="mt-5 text-sm">
+        <Link href="/pricing" className="font-bold text-lime hover:underline">
+          See full pricing — 15% fee, $500 budget → $575 total →
+        </Link>
+      </p>
     </section>
   );
 

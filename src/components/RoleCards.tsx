@@ -34,7 +34,7 @@ export default function RoleCards() {
           Launch Campaigns
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-fg/60">
-          Launch a campaign, get viral clips.
+          Launch a campaign, get real creators posting your clips.
         </p>
         <Link
           href="/signup?role=brand"

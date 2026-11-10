@@ -19,8 +19,8 @@ export default function ContactPage() {
         </h2>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg/60">
           Members join the Discord server, open support tickets, and get help
-          from the team. Support tickets will be handled on Discord once the
-          server opens.
+          from the team. Support tickets are handled on Discord — open a
+          ticket in the server and the team will help you.
         </p>
         <DiscordButton className="mx-auto mt-5 max-w-sm" />
       </div>
