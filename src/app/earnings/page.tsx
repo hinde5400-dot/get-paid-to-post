@@ -33,7 +33,7 @@ export default async function EarningsPage() {
           available to withdraw. Payouts are USDT only.
         </p>
         <p className="mt-2 max-w-2xl rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
-          After campaign ends and views are verified, your earnings go to Pending for 72-hour hold, then become Withdrawable. You can withdraw anytime when Withdrawable is more than $15.
+          Approved earnings go into a 72-hour hold as soon as they are approved, then become Withdrawable. You can withdraw anytime when Withdrawable is $15 or more.
         </p>
       </div>
 
@@ -77,7 +77,7 @@ export default async function EarningsPage() {
         <h2 className="text-lg font-extrabold text-fg">Payout info</h2>
         <ul className="mt-3 space-y-2 text-sm text-fg/70">
           <li>• Minimum withdrawal: {formatUSD(WITHDRAW_MIN)}.</li>
-          <li>• Withdrawal fee: 5% — you receive amount × 0.95 in USDT.</li>
+          <li>• Withdrawal fee: 5% — the fee is rounded to the nearest cent, and you receive the amount after the fee.</li>
           <li>• Methods: USDT (TRC20) and USDT (BEP20) only.</li>
           <li>• Approved earnings are held for {HOLD_HOURS} hours before they become available.</li>
           <li>• Payouts are processed by the platform owner from the funded campaign budget, within 24-48 hours.</li>

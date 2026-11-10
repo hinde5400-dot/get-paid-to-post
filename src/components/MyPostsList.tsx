@@ -3,7 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Platform, Submission, SubmissionStatus } from "@/lib/types";
-import { formatUSD, payoutForViews } from "@/lib/money";
+import { formatUSD } from "@/lib/money";
+import {
+  engagementRate,
+  formatEngagementRate,
+  MIN_ENGAGEMENT_RATE,
+} from "@/lib/engagement";
 import { DISCORD_URL, PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
 import { PlatformChips } from "./PlatformIcons";
@@ -166,7 +171,13 @@ export default function MyPostsList({
                   business days.
                 </p>
               )}
-              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+              {s.status === "rejected" && (
+                <p className="mt-3 rounded-xl bg-fg/5 px-4 py-2.5 text-sm leading-relaxed text-fg/70">
+                  No resubmit — this clip is done. Post a new clip to try
+                  again.
+                </p>
+              )}
+              <div className="mt-4 grid grid-cols-4 gap-3 text-center">
                 <div className="rounded-xl bg-fg/5 py-2">
                   <p className="text-lg font-black text-fg">
                     {s.views.toLocaleString()}
@@ -180,28 +191,56 @@ export default function MyPostsList({
                   <p className="text-xs text-fg/50">Likes</p>
                 </div>
                 <div className="rounded-xl bg-fg/5 py-2">
+                  <p className="text-lg font-black text-fg">
+                    {s.comments.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-fg/50">Comments</p>
+                </div>
+                <div className="rounded-xl bg-fg/5 py-2">
                   <p className="text-lg font-black text-lime">
                     {formatUSD(s.earnings)}
                   </p>
                   <p className="text-xs text-fg/50">Earned</p>
                 </div>
               </div>
-              {/* Earnings breakdown with the per-post cap applied —
-                  the exact math, from the submission's real numbers. */}
+              {/* Engagement self-check vs the 1% gate (likes +
+                  comments only). */}
+              {(() => {
+                const rate = engagementRate(s.likes, s.comments, s.views);
+                if (rate === null) return null;
+                const ok = rate >= MIN_ENGAGEMENT_RATE;
+                return (
+                  <p
+                    className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold leading-relaxed ${
+                      ok
+                        ? "bg-lime/10 text-lime"
+                        : "bg-red-500/15 text-red-300"
+                    }`}
+                  >
+                    Engagement {formatEngagementRate(rate)} (likes +
+                    comments / views) —{" "}
+                    {ok
+                      ? "above the 1% minimum ✓"
+                      : "below the 1% minimum — this clip cannot be approved"}
+                  </p>
+                );
+              })()}
+              {/* Earnings breakdown — locked at approval: the views
+                  above are the latest count and may have grown
+                  since, so the math is never restated from them. */}
               {s.status === "approved" &&
                 s.views > 0 &&
                 s.rate_per_1k !== undefined && (
                   <p className="mt-3 rounded-xl bg-lime/10 px-4 py-2.5 text-sm leading-relaxed text-fg/80">
-                    {(() => {
-                      const calc = payoutForViews(
-                        s.views,
-                        s.rate_per_1k as number,
-                        s.max_payout_per_post ?? s.earnings
-                      );
-                      return calc.capped
-                        ? `Your video got ${s.views.toLocaleString()} views at ${formatUSD(s.rate_per_1k as number)}/1k = ${formatUSD(calc.uncapped)} earned. Cap ${formatUSD(s.max_payout_per_post ?? s.earnings)} applied, you earned ${formatUSD(s.earnings)}.`
-                        : `Your video got ${s.views.toLocaleString()} views at ${formatUSD(s.rate_per_1k as number)}/1k = ${formatUSD(s.earnings)} earned.`;
-                    })()}
+                    Your video earned {formatUSD(s.earnings)} at{" "}
+                    {formatUSD(s.rate_per_1k as number)}/1k.
+                    {s.max_payout_per_post !== undefined &&
+                    s.max_payout_per_post !== null &&
+                    s.earnings >= s.max_payout_per_post
+                      ? ` The per-post cap of ${formatUSD(s.max_payout_per_post)} applied.`
+                      : ""}{" "}
+                    Earnings were locked when the clip was approved —
+                    the views above are the latest count.
                   </p>
                 )}
               <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-fg/60">

@@ -192,7 +192,8 @@ export default function WithdrawModal({
                   <span className="font-black text-lime">{formatUSD(final)}</span>
                 </div>
                 <p className="mt-2 text-xs text-fg/50">
-                  You receive amount × 0.95 after the 5% fee, in USDT.
+                  The 5% fee is rounded to the nearest cent — you receive
+                  the amount shown above, in USDT.
                 </p>
               </div>
             )}

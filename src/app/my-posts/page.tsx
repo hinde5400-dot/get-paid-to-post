@@ -55,7 +55,7 @@ export default async function MyPostsPage() {
         <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">My Posts</h1>
         <p className="mt-2 text-sm text-fg/60">
           Every clip you submitted, with views, likes and earnings. Metrics
-          update once a day.
+          update every 3 hours.
         </p>
       </div>
       <MyPostsList submissions={submissions} pastCampaigns={pastCampaigns} />
