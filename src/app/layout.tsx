@@ -3,6 +3,7 @@ import { Archivo, Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BottomNav from "@/components/BottomNav";
+import HelpBubble from "@/components/HelpBubble";
 import NavigationLoader from "@/components/NavigationLoader";
 import ToastProvider from "@/components/Toast";
 import { BRAND_NAME, SITE_URL } from "@/lib/constants";
@@ -64,6 +65,7 @@ export default function RootLayout({
           </main>
           <Footer />
           <BottomNav />
+          <HelpBubble />
         </ToastProvider>
       </body>
     </html>
