@@ -850,3 +850,97 @@ export async function getCampaignBudgetHistory(
     return {};
   }
 }
+
+/** One row of the Win Board (Top Clippers): a creator's real
+ *  earnings from approved clips only. */
+export interface TopClipperEntry {
+  user_id: string;
+  name: string;
+  earned: number;
+  views: number;
+  clips: number;
+}
+
+/**
+ * Top earners from APPROVED submissions, across all campaigns
+ * (global board) or one campaign (campaign board). Names come
+ * from the creator's own profile full_name; a missing name falls
+ * back to "Creator".
+ *
+ * Honesty guard: submissions are readable only by their owner and
+ * the admin (RLS: "submissions own read" + "admins read all"),
+ * so a public query would only ever return the viewer's own rows
+ * — never a real leaderboard. This function therefore returns []
+ * for non-admins, and the Win Board shows the true zero state.
+ * A public board needs a SECURITY DEFINER top_clippers RPC (a
+ * future migration); until then only the owner sees real rows.
+ */
+async function topClippersFromRows(
+  campaignId: string | null,
+  limit: number
+): Promise<TopClipperEntry[]> {
+  try {
+    const supabase = getServerClient();
+    if (!supabase) return [];
+    const { data: isAdmin } = await supabase.rpc("is_admin");
+    if (isAdmin !== true) return [];
+    let query = supabase
+      .from("submissions")
+      .select("user_id, earnings, views")
+      .eq("status", "approved");
+    if (campaignId) query = query.eq("campaign_id", campaignId);
+    const { data: rows, error } = await query;
+    if (error || !rows) return [];
+    const byUser = new Map<
+      string,
+      { earned: number; views: number; clips: number }
+    >();
+    for (const r of rows as Record<string, unknown>[]) {
+      const uid = String(r.user_id ?? "");
+      if (!uid) continue;
+      const agg = byUser.get(uid) ?? { earned: 0, views: 0, clips: 0 };
+      agg.earned += Number(r.earnings ?? 0);
+      agg.views += Number(r.views ?? 0);
+      agg.clips += 1;
+      byUser.set(uid, agg);
+    }
+    if (byUser.size === 0) return [];
+    const ids = [...byUser.keys()];
+    const { data: users } = await supabase
+      .from("users")
+      .select("id, full_name")
+      .in("id", ids);
+    const names = new Map<string, string>();
+    for (const u of (users ?? []) as Record<string, unknown>[]) {
+      const name = String(u.full_name ?? "").trim();
+      if (name) names.set(String(u.id), name);
+    }
+    return [...byUser.entries()]
+      .map(([user_id, agg]) => ({
+        user_id,
+        name: names.get(user_id) ?? "Creator",
+        earned: Math.round(agg.earned * 100) / 100,
+        views: agg.views,
+        clips: agg.clips,
+      }))
+      .sort((a, b) => b.earned - a.earned || b.views - a.views)
+      .slice(0, Math.max(1, limit));
+  } catch {
+    return [];
+  }
+}
+
+/** Top earners across all campaigns (Discover board). */
+export async function getTopClippers(
+  limit = 5
+): Promise<TopClipperEntry[]> {
+  return topClippersFromRows(null, limit);
+}
+
+/** Top earners on one campaign (campaign detail board). */
+export async function getCampaignTopClippers(
+  campaignId: string,
+  limit = 5
+): Promise<TopClipperEntry[]> {
+  return topClippersFromRows(campaignId, limit);
+}

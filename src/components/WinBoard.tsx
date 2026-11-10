@@ -1,0 +1,79 @@
+import { formatUSD } from "@/lib/money";
+import type { TopClipperEntry } from "@/lib/data";
+
+/**
+ * Win Board (Top Clippers) — a leaderboard of the creators who
+ * earned the most from approved clips. Every row comes from real
+ * approved submissions only: no invented names, no invented
+ * amounts. With no approved clips yet the board shows the honest
+ * empty state — all counts 0, "No winners yet — be the first".
+ *
+ * NOTE (2026-11-10): submissions are readable only by their owner
+ * and the admin (RLS), so the public board can only list real
+ * winners once a public top-clippers RPC exists (a future
+ * migration). Until then getTopClippers returns [] for non-admins
+ * and the board shows the true zero state.
+ */
+export default function WinBoard({
+  entries,
+  title = "Top Clippers",
+  subtitle = "Creators who earned the most from approved clips.",
+}: {
+  entries: TopClipperEntry[];
+  title?: string;
+  subtitle?: string;
+}) {
+  const medals = ["🥇", "🥈", "🥉", "4", "5"];
+  return (
+    <section className="rounded-3xl border border-fg/10 bg-card p-6">
+      <h2 className="font-display text-2xl font-black uppercase tracking-tight text-fg">
+        🏆 {title}
+      </h2>
+      <p className="mt-1 text-sm text-fg/60">{subtitle}</p>
+      {entries.length === 0 ? (
+        <div className="mt-5 rounded-2xl border border-fg/10 bg-ink p-8 text-center">
+          <p className="text-4xl" aria-hidden>
+            🏆
+          </p>
+          <p className="mt-3 text-lg font-black text-fg">
+            No winners yet — be the first
+          </p>
+          <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-fg/60">
+            No clips have been approved yet, so nobody has earned
+            anything. Post a clip on a live campaign and you could top
+            this board.
+          </p>
+          <p className="mt-4 text-sm font-bold text-fg/50">
+            Total paid out so far:{" "}
+            <span className="text-lime">{formatUSD(0)}</span>
+          </p>
+        </div>
+      ) : (
+        <ol className="mt-5 space-y-2">
+          {entries.map((e, i) => (
+            <li
+              key={e.user_id}
+              className="flex flex-wrap items-center gap-3 rounded-2xl bg-fg/5 px-4 py-3"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/15 text-base font-black text-lime">
+                {medals[i] ?? `${i + 1}`}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-bold text-fg">
+                  {e.name}
+                </span>
+                <span className="block text-xs text-fg/50">
+                  {e.clips} approved clip{e.clips === 1 ? "" : "s"} ·{" "}
+                  {e.views.toLocaleString()} views
+                </span>
+              </span>
+              <span className="font-display text-lg font-black text-lime">
+                {formatUSD(e.earned)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}

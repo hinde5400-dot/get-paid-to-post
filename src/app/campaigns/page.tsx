@@ -3,12 +3,13 @@ import { Suspense } from "react";
 import {
   getDiscoverCampaigns,
   getCampaignStatsMap,
+  getTopClippers,
   getUserSubmissions,
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
 import CampaignGrid from "@/components/CampaignGrid";
 import CampaignFilters from "@/components/CampaignFilters";
-import AdSlot from "@/components/AdSlot";
+import WinBoard from "@/components/WinBoard";
 import type { Campaign, Platform } from "@/lib/types";
 import { campaignPlatforms, isCampaignCategory } from "@/lib/types";
 import {
@@ -76,6 +77,9 @@ export default async function CampaignsPage({
   // submission count. No extra queries — the same stats map already
   // fed the cards and the modal.
   const stats = await getCampaignStatsMap(list.map((c) => c.id));
+  // Win Board: real top earners from approved submissions only —
+  // empty (all counts 0) until the first clip is approved.
+  const topClippers = await getTopClippers(5);
   // Sorts (P1-a, Content Rewards model — definitions in
   // src/lib/campaigns.ts sortCampaigns). "best" is the old
   // Recommended value and still maps to it; unknown values fall back
@@ -148,7 +152,7 @@ export default async function CampaignsPage({
         <CampaignFilters />
       </Suspense>
 
-      <AdSlot />
+      <WinBoard entries={topClippers} />
 
       {!hasAny ? (
         <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">

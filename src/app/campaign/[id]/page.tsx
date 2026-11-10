@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   getCampaign,
   getCampaignStats,
+  getCampaignTopClippers,
   getUserSubmissions,
   isCampaignLive,
   isCampaignSettling,
@@ -11,6 +12,7 @@ import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import SubmitBundleForm, { type LastSubmission } from "@/components/SubmitBundleForm";
 import CampaignBanner, { BrandLogoTile } from "@/components/CampaignBanner";
 import CampaignDetailTabs from "@/components/CampaignDetailTabs";
+import WinBoard from "@/components/WinBoard";
 import { PlatformChips } from "@/components/PlatformIcons";
 import { formatUSD, formatTimeLeft } from "@/lib/money";
 import {
@@ -63,6 +65,10 @@ export default async function CampaignDetailPage({
     if (!isOwner(profile)) notFound();
   }
   const stats = await getCampaignStats(campaign.id);
+  // Win Board for this campaign: real top earners from approved
+  // clips only — empty (all counts 0) until the first clip here
+  // is approved.
+  const topClippers = await getCampaignTopClippers(campaign.id, 5);
   let lastByPlatform: LastSubmission[] = [];
   // Approved clips per platform for this creator on this campaign
   // (P0 batch 2): only status='approved' counts — rejected clips do
@@ -479,6 +485,12 @@ export default async function CampaignDetailPage({
             </dl>
           </div>
         }
+      />
+
+      <WinBoard
+        entries={topClippers}
+        title="Top Clippers on this campaign"
+        subtitle="Creators who earned the most from this campaign's approved clips."
       />
     </div>
   );

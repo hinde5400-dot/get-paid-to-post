@@ -3,7 +3,6 @@ import { getCampaigns, getCampaignStatsMap } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
 import CampaignGrid from "@/components/CampaignGrid";
 import CampaignBanner from "@/components/CampaignBanner";
-import AdSlot from "@/components/AdSlot";
 import Faq from "@/components/Faq";
 import DiscordButton from "@/components/DiscordButton";
 import RoleCards from "@/components/RoleCards";
@@ -203,8 +202,6 @@ export default async function HomePage() {
           <CampaignGrid campaigns={rest} stats={stats} />
         )}
       </section>
-
-      <AdSlot />
 
       {/* How it works */}
       <section>
