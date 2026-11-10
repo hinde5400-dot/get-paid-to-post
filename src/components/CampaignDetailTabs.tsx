@@ -109,6 +109,8 @@ export default function CampaignDetailTabs({
               <p className="mt-2 text-sm font-semibold text-amber-200">
                 ⏱ Submit your link within 30 minutes of posting — a link
                 posted more than 30 minutes earlier is not accepted.
+                Instagram links are hand-checked by the admin (no
+                automatic check yet).
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {platforms.map((p) => {

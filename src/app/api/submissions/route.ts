@@ -12,7 +12,7 @@ import {
   SUBMIT_WINDOW_MS,
 } from "@/lib/constants";
 import { fetchPostedTime } from "@/lib/views/posted-time";
-import { countWords, validatePostUrl } from "@/lib/validate";
+import { countWords, validatePostUrl, validateProofUrl } from "@/lib/validate";
 import { canonicalizePostUrl } from "@/lib/canonical-url";
 import type { Platform } from "@/lib/types";
 import { platformsFromRow, platformNamesText } from "@/lib/types";
@@ -248,6 +248,16 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Proof must be a real URL (image/screenshot link), not any string.
+  for (const p of proof) {
+    const proofCheck = validateProofUrl(p);
+    if (!proofCheck.ok) {
+      return NextResponse.json(
+        { error: proofCheck.error ?? "Proof must be a real link." },
+        { status: 400 }
+      );
+    }
+  }
 
   // Clip limit (P0 batch 2): 15 APPROVED clips per platform per
   // creator, per campaign. Only status='approved' rows count —
@@ -272,13 +282,16 @@ export async function POST(request: Request) {
     }
   }
 
-  // 2-hour cooldown, per platform.
+  // 2-hour cooldown, per platform, across ALL campaigns on that
+  // platform. Only live submissions (pending or approved) start
+  // the cooldown — a rejected or duplicate submission does not.
   for (const l of links) {
     const { data: last } = await supabase
       .from("submissions")
       .select("created_at")
       .eq("user_id", user.id)
       .eq("platform", l.platform)
+      .in("status", ["pending", "approved"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -289,7 +302,7 @@ export async function POST(request: Request) {
       if (remaining > 0) {
         return NextResponse.json(
           {
-            error: `Please wait — you can submit another ${l.platform} clip in ${Math.ceil(remaining / 60000)} minutes. One clip per platform every 2 hours.`,
+            error: `Please wait — you can submit another ${l.platform} clip in ${Math.ceil(remaining / 60000)} minutes. One clip per platform every 2 hours, across all campaigns on this platform.`,
             retryAfterSeconds: Math.ceil(remaining / 1000),
           },
           { status: 429 }

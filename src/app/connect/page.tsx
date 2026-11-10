@@ -257,7 +257,8 @@ export default function ConnectPage() {
         </p>
       )}
 
-      {/* TikTok — live via Login Kit */}
+      {/* TikTok — live via Login Kit (Sandbox: only the test
+          account can connect until TikTok approves our app) */}
       <div className={`mt-4 ${cardCls}`}>
         <h2 className="text-sm font-bold text-fg">Connect TikTok</h2>
         <p className="mt-1 text-sm text-fg/60">
@@ -266,6 +267,11 @@ export default function ConnectPage() {
               ? "Connected as your TikTok account. We use this only to verify your identity and read your own videos' view counts."
               : `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with TikTok so we can verify your identity and read your own videos' view counts. We never post, edit or delete your videos."}
+        </p>
+        <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">
+          TikTok login is still in review (Sandbox) — only the test
+          account (nagu6503) can connect until TikTok approves our app.
+          If your login fails, that is why.
         </p>
         {tiktokConnected ? (
           <button
@@ -299,7 +305,7 @@ export default function ConnectPage() {
         </span>
       </div>
 
-      {/* YouTube — live via Google OAuth */}
+      {/* YouTube — live via Google OAuth (app unverified, 100-user cap) */}
       <div className={`mt-4 ${cardCls}`}>
         <h2 className="text-sm font-bold text-fg">Connect YouTube</h2>
         <p className="mt-1 text-sm text-fg/60">
@@ -308,6 +314,11 @@ export default function ConnectPage() {
               ? "Connected as your YouTube channel. We use this only to verify your identity and read your own videos' view counts."
               : `Connected as ${youtubeConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with Google so we can verify your YouTube channel and read your own videos' view counts. Only videos from your connected channel count — we never post, edit or delete your videos."}
+        </p>
+        <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">
+          Our Google app is still unverified — Google will show a
+          warning screen before you connect, and only the first 100
+          accounts can connect until verification finishes.
         </p>
         {youtubeConnected ? (
           <button

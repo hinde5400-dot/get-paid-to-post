@@ -463,15 +463,17 @@ function AdminCampaignCard({
               <p className="mt-1 text-xs font-black text-red-300">
                 Payment submitted
               </p>
-              <p
-                className="mt-1 break-all font-mono text-xs font-bold text-fg/80"
-                title={c.payment_tx_id}
-              >
-                TxID:{" "}
-                {c.payment_tx_id.length > 12
-                  ? `${c.payment_tx_id.slice(0, 12)}…`
-                  : c.payment_tx_id}
+              <p className="mt-1 break-all font-mono text-xs font-bold text-fg/80">
+                TxID: {c.payment_tx_id}
               </p>
+              <a
+                href={`https://tronscan.org/#/transaction/${c.payment_tx_id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-block text-xs font-bold text-lime hover:underline"
+              >
+                Verify on Tronscan ↗
+              </a>
             </>
           ) : (
             <>
@@ -490,6 +492,19 @@ function AdminCampaignCard({
       {c.description && (
         <p className="mt-3 text-sm leading-relaxed text-fg/60">
           {c.description}
+        </p>
+      )}
+
+      {c.brief_url && (
+        <p className="mt-2 text-sm">
+          <a
+            href={c.brief_url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-bold text-lime hover:underline"
+          >
+            Campaign brief (Google Drive) ↗
+          </a>
         </p>
       )}
 

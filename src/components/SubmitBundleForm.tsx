@@ -11,7 +11,7 @@ import {
   MAX_PROOF_SCREENSHOTS,
   PLATFORM_LABELS,
 } from "@/lib/constants";
-import { countWords, validatePostUrl, VIDEO_RULES } from "@/lib/validate";
+import { countWords, validatePostUrl, validateProofUrl, VIDEO_RULES } from "@/lib/validate";
 import { playChime } from "@/lib/sounds";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
@@ -154,7 +154,7 @@ export default function SubmitBundleForm({
       }
       if (cooldowns.has(l.platform)) {
         showError(
-          `Please wait — you can submit another ${PLATFORM_LABELS[l.platform]} clip in ${formatRemaining(cooldowns.get(l.platform)!)}. One clip per platform every 2 hours.`
+          `Please wait — you can submit another ${PLATFORM_LABELS[l.platform]} clip in ${formatRemaining(cooldowns.get(l.platform)!)}. One clip per platform every 2 hours, across all campaigns on that platform.`
         );
         return;
       }
@@ -168,6 +168,13 @@ export default function SubmitBundleForm({
     if (proofFilled.length < 1) {
       showError("Please add at least one originality-proof screenshot link.");
       return;
+    }
+    for (const p of proofFilled) {
+      const proofCheck = validateProofUrl(p);
+      if (!proofCheck.ok) {
+        showError(proofCheck.error ?? "Proof must be a real link.");
+        return;
+      }
     }
     if (!agreed) {
       showError("Please confirm you followed the campaign rules and this is your own content.");
@@ -190,6 +197,15 @@ export default function SubmitBundleForm({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submission failed.");
+      // A duplicate is NOT a success: no chime, no celebration
+      // popup — the link was already submitted and got rejected.
+      if (data.duplicateWarning) {
+        showError(
+          data.message ??
+            "Submitted, but a duplicate link was detected and rejected as a duplicate."
+        );
+        return;
+      }
       playChime();
       setSuccess({
         codes: (data.codes as string[]) ?? [],
@@ -215,11 +231,26 @@ export default function SubmitBundleForm({
             ? `Post on ${platformNames} together — submit both links as one bundle, reviewed and paid together.`
             : `Post on any 2 of ${platformNames} — submit the links as one bundle, reviewed and paid together.`}{" "}
         Up to 15 approved clips per platform — rejected clips
-        don&apos;t count toward the limit.
+        don&apos;t count toward the limit, and a rejected clip cannot
+        be resubmitted — post a new clip instead.
       </p>
+      {campaign.brief_url && (
+        <p className="mt-3 rounded-xl bg-fg/5 px-4 py-2.5 text-sm font-semibold text-fg/80">
+          Campaign brief:{" "}
+          <a
+            href={campaign.brief_url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-bold text-lime hover:underline"
+          >
+            Open the brief (Google Drive) ↗
+          </a>
+        </p>
+      )}
       <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
         ⏱ Submit your link within 30 minutes of posting — a link
-        posted more than 30 minutes ago is not accepted.
+        posted more than 30 minutes ago is not accepted. Instagram
+        links are hand-checked by the admin (no automatic check yet).
       </p>
       {isLoggedIn && (
         <p className="mt-1 text-sm text-fg/60">
@@ -242,7 +273,8 @@ export default function SubmitBundleForm({
               className="rounded-xl bg-lime/10 px-4 py-2.5 text-sm font-semibold text-lime"
             >
               ⏳ {PLATFORM_LABELS[p]}: next submit in {formatRemaining(ms)} —
-              one clip per platform every 2 hours.
+              one clip per platform every 2 hours, across all campaigns
+              on this platform.
             </p>
           ))}
         </div>

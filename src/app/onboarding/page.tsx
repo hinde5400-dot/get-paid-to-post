@@ -166,7 +166,9 @@ export default function OnboardingPage() {
         setProfileExists(true);
       }
       setConnected((c) => ({ ...c, [key]: true }));
-      showSuccess(`${platform.name} connected!`);
+      showSuccess(
+        `${platform.name} link added — not verified yet. Verify for real with login on the My accounts page.`
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save link.";
       setError(message);
@@ -211,11 +213,19 @@ export default function OnboardingPage() {
         Connect your profiles
       </h1>
       <p className="mx-auto mt-3 max-w-md text-center text-sm leading-relaxed text-fg/60">
-        Connect at least 1 account so your submitted clips can be matched
-        to you. You can add the others later from My accounts.
+        Add at least 1 account link so your submitted clips can be
+        matched to you. You can add the others later from My accounts.
+      </p>
+      <p className="mx-auto mt-3 max-w-md rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-amber-200">
+        Pasting a link only saves it — it does not verify your
+        account. Verify for real with TikTok / YouTube login on the{" "}
+        <Link href="/connect" className="font-bold text-lime underline">
+          My accounts page
+        </Link>
+        .
       </p>
       <p className="mt-4 text-center text-sm font-bold text-fg">
-        <span className="text-lime">{connectedCount} of 3 connected</span>
+        <span className="text-lime">{connectedCount} of 3 links added</span>
       </p>
 
       <div className="mt-6 space-y-4">
@@ -238,13 +248,13 @@ export default function OnboardingPage() {
                 </span>
                 <span className="block text-xs text-fg/50">
                   {connected[key]
-                    ? "Connected — you can update the link anytime."
-                    : "Paste your profile link to connect."}
+                    ? "Link added (not verified) — you can update it anytime."
+                    : "Paste your profile link to add it."}
                 </span>
               </span>
               {connected[key] && (
-                <span className="ml-auto shrink-0 rounded-full bg-lime px-3 py-1 text-xs font-black text-black">
-                  ✓ Connected
+                <span className="ml-auto shrink-0 rounded-full bg-amber-400/20 px-3 py-1 text-xs font-black text-amber-200">
+                  Link added (not verified)
                 </span>
               )}
             </div>
@@ -271,7 +281,7 @@ export default function OnboardingPage() {
               ) : connected[key] ? (
                 `Update ${name} link`
               ) : (
-                `Connect ${name}`
+                `Save ${name} link`
               )}
             </button>
           </div>
