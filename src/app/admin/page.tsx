@@ -82,6 +82,12 @@ export default async function AdminPage() {
     creator_email: emailById.get(w.user_id) ?? w.user_id.slice(0, 8),
   }));
 
+  // Bot-rejection count per creator for the review cards' bot
+  // signal (admin batch 2) — live from submissions, same source
+  // as the fraud view below.
+  const botCounts: Record<string, number> = {};
+  for (const row of botRows) botCounts[row.user_id] = row.bot_rejections;
+
   // P1-c fraud watch: live bot-rejection counts from submissions,
   // flag state (flagged/banned dates) from creator_flags.
   const fraudCreators: FraudCreator[] = botRows.map((row) => {
@@ -295,7 +301,7 @@ export default async function AdminPage() {
           Submission review
         </h2>
         <div className="mt-4">
-          <AdminReviewList submissions={items} />
+          <AdminReviewList submissions={items} botCounts={botCounts} />
         </div>
       </section>
 

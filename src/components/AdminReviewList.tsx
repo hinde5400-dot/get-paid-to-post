@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Submission } from "@/lib/types";
-import { formatUSD } from "@/lib/money";
-import { PLATFORM_LABELS } from "@/lib/constants";
+import { formatUSD, payoutForViews } from "@/lib/money";
+import { PLATFORM_LABELS, MAX_PAYOUT_DEFAULT } from "@/lib/constants";
 import { engagementRate, formatEngagementRate } from "@/lib/engagement";
 import StatusBadge from "./StatusBadge";
 import { useToast } from "@/components/Toast";
@@ -36,8 +36,13 @@ function timeAgo(iso: string): string {
 
 export default function AdminReviewList({
   submissions,
+  /** Live bot-rejection count per creator (from /admin's Fraud
+   *  data) — the only bot signal we actually have. There is NO
+   *  third-party 0–100 bot score, so none is shown or invented. */
+  botCounts = {},
 }: {
   submissions: AdminSubmission[];
+  botCounts?: Record<string, number>;
 }) {
   const router = useRouter();
   const [views, setViews] = useState<Record<string, string>>({});
@@ -49,6 +54,27 @@ export default function AdminReviewList({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { showError, showSuccess } = useToast();
+  // Sort (admin batch 2): newest first by default, or by views,
+  // or by bot signal (most bot rejections first) for fraud triage.
+  const [sort, setSort] = useState<"newest" | "views" | "bot">("newest");
+  const sorted = useMemo(() => {
+    const arr = [...submissions];
+    if (sort === "views") {
+      arr.sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+    } else if (sort === "bot") {
+      arr.sort(
+        (a, b) =>
+          (botCounts[b.user_id] ?? 0) - (botCounts[a.user_id] ?? 0) ||
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    } else {
+      arr.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    }
+    return arr;
+  }, [submissions, sort, botCounts]);
 
   async function refreshViewsNow() {
     setRefreshing(true);
@@ -173,22 +199,38 @@ export default function AdminReviewList({
           Views auto-refresh every 3 hours for pending clips (YouTube +
           TikTok). Instagram is not connected yet.
         </p>
-        <button
-          type="button"
-          onClick={refreshViewsNow}
-          disabled={refreshing}
-          className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
-        >
-          {refreshing ? (
-            <>
-              <Spinner /> Refreshing...
-            </>
-          ) : (
-            "Refresh views now"
-          )}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm font-bold text-fg">
+            Sort:
+            <select
+              value={sort}
+              onChange={(e) =>
+                setSort(e.target.value as "newest" | "views" | "bot")
+              }
+              className="rounded-full border border-fg/15 bg-card px-3 py-2 text-sm text-fg outline-none focus:border-red-500"
+            >
+              <option value="newest">Newest first</option>
+              <option value="views">Most views</option>
+              <option value="bot">Most bot rejections</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={refreshViewsNow}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+          >
+            {refreshing ? (
+              <>
+                <Spinner /> Refreshing...
+              </>
+            ) : (
+              "Refresh views now"
+            )}
+          </button>
+        </div>
       </div>
-      {submissions.map((s) => (
+      {sorted.map((s) => (
         <article
           key={s.id}
           className="rounded-2xl border border-fg/10 bg-card p-5"
@@ -338,6 +380,113 @@ export default function AdminReviewList({
                 : "—"}
             </p>
           )}
+
+          {/* Review signals (admin batch 2, Content Rewards-style):
+              estimated payout, bot signal from data we actually
+              have, and the 30-minute-rule posted time. There is NO
+              view curve — no view-history pipeline exists, and this
+              batch does not build one. */}
+          <div className="mt-2 space-y-1 text-xs text-fg/70">
+            <p>
+              {(() => {
+                if (s.status !== "pending") return null;
+                if (s.rate_per_1k == null) {
+                  return (
+                    <>
+                      <span className="font-bold text-fg">Est. payout: </span>
+                      — (no rate on this campaign)
+                    </>
+                  );
+                }
+                const v = Number(views[s.id] ?? s.views ?? 0);
+                if (v <= 0) {
+                  return (
+                    <>
+                      <span className="font-bold text-fg">Est. payout: </span>
+                      $0.00 — enter verified views above
+                    </>
+                  );
+                }
+                const calc = payoutForViews(
+                  v,
+                  s.rate_per_1k,
+                  s.max_payout_per_post ?? MAX_PAYOUT_DEFAULT
+                );
+                let est = calc.earnings;
+                let note = "";
+                if (calc.capped) {
+                  note = ` (capped at ${formatUSD(s.max_payout_per_post ?? 0)} max per post)`;
+                }
+                if (
+                  s.campaign_budget_left != null &&
+                  est > s.campaign_budget_left
+                ) {
+                  est = Math.max(0, s.campaign_budget_left);
+                  note = ` (limited by remaining budget ${formatUSD(s.campaign_budget_left)})`;
+                }
+                return (
+                  <>
+                    <span className="font-bold text-fg">Est. payout: </span>
+                    {formatUSD(est)}
+                    {note}
+                  </>
+                );
+              })()}
+            </p>
+            <p>
+              {(() => {
+                const n = botCounts[s.user_id] ?? 0;
+                if (n === 0) {
+                  return (
+                    <>
+                      <span className="font-bold text-fg">Bot signal: </span>
+                      <span className="text-fg/50">0 bot rejections</span>
+                    </>
+                  );
+                }
+                if (n < 6) {
+                  return (
+                    <>
+                      <span className="font-bold text-fg">Bot signal: </span>
+                      <span className="font-bold text-amber-300">
+                        {n} bot rejection{n === 1 ? "" : "s"}
+                      </span>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <span className="font-bold text-fg">Bot signal: </span>
+                    <span className="font-bold text-red-300">
+                      {n} bot rejections — concern (10 = flag, one more
+                      after the flag = auto-ban)
+                    </span>
+                  </>
+                );
+              })()}
+            </p>
+            {s.posted_time_unverified ? (
+              <p className="font-semibold text-amber-300">
+                ⚠ Posted time unverified — the platform API could not
+                supply it. Check the video&apos;s post time before
+                approving.
+              </p>
+            ) : s.posted_at ? (
+              <p>
+                <span className="font-bold text-fg">Posted: </span>
+                {new Date(s.posted_at).toLocaleString("en-US")} · submitted{" "}
+                {Math.max(
+                  0,
+                  Math.round(
+                    (new Date(s.created_at).getTime() -
+                      new Date(s.posted_at).getTime()) /
+                      60000
+                  )
+                )}{" "}
+                min after posting (30-minute limit)
+              </p>
+            ) : null}
+          </div>
 
           {s.status === "rejected" && s.rejection_reason && (
             <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
