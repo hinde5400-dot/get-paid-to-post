@@ -36,7 +36,7 @@ const FAQS = [
   },
   {
     q: "When do I get paid after a campaign ends?",
-    a: "About 1 week after the campaign ends. First there is a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then the 72-hour payment hold finishes and payouts are made. Approved earnings go into the 72-hour hold as soon as they are approved during the campaign — the week after a campaign ends is the final re-check and payout window. One day after payout finishes, the campaign, its proofs and its chat are deleted — your earnings history stays in your account.",
+    a: "Approved earnings enter a 72-hour hold as soon as they are approved — even while the campaign is still running. After the campaign ends there is a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then payouts are made manually — about 1 week after the campaign ends in total. The campaign, its proofs and its chat are deleted 1 day after the last hold matures, never earlier than 7 days after the campaign ends. Wallet and withdrawal records are never deleted.",
   },
   {
     q: "Do I need followers to join?",
@@ -44,7 +44,7 @@ const FAQS = [
   },
   {
     q: "How much can I earn per post?",
-    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. The campaign sets ONE rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube. A clip needs at least 1,000 views to earn — clips below 1,000 views cannot be approved. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked while your clip is pending, for up to 14 days after you submit. Once approved, earnings are fixed on the views at approval — later views don't add earnings.",
+    a: "Every approved post earns the campaign's rate per 1,000 verified views — there is no base pay per post. The campaign sets ONE rate per 1,000 views for the whole campaign — the same rate on TikTok, Instagram and YouTube. Every clip needs at least 1,000 views to earn — a brand may set a higher minimum, shown on the campaign. A clip below the campaign's minimum cannot be approved. Each campaign also sets a maximum payout per post — shown on its card as 'Up to $X per post' — so a viral clip never pays more than the cap. Views are tracked while your clip is pending, for up to 14 days after you submit. Once approved, earnings are fixed on the views at approval — later views don't add earnings.",
   },
   {
     q: "What are the video rules?",
@@ -52,7 +52,7 @@ const FAQS = [
   },
   {
     q: "How many posts can I submit?",
-    a: "Up to 15 approved clips per platform per campaign, and one clip per platform every 2 hours — the cooldown applies across all campaigns on that platform, not per campaign. A rejected or duplicate submission does not start the cooldown. Submit any 2 of TikTok, Instagram and YouTube together as one bundle. Rejected clips don't count toward the 15-clip limit, and a rejected clip cannot be resubmitted — post a new clip instead.",
+    a: "Up to 15 approved clips per platform per campaign, and one clip per platform every 2 hours — the cooldown applies across all campaigns on that platform, not per campaign. A rejected or duplicate submission does not start the cooldown. Submit up to 2 links together as one bundle (a single-platform campaign needs only 1 link). Rejected clips don't count toward the 15-clip limit, and a rejected clip cannot be resubmitted — post a new clip instead.",
   },
   {
     q: "What happens with fake engagement?",
@@ -60,7 +60,7 @@ const FAQS = [
   },
   {
     q: "Is Get Paid To Post safe?",
-    a: "We make no guarantee of safety — here is how it works instead. Every campaign is funded by the brand before it goes live, creators are paid only for verified views, and creators never pay anything to join, post, or earn. Views are checked through the platforms and reviewed by hand, and fake engagement leads to an account being strictly blocked or banned. Support runs on Discord.",
+    a: "We make no guarantee of safety — here is how it works instead. Every campaign is funded by the brand before it goes live, creators are paid only for verified views, and creators never pay anything to join, post, or earn. Views are checked through the platforms' own data where available (TikTok and YouTube) and reviewed by hand; Instagram views are checked by hand only — there is no automatic Instagram check yet. Fake engagement leads to an account being strictly blocked or banned. Support runs on Discord.",
   },
   {
     q: "What happens to my unspent budget?",
@@ -68,11 +68,11 @@ const FAQS = [
   },
   {
     q: "What if my clip is rejected by mistake?",
-    a: "You can appeal once through Discord support. A person will review your appeal. We aim to reply within 10 business days. If a submission is rejected after it was approved, its earnings are reversed — taken back from your Pending Balance first, then from your Withdrawable Balance — and returned to the campaign budget. Only amounts already withdrawn (paid out) cannot be reversed.",
+    a: "If you think a rejection or flag was wrong, appeal through Discord support. A person will review your appeal. We aim to reply within 10 business days. If a submission is rejected after it was approved, its earnings are reversed — taken back from your Pending Balance first, then from your Withdrawable Balance — and returned to the campaign budget. Only amounts already withdrawn (paid out) cannot be reversed.",
   },
   {
     q: "What happens after a campaign ends?",
-    a: "About 1 week after the campaign ends: first a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then the 72-hour payment hold finishes and payouts are made. One day after payout finishes, the campaign, its proofs and its chat are deleted — your earnings history stays in your account.",
+    a: "About 1 week after the campaign ends. Approved earnings already entered a 72-hour hold as soon as they were approved — even while the campaign was still running. After the campaign ends there is a 3-day re-check window, during which an already-approved video can still be rejected if fake or bot views show up. Then payouts are made manually. The campaign, its proofs and its chat are deleted 1 day after the last hold matures, never earlier than 7 days after the campaign ends. Wallet and withdrawal records are never deleted.",
   },
   {
     q: "Do you guarantee views or earnings?",
@@ -441,7 +441,7 @@ export default async function HomePage() {
         </h2>
         <div className="grid gap-4 md:grid-cols-4">
           {[
-            { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. Then connect your TikTok, Instagram and YouTube profiles." },
+            { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. Then connect your TikTok and YouTube accounts and add your Instagram profile link." },
             { n: "2", t: "Pick a campaign", d: "Browse funded campaigns and choose one that fits your style. Check the brief, rate and rules first." },
             { n: "3", t: "Post your clip", d: "Film a vertical 9:16 clip with captions and a hook in the first 3 seconds. Post it, then submit the link." },
             { n: "4", t: "Get paid per view", d: "Approved earnings sit in a 72-hour hold, then land in your wallet. Withdraw from $15 in USDT (TRC20 or BEP20)." },
@@ -474,7 +474,7 @@ export default async function HomePage() {
             },
             {
               t: "Verified views",
-              d: "Views are checked through the platforms' own data and reviewed by hand. Only verified views from real people count.",
+              d: "Views are checked through the platforms' own data where available (TikTok and YouTube) and reviewed by hand; Instagram views are checked by hand only — there is no automatic Instagram check yet. Only verified views from real people count.",
             },
             {
               t: "1% engagement gate",
@@ -486,7 +486,7 @@ export default async function HomePage() {
             },
             {
               t: "Every rejection shows its reason",
-              d: "A rejected clip always tells you why — bot views, brief mismatch, wrong content or duplicate. One appeal via Discord.",
+              d: "A rejected clip always tells you why — bot views, brief mismatch, wrong content or duplicate. Appeal through Discord support if you think a rejection was wrong.",
             },
             {
               t: "Free to join — no fake engagement",
