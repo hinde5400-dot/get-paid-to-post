@@ -16,9 +16,10 @@ import { getServerClient } from "@/lib/supabase/server";
  * migrations 0023 and 0030). No service_role key is used anywhere.
  *
  * What it deletes, per ended campaign: the campaign row, its
- * submissions, its brand_messages (chat), and its proof images in
- * the private 'brand-proofs' bucket. Wallets and withdrawals are
- * NEVER deleted — money history stays forever.
+ * submissions, its brand_messages (chat), its proof images in
+ * the private 'brand-proofs' bucket, and its logo + thumbnail in
+ * the public 'campaign-images' bucket (migration 0032). Wallets
+ * and withdrawals are NEVER deleted — money history stays forever.
  *
  * EXPIRED PENDING (migration 0030): a campaign that stays
  * status 'pending' with NO payment_tx_id for 7+ days is junk and
@@ -62,7 +63,7 @@ import { getServerClient } from "@/lib/supabase/server";
  *
  * Response: { ok, checked, deleted, skipped, failed,
  *   expired_pending_deleted, expired_pending_failed,
- *   expired_pending_error, details[] }
+ *   expired_pending_error, orphan_images_deleted, details[] }
  * where details has one entry per candidate campaign (ended or
  * expired-pending), and `deleted` counts ended campaigns only —
  * expired pending deletions are counted separately in
@@ -96,6 +97,7 @@ interface CandidateRow {
   approved_count: number;
   latest_hold_until: string | null;
   storage_paths: string[] | null;
+  image_paths: string[] | null;
   eligible: boolean;
   skip_reason: string | null;
 }
@@ -113,6 +115,7 @@ interface ExpiredPendingRow {
   created_at: string | null;
   messages_count: number;
   storage_paths: string[] | null;
+  image_paths: string[] | null;
 }
 
 type Detail =
@@ -209,6 +212,31 @@ async function handle(request: Request) {
         }
       }
 
+      // 1b) Campaign images (migration 0032): the logo + thumbnail
+      // in the public 'campaign-images' bucket, listed by the same
+      // list function. Same storage-first order, same failure rule
+      // — a failed removal leaves the campaign untouched for the
+      // next daily run.
+      const imagePaths = candidate.image_paths ?? [];
+      if (imagePaths.length > 0) {
+        const { error: imageRemoveError } = await supabase.storage
+          .from("campaign-images")
+          .remove(imagePaths);
+        if (imageRemoveError) {
+          failed += 1;
+          details.push({
+            campaign_id: campaignId,
+            result: "failed",
+            reason: `campaign image removal failed: ${imageRemoveError.message}`,
+          });
+          console.error(
+            `Cleanup: campaign image removal failed for campaign ${campaignId}:`,
+            imageRemoveError.message
+          );
+          continue;
+        }
+      }
+
       // 2) Database: re-checks eligibility in the same transaction,
       // then deletes messages, submissions and the campaign row.
       // Wallets and withdrawals are never touched.
@@ -256,13 +284,14 @@ async function handle(request: Request) {
         kind: "ended",
         submissions_deleted: result.submissions_deleted ?? 0,
         messages_deleted: result.messages_deleted ?? 0,
-        objects_deleted: paths.length,
+        objects_deleted: paths.length + imagePaths.length,
       });
       console.log(
         `Cleanup: deleted campaign ${campaignId} — ` +
           `${result.submissions_deleted ?? 0} submissions, ` +
           `${result.messages_deleted ?? 0} messages, ` +
-          `${paths.length} proof objects`
+          `${paths.length} proof objects, ` +
+          `${imagePaths.length} campaign images`
       );
     } catch (err) {
       failed += 1;
@@ -326,6 +355,29 @@ async function handle(request: Request) {
           }
         }
 
+        // Campaign images (migration 0032): same storage-first
+        // order as the ended-campaign loop above.
+        const imagePaths = row.image_paths ?? [];
+        if (imagePaths.length > 0) {
+          const { error: imageRemoveError } = await supabase.storage
+            .from("campaign-images")
+            .remove(imagePaths);
+          if (imageRemoveError) {
+            expiredPendingFailed += 1;
+            details.push({
+              campaign_id: campaignId,
+              result: "failed",
+              kind: "expired_pending",
+              reason: `campaign image removal failed: ${imageRemoveError.message}`,
+            });
+            console.error(
+              `Cleanup: campaign image removal failed for expired pending campaign ${campaignId}:`,
+              imageRemoveError.message
+            );
+            continue;
+          }
+        }
+
         const { data: cleaned, error: cleanupError } = await supabase.rpc(
           "cleanup_expired_pending_campaign",
           { p_campaign_id: campaignId }
@@ -371,13 +423,14 @@ async function handle(request: Request) {
           kind: "expired_pending",
           submissions_deleted: result.submissions_deleted ?? 0,
           messages_deleted: result.messages_deleted ?? 0,
-          objects_deleted: paths.length,
+          objects_deleted: paths.length + imagePaths.length,
         });
         console.log(
           `Cleanup: deleted expired pending campaign ${campaignId} ("${row.title ?? ""}") — ` +
             `${result.submissions_deleted ?? 0} submissions, ` +
             `${result.messages_deleted ?? 0} messages, ` +
-            `${paths.length} proof objects`
+            `${paths.length} proof objects, ` +
+            `${imagePaths.length} campaign images`
         );
       } catch (err) {
         expiredPendingFailed += 1;
@@ -395,6 +448,54 @@ async function handle(request: Request) {
     }
   }
 
+  // --- Orphaned campaign images (migration 0032) ---
+  // A brand uploads its logo/thumbnail at confirmed submit and the
+  // campaign POST follows at once — an upload only becomes an
+  // orphan when that POST fails. Sweep them once a day: list the
+  // bucket (objects live at <user_id>/<uuid>.<ext>), ask the
+  // SECURITY DEFINER orphan check per object (1+ day old and
+  // referenced by no campaign), and remove the orphans through
+  // the Storage API. Best-effort: a failure here never fails the
+  // job, and if migration 0032 has not been run yet the calls
+  // simply error and are skipped.
+  let orphanImagesDeleted = 0;
+  try {
+    const { data: folders, error: foldersError } = await supabase.storage
+      .from("campaign-images")
+      .list("", { limit: 1000 });
+    if (!foldersError && folders) {
+      for (const folder of folders) {
+        if (!folder.name) continue;
+        const { data: files, error: filesError } = await supabase.storage
+          .from("campaign-images")
+          .list(folder.name, { limit: 1000 });
+        if (filesError || !files) continue;
+        const oldPaths = files
+          .filter(
+            (f) =>
+              f.name &&
+              f.created_at &&
+              new Date(f.created_at).getTime() <
+                Date.now() - 24 * 60 * 60 * 1000
+          )
+          .map((f) => `${folder.name}/${f.name}`);
+        for (const path of oldPaths) {
+          const { data: isOrphan } = await supabase.rpc(
+            "campaign_image_is_orphan",
+            { p_path: path }
+          );
+          if (isOrphan !== true) continue;
+          const { error: orphanRemoveError } = await supabase.storage
+            .from("campaign-images")
+            .remove([path]);
+          if (!orphanRemoveError) orphanImagesDeleted += 1;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Cleanup: orphan image sweep failed:", err);
+  }
+
   return NextResponse.json({
     ok: true,
     checked: candidates.length,
@@ -404,6 +505,7 @@ async function handle(request: Request) {
     expired_pending_deleted: expiredPendingDeleted,
     expired_pending_failed: expiredPendingFailed,
     expired_pending_error: expiredPendingError,
+    orphan_images_deleted: orphanImagesDeleted,
     details,
   });
 }
