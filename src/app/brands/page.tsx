@@ -19,11 +19,10 @@ export default async function BrandsPage() {
   // Brand entry is only from Signup (role=brand) and the Footer.
   // A logged-in creator cannot launch campaigns from a creator
   // account; the owner can always test the form.
-  // Role fallback: Google OAuth users carry their role in auth
-  // metadata (the auth callback sets it — a user cannot write `role`
-  // to public.users themselves, migration 0010's privilege guard).
-  // Same fallback the login page already uses.
-  const role = profile?.role ?? user?.user_metadata?.role ?? "creator";
+  // public.users.role is the single source of truth (migration
+  // 0034 claims it there at Google signup through a guarded RPC).
+  // Auth metadata is user-writable and must never decide a role.
+  const role = profile?.role ?? "creator";
   const canLaunch = !user ? false : owner || role !== "creator";
   const initialBrandName =
     profile?.brand_name ?? profile?.full_name ?? null;

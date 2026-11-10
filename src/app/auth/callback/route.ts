@@ -12,14 +12,16 @@ function safeNext(raw: string | null): string {
  *
  * Google OAuth: signInWithOAuth cannot carry user metadata, so the
  * role picked on the signup page travels in the callback URL
- * (?role=brand). A brand role cannot be written to public.users by
- * the user themselves — migration 0010's privilege guard blocks
- * non-owners from changing `role` — so the callback stores it in the
- * user's own auth metadata instead (updateUser, always allowed for
- * one's own record), and the brands/dashboard pages read the role
- * with the same metadata fallback the login page already uses.
+ * (?role=brand). It is claimed on public.users through the
+ * SECURITY DEFINER RPC claim_oauth_role (migration 0034): only a
+ * fresh account (created within the last 10 minutes) with no
+ * campaigns and no submissions may claim creator -> brand, and
+ * only on its own row. Auth metadata is NEVER the role store —
+ * any user can write their own metadata from the browser console,
+ * so a metadata fallback would let anyone self-promote to 'brand'
+ * and bypass the migration 0010 privilege guard.
  * brand_name is NOT privilege-guarded, so it is written to the
- * profile row as well.
+ * profile row directly as well.
  *
  * The brand role is only applied to FRESH accounts (created within
  * the last 10 minutes): an existing user who links Google to their
@@ -75,7 +77,6 @@ export async function GET(request: Request) {
           );
         }
 
-        const metaRole = user.user_metadata?.role;
         const metaName =
           typeof user.user_metadata?.full_name === "string" &&
           user.user_metadata.full_name.trim()
@@ -90,34 +91,45 @@ export async function GET(request: Request) {
           Number.isFinite(createdMs) &&
           Date.now() - createdMs < 10 * 60 * 1000;
 
-        let effectiveRole: string =
-          p?.role ?? (typeof metaRole === "string" ? metaRole : "creator");
+        // public.users.role is the single source of truth.
+        let effectiveRole: string = p?.role ?? "creator";
 
         if (intendedRole === "brand" && isFresh && effectiveRole !== "brand") {
-          // Store the brand role in auth metadata (own record) and
-          // carry the brand name onto the profile row (allowed).
-          // The public.users role stays 'creator' — the privilege
-          // guard forbids user-side role writes; see the header.
-          const { data: updated } = await supabase.auth.updateUser({
-            data: { role: "brand", brand_name: p?.brand_name ?? displayName },
-          });
-          const updatedRole = updated.user?.user_metadata?.role;
-          if (updatedRole === "brand") {
+          // Claim the brand role on public.users through the guarded
+          // RPC (migration 0034) — never via auth metadata, which
+          // the user themselves can write. If the RPC is not
+          // applied yet it fails cleanly (error, no throw) and the
+          // signup simply lands as a creator.
+          if (!p) {
+            // Trigger fallback (same as onboarding): create the row
+            // first, so the RPC has a row to claim on.
+            await supabase.from("users").insert({
+              id: user.id,
+              email: user.email,
+              full_name: displayName,
+              brand_name: displayName,
+            });
+          }
+          const { data: claimed, error: claimError } = await supabase.rpc(
+            "claim_oauth_role",
+            { p_role: "brand" }
+          );
+          if (!claimError && claimed === "brand") {
             effectiveRole = "brand";
-            if (p && !p.brand_name) {
+            // brand_name is NOT privilege-guarded: write it to the
+            // profile row if it is still missing.
+            const { data: after } = await supabase
+              .from("users")
+              .select("brand_name")
+              .eq("id", user.id)
+              .single();
+            if (
+              !(after as { brand_name?: string | null } | null)?.brand_name
+            ) {
               await supabase
                 .from("users")
                 .update({ brand_name: displayName })
                 .eq("id", user.id);
-            }
-            if (!p) {
-              // Trigger fallback (same as onboarding): create the row.
-              await supabase.from("users").insert({
-                id: user.id,
-                email: user.email,
-                full_name: displayName,
-                brand_name: displayName,
-              });
             }
           }
         }
