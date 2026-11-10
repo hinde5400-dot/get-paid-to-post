@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       { status: 429 }
     );
   }
-  const body = (await request.json()) as {
+  let body: {
     brandName?: string;
     logoUrl?: string | null;
     title?: string;
@@ -103,6 +103,14 @@ export async function POST(request: Request) {
     thumbnailUrl?: string | null;
     durationDays?: number | null;
   };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request — send a valid JSON body." },
+      { status: 400 }
+    );
+  }
   // Server-side validation mirrors the client form — never trust the
   // client alone. Every rejection carries the exact message the red
   // error popup shows.
@@ -465,7 +473,9 @@ export async function POST(request: Request) {
     // The per-post cap IS the "earn up to" figure shown on cards.
     max_payout_per_post: cap,
     views_tracked_days: 14,
-    max_posts: 7,
+    // No max_posts: the old hardcoded max_posts: 7 was dead (never
+    // read anywhere) and stale next to the enforced 15-approved-
+    // clips-per-platform rule.
     earn_up_to: cap,
     is_funded: false,
     status: "pending",

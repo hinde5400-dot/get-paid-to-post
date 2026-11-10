@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getProfile } from "@/lib/auth";
 import { getServerClient } from "@/lib/supabase/server";
 import { SITE_URL, TIKTOK_REDIRECT_URI, TIKTOK_SCOPES } from "@/lib/constants";
 
@@ -32,6 +32,11 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.redirect(new URL("/login", SITE_URL));
+  }
+  // A blocked account connects no OAuth account.
+  const profile = await getProfile(user.id);
+  if (profile?.is_blocked) {
+    return new NextResponse("This account is blocked.", { status: 403 });
   }
 
   const clientKey = process.env.TIKTOK_CLIENT_KEY;
@@ -71,6 +76,15 @@ export async function DELETE() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
+  }
+  // A blocked account disconnects nothing — the block is supposed
+  // to stop all activity, including (re)connecting OAuth.
+  const profile = await getProfile(user.id);
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
   }
   const supabase = getServerClient();
   if (!supabase) {
