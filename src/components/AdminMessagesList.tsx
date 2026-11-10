@@ -125,7 +125,8 @@ export default function AdminMessagesList({
         return (
           <div
             key={campaignId}
-            className={`rounded-3xl border bg-card p-5 ${
+            id={`brand-thread-${campaignId}`}
+            className={`scroll-mt-24 rounded-3xl border bg-card p-5 target:ring-2 target:ring-red-500 ${
               unread > 0 ? "border-red-500/50" : "border-fg/10"
             }`}
           >

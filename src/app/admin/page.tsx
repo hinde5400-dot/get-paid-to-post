@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
-import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, isCampaignSettling } from "@/lib/data";
+import type { Campaign } from "@/lib/types";
+import { getAllSubmissions, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, isCampaignSettling, campaignStatus } from "@/lib/data";
 import { fraudStatus } from "@/lib/fraud";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -9,7 +10,9 @@ import AdminFraudList, { type FraudCreator } from "@/components/AdminFraudList";
 import AdminRecheckList from "@/components/AdminRecheckList";
 import AdminPayoutsList, { type PayoutRow } from "@/components/AdminPayoutsList";
 import AdminCreatorsList, { type CreatorRow } from "@/components/AdminCreatorsList";
-import AdminCampaignList from "@/components/AdminCampaignList";
+import AdminCampaignCards, {
+  type CampaignCardStats,
+} from "@/components/AdminCampaignCards";
 import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
 import AdminSettingsForm from "@/components/AdminSettingsForm";
@@ -76,9 +79,80 @@ export default async function AdminPage() {
   }));
 
   const pending = items.filter((s) => s.status === "pending").length;
+  const approvedCount = items.filter((s) => s.status === "approved").length;
+  const rejectedCount = items.filter((s) => s.status === "rejected").length;
   const pendingWithdrawals = withdrawals.filter(
     (w) => w.status === "pending"
   ).length;
+
+  // Per-campaign cards (admin campaign cards + budget edit):
+  // every live (including settling) and pending campaign gets its
+  // own card. Pending first (they need a decision), then live,
+  // then settling; newest first inside each group.
+  const statusOrder = (c: Campaign) => {
+    if (c.status === "pending") return 0;
+    return campaignStatus(c) === "live" ? 1 : 2;
+  };
+  const cardCampaigns = [...discoverCampaigns, ...pendingCampaigns]
+    .filter(
+      (c, i, arr) => arr.findIndex((x) => x.id === c.id) === i
+    )
+    .sort(
+      (a, b) =>
+        statusOrder(a) - statusOrder(b) ||
+        new Date(b.created_at ?? 0).getTime() -
+          new Date(a.created_at ?? 0).getTime()
+    );
+
+  // Per-campaign stats, computed live from the submissions table
+  // (the same rows the review list below shows): submissions
+  // split by platform, total views, summed likes/comments for the
+  // aggregate engagement rate, and the per-post list for the
+  // card's engagement breakdown.
+  const statsByCampaign: Record<string, CampaignCardStats> = {};
+  for (const s of items) {
+    let st = statsByCampaign[s.campaign_id];
+    if (!st) {
+      st = {
+        total: 0,
+        tiktok: 0,
+        instagram: 0,
+        youtube: 0,
+        views: 0,
+        likes: 0,
+        comments: 0,
+        posts: [],
+      };
+      statsByCampaign[s.campaign_id] = st;
+    }
+    st.total += 1;
+    if (s.platform === "tiktok") st.tiktok += 1;
+    else if (s.platform === "instagram") st.instagram += 1;
+    else if (s.platform === "youtube") st.youtube += 1;
+    st.views += s.views ?? 0;
+    st.likes += s.likes ?? 0;
+    st.comments += s.comments ?? 0;
+    st.posts.push({
+      id: s.id,
+      platform: s.platform,
+      post_url: s.post_url,
+      views: s.views ?? 0,
+      likes: s.likes ?? 0,
+      comments: s.comments ?? 0,
+      status: s.status,
+    });
+  }
+
+  // Which campaigns have proof — at least one brand message in
+  // their chat thread. The Proof button on a card jumps to that
+  // campaign's thread; a campaign with no messages yet links to
+  // the inbox instead.
+  const hasProof: Record<string, boolean> = {};
+  for (const m of brandMessages) hasProof[m.campaign_id] = true;
+
+  const budgetHistory = await getCampaignBudgetHistory(
+    cardCampaigns.map((c) => c.id)
+  );
   const unreadMessages = brandMessages.filter((m) => !m.is_read).length;
   const withdrawalItems: WithdrawalWithCreator[] = withdrawals.map((w) => ({
     ...w,
@@ -297,6 +371,44 @@ export default async function AdminPage() {
         </p>
       </div>
 
+      {/* Status summary — one box per count, at the top, so the
+          state of the whole site reads at a glance. Payment
+          pending = withdrawal requests not yet marked paid. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-3xl border border-fg/10 bg-card p-4">
+          <p className="font-display text-2xl font-black text-amber-300">
+            {pending}
+          </p>
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-fg/50">
+            Pending submissions
+          </p>
+        </div>
+        <div className="rounded-3xl border border-fg/10 bg-card p-4">
+          <p className="font-display text-2xl font-black text-green-300">
+            {approvedCount}
+          </p>
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-fg/50">
+            Approved submissions
+          </p>
+        </div>
+        <div className="rounded-3xl border border-fg/10 bg-card p-4">
+          <p className="font-display text-2xl font-black text-red-300">
+            {rejectedCount}
+          </p>
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-fg/50">
+            Rejected submissions
+          </p>
+        </div>
+        <div className="rounded-3xl border border-fg/10 bg-card p-4">
+          <p className="font-display text-2xl font-black text-amber-300">
+            {pendingWithdrawals}
+          </p>
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-fg/50">
+            Payment pending
+          </p>
+        </div>
+      </div>
+
       {/* Admin settings — USDT wallet brands pay their budget to */}
       <section id="admin-settings">
         <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
@@ -313,39 +425,48 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* Pending campaigns — owner-only, same check as this whole page */}
+      {/* Campaigns — owner-only. Every live and pending campaign
+          gets its OWN card: name, brand, status, budget % used,
+          a Proof button in the corner (its brand chat + payment
+          proof), submissions split by platform, total views and
+          per-post engagement. Pending cards carry Approve /
+          Reject; every card carries an Edit budget option. */}
       <section>
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
-            Pending campaigns
+            Campaigns
           </h2>
           <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
+            {cardCampaigns.length} campaign
+            {cardCampaigns.length === 1 ? "" : "s"} ·{" "}
             {pendingCampaigns.length} waiting for review
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
-          Check the Transaction ID on each campaign — it proves the
-          brand sent the budget. Approve a campaign{" "}
+          Check the Transaction ID on each pending campaign — it proves
+          the brand sent the budget. Approve a campaign{" "}
           <strong className="text-fg">only after the brand&apos;s
           budget has actually reached you</strong> — approving marks it
           funded and live on Discover. Rejecting hides it forever; it is
-          never shown anywhere.
+          never shown anywhere. Use Edit budget when a brand tops up
+          (check the extra budget + 15% fee arrived first) or when a
+          campaign under-uses its budget and you refund the remainder
+          to the brand yourself.
         </p>
         <div className="mt-4">
-          {pendingCampaigns.length === 0 ? (
-            <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center text-sm text-fg/60">
-              No campaigns waiting for review.
-            </div>
-          ) : (
-            <AdminCampaignList campaigns={pendingCampaigns} />
-          )}
+          <AdminCampaignCards
+            campaigns={cardCampaigns}
+            statsByCampaign={statsByCampaign}
+            hasProof={hasProof}
+            budgetHistory={budgetHistory}
+          />
         </div>
       </section>
 
       {/* Brand messages — private two-way chat. Brands message the
           admin from the payment page and upload proof screenshots
           there; the admin replies in the thread. */}
-      <section>
+      <section id="brand-messages">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
             Brand messages
