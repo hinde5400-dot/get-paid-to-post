@@ -889,32 +889,44 @@ export default function BrandForm({
             10,000 views earns $20.00 (up to the Max Payout Per Post).
             The same rate applies on TikTok, Instagram and YouTube.
           </span>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            value={rate}
-            onChange={(e) => setRate(e.target.value)}
-            placeholder="e.g. 2"
-            className={inputCls}
-          />
+          <div className="relative">
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-fg/50">
+              $
+            </span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              placeholder="2"
+              className={`${inputCls} pl-8`}
+            />
+          </div>
           {fieldErrors.rate && (
             <span className={errCls}>{fieldErrors.rate}</span>
           )}
         </label>
         <label id="field-budget" className="block text-sm font-bold text-fg">
-          Budget (Your Choice)
-          <input
-            type="number"
-            min={1}
-            step="1"
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-            placeholder="e.g. 200"
-            className={inputCls}
-          />
+          Campaign Budget (USD)
+          <div className="relative">
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-fg/50">
+              $
+            </span>
+            <input
+              type="number"
+              min={1}
+              step="1"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="200"
+              className={`${inputCls} pl-8`}
+            />
+          </div>
           <span className="mt-1 block text-xs font-medium text-fg/50">
-            Any amount above $0 — funded upfront before launch.
+            The total amount you want to spend on this campaign.
+            Creators are paid from this budget — you choose it. Any
+            amount above $0, funded upfront before launch.
           </span>
           {liveFeeSplit && (
             <span className="mt-1 block text-xs font-semibold text-lime">
@@ -931,16 +943,21 @@ export default function BrandForm({
         <label id="field-maxPayout" className="block text-sm font-bold text-fg md:col-span-2">
           Max Payout Per Post (USD){" "}
           <span className="font-medium text-fg/50">(optional)</span>
-          <input
-            type="number"
-            min={MAX_PAYOUT_MIN}
-            max={MAX_PAYOUT_MAX}
-            step="1"
-            value={maxPayout}
-            onChange={(e) => setMaxPayout(e.target.value)}
-            placeholder="100 — default $100"
-            className={inputCls}
-          />
+          <div className="relative">
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-fg/50">
+              $
+            </span>
+            <input
+              type="number"
+              min={MAX_PAYOUT_MIN}
+              max={MAX_PAYOUT_MAX}
+              step="1"
+              value={maxPayout}
+              onChange={(e) => setMaxPayout(e.target.value)}
+              placeholder="100"
+              className={`${inputCls} pl-8`}
+            />
+          </div>
           <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
             Optional — leave blank for the $100 default. Creator will
             never earn more than this on one post, even if
@@ -970,12 +987,12 @@ export default function BrandForm({
             step="1"
             value={minViews}
             onChange={(e) => setMinViews(e.target.value)}
-            placeholder="e.g. 1000"
+            placeholder="1000"
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-medium leading-relaxed text-fg/50">
-            Optional — leave blank for the 1,000 minimum. Every clip
-            needs at least 1,000 views to earn.
+            Optional — leave blank for the 1,000 minimum. A clip earns
+            only after it reaches this many views.
           </span>
           {fieldErrors.minViews && (
             <span className={errCls}>{fieldErrors.minViews}</span>
@@ -1040,13 +1057,13 @@ export default function BrandForm({
           onChange={(e) => setBrief(e.target.value)}
           placeholder={`Example — write your brief in four short parts:
 
-What to show: [Brand] is a [one-line product intro]. Show the product in real use, the result it gives, and your honest reaction.
+What to show: Our energy drink — show yourself drinking it before a workout, your real energy boost, and your honest reaction.
 
-What NOT to show: No competitor logos, no misleading claims, no adult or unsafe content, no reused clips from other creators.
+What NOT to show: No other brands or logos, no fake claims, no unsafe or adult content.
 
-Hook: Open with the problem in the first 3 seconds — e.g. "Stop wasting money on..." — then show the fix.
+Hook: Open with the problem in the first 3 seconds — e.g. "Tired before every workout?" — then show the fix.
 
-CTA: End by telling viewers to try [Brand] — link in bio, or use code CLIP10 for 10% off.`}
+CTA: End by telling viewers to try it — link in bio, or use code CLIP10 for 10% off.`}
           className={`${inputCls} resize-none`}
         />
         {fieldErrors.brief && (

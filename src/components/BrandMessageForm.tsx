@@ -17,6 +17,25 @@ function formatSize(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+// Short, professional timestamps: the thread shows the day once
+// (a divider chip) and each bubble shows only the time.
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  if (d.toDateString() === new Date().toDateString()) return "Today";
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function timeLabel(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /**
  * Private two-way chat with the admin on the payment page. The brand
  * sends a text message (e.g. its Transaction ID) and/or uploads a
@@ -119,17 +138,24 @@ export default function BrandMessageForm({
       >
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-            <p className="text-4xl">💬</p>
-            <p className="mt-3 text-sm font-bold text-fg">
-              No messages yet
-            </p>
-            <p className="mt-1 max-w-xs text-sm leading-relaxed text-fg/50">
-              Say hello below and attach your payment proof screenshot
-              when you send the budget.
-            </p>
+            <div className="max-w-sm rounded-2xl border border-fg/10 bg-card px-5 py-4">
+              <p className="text-sm font-black text-fg">
+                Private conversation with the admin
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-fg/60">
+                Send your Transaction ID and payment proof screenshot
+                below. The admin replies in this chat.
+              </p>
+            </div>
           </div>
         ) : (
-          messages.map((m) => {
+          <>
+            <div className="flex justify-center">
+              <span className="rounded-full bg-fg/10 px-3 py-1 text-[11px] font-bold text-fg/50">
+                {dayLabel(messages[0].created_at)}
+              </span>
+            </div>
+            {messages.map((m) => {
             const own = isOwn(m);
             return (
               <div
@@ -166,7 +192,7 @@ export default function BrandMessageForm({
                       <img
                         src={imageUrl(campaignId, m.id)}
                         alt="Payment proof"
-                        className="max-h-64 w-auto rounded-xl border border-fg/10"
+                        className="max-h-80 w-auto rounded-xl border border-fg/10"
                       />
                       <span
                         className={`mt-1 block text-xs font-bold underline ${
@@ -182,24 +208,25 @@ export default function BrandMessageForm({
                       own ? "text-black/50" : "text-fg/40"
                     }`}
                   >
-                    {new Date(m.created_at).toLocaleString("en-US")}
+                    {timeLabel(m.created_at)}
                   </p>
                 </div>
               </div>
             );
-          })
+            })}
+          </>
         )}
       </div>
 
       <label className="mt-5 block text-sm font-bold text-fg">
-        Your message
+        Message the admin
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Tell the admin you sent the budget, or paste your Transaction ID."
+          placeholder="Paste your Transaction ID or tell the admin you sent the budget."
           rows={3}
           maxLength={2000}
-          className="mt-1 w-full resize-y rounded-xl border border-fg/15 bg-ink px-4 py-3 text-sm leading-relaxed text-fg outline-none placeholder:text-fg/30 focus:border-lime"
+          className="mt-1 max-h-48 w-full resize-y rounded-xl border border-fg/15 bg-ink px-4 py-3 text-sm leading-relaxed text-fg outline-none placeholder:text-fg/30 focus:border-lime"
         />
       </label>
 

@@ -171,6 +171,16 @@ export default async function BrandPaymentPage({
             — creators are paid from the whole pool, per verified
             view.
           </p>
+          {/* Red total notice (Turn's decision 2026-11-11): the
+              full amount must jump out — the campaign goes live
+              only after the WHOLE total arrives. */}
+          <p className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-black leading-relaxed text-red-200">
+            Send the full{" "}
+            {formatUSD(campaign.budget_total + campaign.platform_fee)}{" "}
+            USDT — your campaign goes live only after the FULL amount
+            arrives in the admin wallet. Sending less will delay your
+            launch.
+          </p>
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
             <span className="text-sm font-bold text-fg/60">Network</span>
             <span className="text-sm font-black text-fg">USDT TRC20</span>

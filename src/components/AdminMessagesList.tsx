@@ -9,6 +9,15 @@ function imageUrl(campaignId: string, messageId: string) {
   return `/api/campaigns/${campaignId}/messages/${messageId}/image`;
 }
 
+// Bubbles show only the time; the thread header already carries the
+// full date of the latest message.
+function timeLabel(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /**
  * Owner-only brand chat inbox (Admin Review page). Messages are
  * grouped into one thread per campaign — campaign title, brand name,
@@ -246,7 +255,7 @@ export default function AdminMessagesList({
                           <img
                             src={imageUrl(campaignId, m.id)}
                             alt="Payment proof"
-                            className="max-h-64 w-auto rounded-xl border border-fg/10"
+                            className="max-h-80 w-auto rounded-xl border border-fg/10"
                           />
                           <span className="mt-1 block text-xs font-bold text-red-300 underline">
                             Open proof ↗
@@ -254,7 +263,7 @@ export default function AdminMessagesList({
                         </a>
                       )}
                       <p className="mt-2 text-[11px] text-fg/40">
-                        {new Date(m.created_at).toLocaleString("en-US")}
+                        {timeLabel(m.created_at)}
                       </p>
                     </div>
                   </div>
