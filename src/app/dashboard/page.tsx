@@ -5,6 +5,7 @@ import {
   campaignStatus,
   getBrandCampaigns,
   getBrandCampaignStats,
+  getCampaignRejectionReason,
   getUserSubmissions,
   getWallet,
   type BrandCampaignStats,
@@ -48,7 +49,35 @@ export default async function DashboardPage() {
   }
 
   const wallet = await getWallet(user.id);
-  const submissions = await getUserSubmissions(user.id);
+  // Forms #26: a failed load renders an honest error state, never
+  // the empty dashboard. getWallet returns null on error (no row /
+  // cannot compute); getUserSubmissions THROWS on DB error.
+  let submissions: Awaited<ReturnType<typeof getUserSubmissions>> = [];
+  let loadError = false;
+  try {
+    submissions = await getUserSubmissions(user.id);
+  } catch {
+    loadError = true;
+  }
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-lg rounded-3xl border border-red-500/40 bg-card p-8 text-center">
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">
+          Couldn&apos;t load the dashboard
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-fg/60">
+          Your posts could not be loaded — please try again. Your data
+          is safe; this is a loading problem, not an empty dashboard.
+        </p>
+        <Link
+          href="/dashboard"
+          className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+        >
+          Try again
+        </Link>
+      </div>
+    );
+  }
 
   // The creator's name, never "Guest" for a logged-in user: the
   // profile row (migration 0005) first, then the signup metadata
@@ -63,7 +92,22 @@ export default async function DashboardPage() {
   const totalViews = submissions
     .filter((s) => s.status !== "rejected")
     .reduce((s, x) => s + x.views, 0);
-  const totalEarned = submissions.reduce((s, x) => s + x.earnings, 0);
+  // "Total earned (all time)" comes from the WALLET, not from the
+  // submissions list: auto-delete removes a campaign's submissions
+  // after settlement, so a submissions sum silently drops after
+  // cleanup. Wallet balances persist — available + pending +
+  // withdrawn_total is every approved earning ever (a withdrawal
+  // moves available → withdrawn, so the sum is stable across
+  // auto-delete). Fall back to the submissions sum only when no
+  // wallet row exists yet.
+  const walletLifetime =
+    wallet === null
+      ? null
+      : wallet.available_balance +
+        wallet.pending_balance +
+        wallet.withdrawn_total;
+  const totalEarned =
+    walletLifetime ?? submissions.reduce((s, x) => s + x.earnings, 0);
 
   return (
     <div className="space-y-8">
@@ -184,13 +228,53 @@ async function BrandDashboard({
   user: User;
   profile: UserProfile | null;
 }) {
-  const campaigns = await getBrandCampaigns(user.id);
-  const statsList = await Promise.all(
-    campaigns.map((c) => getBrandCampaignStats(c.id))
-  );
+  // Forms #26: a failed load renders an honest error state, never
+  // an empty campaign list. getBrandCampaigns THROWS on DB error;
+  // getBrandCampaignStats returns null when it cannot compute.
+  let campaigns: Campaign[] = [];
+  let statsList: (BrandCampaignStats | null)[] = [];
+  let loadError = false;
+  try {
+    campaigns = await getBrandCampaigns(user.id);
+    statsList = await Promise.all(
+      campaigns.map((c) => getBrandCampaignStats(c.id))
+    );
+  } catch {
+    loadError = true;
+  }
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-lg rounded-3xl border border-red-500/40 bg-card p-8 text-center">
+        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">
+          Couldn&apos;t load the dashboard
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-fg/60">
+          Your campaigns could not be loaded — please try again. Your
+          data is safe; this is a loading problem, not an empty
+          dashboard.
+        </p>
+        <Link
+          href="/dashboard"
+          className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+        >
+          Try again
+        </Link>
+      </div>
+    );
+  }
   const statsById = new Map<string, BrandCampaignStats | null>(
     campaigns.map((c, i) => [c.id, statsList[i]])
   );
+  // Rejection reasons for rejected campaigns, read back from
+  // each campaign's brand chat thread (the admin posts the reason
+  // there on reject — there is no rejection_reason column on
+  // campaigns). Only rejected campaigns are looked up.
+  const rejectionReasons = new Map<string, string>();
+  for (const c of campaigns) {
+    if (c.status !== "rejected") continue;
+    const reason = await getCampaignRejectionReason(c.id);
+    if (reason) rejectionReasons.set(c.id, reason);
+  }
 
   const metaName = user.user_metadata?.full_name;
   const displayName =
@@ -258,6 +342,7 @@ async function BrandDashboard({
                 key={c.id}
                 campaign={c}
                 stats={statsById.get(c.id) ?? null}
+                rejectionReason={rejectionReasons.get(c.id) ?? null}
               />
             ))}
           </div>
@@ -281,9 +366,11 @@ function brandStatus(c: Campaign): { label: string; cls: string } {
 function BrandCampaignCard({
   campaign: c,
   stats,
+  rejectionReason,
 }: {
   campaign: Campaign;
   stats: BrandCampaignStats | null;
+  rejectionReason?: string | null;
 }) {
   const status = brandStatus(c);
   const usedPct = Math.round(budgetUsedPct(c.budget_total, c.budget_left));
@@ -291,7 +378,14 @@ function BrandCampaignCard({
   // 50–75% yellow, 75–90% red, >90% dark red.
   const barCls = budgetBarClass(usedPct);
   const rate = c.view_bonus_per_1k;
-  const needsFunding = c.status === "pending" && !c.is_funded;
+  // "Payment submitted" keys off payment_tx_id, NOT is_funded:
+  // is_funded only becomes true at approve time, so keying off it
+  // made "payment submitted" unreachable and kept showing the
+  // "Fund this campaign" button after the brand already paid. A
+  // non-empty TxID means the payment was submitted and the admin
+  // is verifying it.
+  const paymentSubmitted = Boolean(c.payment_tx_id?.trim());
+  const needsFunding = c.status === "pending" && !paymentSubmitted;
 
   return (
     <div className="rounded-2xl border border-fg/10 bg-card p-5">
@@ -352,8 +446,15 @@ function BrandCampaignCard({
       {c.status === "rejected" && (
         <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
           <span className="font-black">Rejected by the admin.</span>{" "}
-          This campaign will not go live. If you already sent the
-          budget, contact the admin on Discord about your refund.
+          {rejectionReason ? (
+            <>
+              Reason: <span className="font-bold">{rejectionReason}</span>{" "}
+            </>
+          ) : (
+            <>This campaign will not go live. </>
+          )}
+          If you already sent the budget, contact the admin on
+          Discord about your refund.
         </div>
       )}
       {campaignStatus(c) === "live" && (
@@ -365,8 +466,14 @@ function BrandCampaignCard({
       {campaignStatus(c) === "settling" && (
         <div className="mt-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3 text-sm leading-relaxed text-fg/70">
           <span className="font-black text-fg">Ended — payouts in progress.</span>{" "}
-          Payouts finish about 1 week after the campaign ends: a 3-day
-          re-check window, then the 72-hour payment hold, then payout.
+          Approved earnings enter a 72-hour hold as soon as they are
+          approved — even while the campaign is still running. After
+          the campaign ends there is a 3-day re-check window, then
+          payouts are made manually (about 1 week after the campaign
+          ends in total). The campaign, its proofs and its chat are
+          deleted 1 day after the last hold matures, never earlier
+          than 7 days after the campaign ends. Wallet and withdrawal
+          records are never deleted.
         </div>
       )}
 
