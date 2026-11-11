@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import type { BrandMessage, Campaign } from "@/lib/types";
-import { getAllSubmissions, getAllSubmissionsUnpaged, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getBrandMessagesUnpaged, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, getSubmissionStatusCounts, getBrandMessagesCount, getUnreadBrandMessagesCount, getBotRejectionRowCount, isCampaignSettling, campaignStatus } from "@/lib/data";
+import { getAllSubmissions, getAllSubmissionsUnpaged, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getBrandMessagesUnpaged, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, getSubmissionStatusCounts, getBrandMessagesCount, getUnreadBrandMessagesCount, getBotRejectionRowCount, getRejectedCampaigns, getCampaignRejectionReasons, getOpenRefundRequests, getAllUsers, getStorageUsage, isCampaignSettling, campaignStatus } from "@/lib/data";
 import { fraudStatus } from "@/lib/fraud";
-import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { formatUSD } from "@/lib/money";
 import AdminReviewList, { type AdminSubmission } from "@/components/AdminReviewList";
 import AdminFraudList, { type FraudCreator } from "@/components/AdminFraudList";
 import AdminRecheckList from "@/components/AdminRecheckList";
@@ -17,10 +17,17 @@ import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
 import AdminSettingsForm from "@/components/AdminSettingsForm";
 
+/** Human-readable bytes for the storage readout (P2-A9c). */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams?: { reviewPage?: string; inboxPage?: string; fraudPage?: string };
+  searchParams?: { reviewPage?: string; inboxPage?: string; fraudPage?: string; userFilter?: string };
 }) {
   if (!isSupabaseConfigured) {
     return (
@@ -61,6 +68,9 @@ export default async function AdminPage({
   );
   const inboxPage = Math.max(1, Number(searchParams?.inboxPage ?? 1) || 1);
   const fraudPage = Math.max(1, Number(searchParams?.fraudPage ?? 1) || 1);
+  // Users directory filter (P2-A12): all / brand / creator /
+  // admin / blocked, via ?userFilter=.
+  const userFilter = searchParams?.userFilter ?? "all";
 
   // Forms #26: a failed load renders an honest error state, never
   // an empty admin view. The list getters THROW on DB error.
@@ -84,6 +94,13 @@ export default async function AdminPage({
   let submissionFlags: Awaited<ReturnType<typeof getSubmissionFlags>> = {};
   let discoverCampaigns: Awaited<ReturnType<typeof getDiscoverCampaigns>> =
     [];
+  let rejectedCampaigns: Awaited<ReturnType<typeof getRejectedCampaigns>> =
+    [];
+  let rejectionReasons: Awaited<
+    ReturnType<typeof getCampaignRejectionReasons>
+  > = {};
+  let openRefunds: Awaited<ReturnType<typeof getOpenRefundRequests>> = [];
+  let allUsers: Awaited<ReturnType<typeof getAllUsers>> = [];
   let loadError = false;
   try {
     submissions = await getAllSubmissions({
@@ -110,6 +127,18 @@ export default async function AdminPage({
     creatorFlags = await getCreatorFlags();
     submissionFlags = await getSubmissionFlags();
     discoverCampaigns = await getDiscoverCampaigns();
+    // Refund queue (P1-A2): rejected campaigns + their reasons
+    // (stored only as brand-chat messages) + open refund
+    // requests. Loaded here so a failed load is a load error,
+    // never a silently empty refund queue.
+    rejectedCampaigns = await getRejectedCampaigns();
+    rejectionReasons = await getCampaignRejectionReasons(
+      rejectedCampaigns.map((c) => c.id)
+    );
+    openRefunds = await getOpenRefundRequests();
+    // Users directory (P1-A1 / P2-A12): every user, chunked to
+    // exhaustion — the old inline select capped at 1,000 users.
+    allUsers = await getAllUsers();
   } catch {
     loadError = true;
   }
@@ -117,28 +146,29 @@ export default async function AdminPage({
     return <AdminLoadError />;
   }
 
+  // Storage usage (P2-A9c): best-effort only — a failure here
+  // must never break the admin page. getStorageUsage never
+  // throws; a failed bucket renders "unavailable".
+  let storageUsage: Awaited<ReturnType<typeof getStorageUsage>> = [];
+  try {
+    storageUsage = await getStorageUsage();
+  } catch {
+    storageUsage = [];
+  }
+
   // Creator emails + blocked state for the review and fraud lists
   // (owner can read all users), plus the linked Instagram profile
   // URL (users.instagram_url, pasted at onboarding) for the
-  // Instagram hand-check on review cards.
-  const supabase = getServerClient();
+  // Instagram hand-check on review cards. Built from the chunked
+  // getAllUsers load above, so it stays complete past 1,000
+  // users (P1-A1).
   const emailById = new Map<string, string>();
   const blockedById = new Map<string, boolean>();
   const instagramById = new Map<string, string>();
-  if (supabase) {
-    const { data } = await supabase
-      .from("users")
-      .select("id, email, is_blocked, instagram_url");
-    for (const row of (data ?? []) as {
-      id: string;
-      email: string;
-      is_blocked?: boolean;
-      instagram_url?: string | null;
-    }[]) {
-      emailById.set(row.id, row.email);
-      blockedById.set(row.id, Boolean(row.is_blocked));
-      if (row.instagram_url) instagramById.set(row.id, row.instagram_url);
-    }
+  for (const row of allUsers) {
+    emailById.set(row.id, row.email);
+    blockedById.set(row.id, row.is_blocked);
+    if (row.instagram_url) instagramById.set(row.id, row.instagram_url);
   }
 
   const items: AdminSubmission[] = submissions.map((s) => ({
@@ -184,13 +214,15 @@ export default async function AdminPage({
           new Date(a.created_at ?? 0).getTime()
     );
 
-  // Per-campaign stats, computed live from the submissions table
-  // (the same rows the review list below shows): submissions
-  // split by platform, total views, summed likes/comments for the
-  // aggregate engagement rate, and the per-post list for the
-  // card's engagement breakdown.
+  // Per-campaign stats, computed live from ALL submissions
+  // (Round-4 P1-A4): the old code built this from `items` (the
+  // current 100-row review page), so a campaign's card showed
+  // only the submissions on that page — platform splits, total
+  // views and the engagement breakdown silently changed as the
+  // admin flipped pages. Payouts/Creators/Re-check already used
+  // allItems; Campaigns stats now do too.
   const statsByCampaign: Record<string, CampaignCardStats> = {};
-  for (const s of items) {
+  for (const s of allItems) {
     let st = statsByCampaign[s.campaign_id];
     if (!st) {
       st = {
@@ -339,6 +371,9 @@ export default async function AdminPage({
       created_at: w.created_at,
       network: w.method,
       address: w.details,
+      // P1-A3: the on-chain payout proof, so a disputed payout
+      // can be answered from the Payouts list too.
+      payoutTxId: w.payout_tx_id ?? null,
     });
   }
   payoutRows.sort(
@@ -441,6 +476,25 @@ export default async function AdminPage({
     (s) => settlingIds.has(s.campaign_id) && s.status === "approved"
   );
 
+  // Users directory (P2-A12): every user, with a simple filter.
+  // A brand that signed up but never created a campaign, and a
+  // creator who signed up but never submitted, are invisible
+  // everywhere else on /admin — this is the only place they show.
+  const filteredUsers = allUsers.filter((u) => {
+    if (userFilter === "brand") return u.role === "brand";
+    if (userFilter === "creator") return u.role === "creator";
+    if (userFilter === "admin") return u.is_admin;
+    if (userFilter === "blocked") return u.is_blocked;
+    return true;
+  });
+
+  // Campaign lookup for the refund queue (P1-A2): refund
+  // requests reference campaigns by id.
+  const campaignById = new Map<string, Campaign>();
+  for (const c of [...cardCampaigns, ...rejectedCampaigns]) {
+    if (!campaignById.has(c.id)) campaignById.set(c.id, c);
+  }
+
   return (
     <div className="space-y-10">
       {/* Wallet warning — brands cannot pay while the admin USDT
@@ -535,6 +589,54 @@ export default async function AdminPage({
         </div>
       </section>
 
+      {/* Storage (Round-4 P2-A9c): best-effort per-bucket file
+          count + size. The free Supabase tier caps storage at
+          1 GB — the first sign used to be uploads failing. A
+          failed listing renders "unavailable", never a fake
+          number, and a capped scan says so. */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Storage
+          </h2>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Image + proof files stored in Supabase (1 GB free tier).
+          Campaign logos/thumbnails live in campaign-images, brand
+          payment proofs in brand-proofs.
+        </p>
+        <div className="mt-4 space-y-2">
+          {storageUsage.length === 0 ? (
+            <p className="rounded-2xl border border-fg/10 bg-card p-5 text-sm text-fg/60">
+              Storage usage unavailable.
+            </p>
+          ) : (
+            storageUsage.map((u) => (
+              <p
+                key={u.bucket}
+                className="rounded-2xl border border-fg/10 bg-card px-4 py-3 text-sm text-fg/70"
+              >
+                <span className="font-mono font-bold text-fg">
+                  {u.bucket}
+                </span>
+                {" — "}
+                {u.error ? (
+                  "unavailable"
+                ) : (
+                  <>
+                    {u.files} file{u.files === 1 ? "" : "s"} ·{" "}
+                    {formatBytes(u.bytes)} of the 1 GB free tier
+                    {u.capped
+                      ? " (scan capped at 500 files — totals may be higher)"
+                      : ""}
+                  </>
+                )}
+              </p>
+            ))
+          )}
+        </div>
+      </section>
+
       {/* Campaigns — owner-only. Every live and pending campaign
           gets its OWN card: name, brand, status, budget % used,
           a Proof button in the corner (its brand chat + payment
@@ -571,6 +673,135 @@ export default async function AdminPage({
             hasMessages={hasMessages}
             budgetHistory={budgetHistory}
           />
+        </div>
+      </section>
+
+      {/* Rejected campaigns — the refund queue (Round-4 P1-A2).
+          A rejected campaign used to appear in NO admin section:
+          the brand saw a rejection the admin could no longer
+          find, and a brand that paid and then got rejected had no
+          admin-visible record to trigger the manual USDT refund.
+          Paid-or-not is payment_tx_id present; the reason is read
+          back from the brand-chat message. Open refund requests
+          (migration 0041) are listed below the campaigns. */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Rejected campaigns — refund queue
+          </h2>
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
+            {rejectedCampaigns.length} rejected · {openRefunds.length}{" "}
+            refund{openRefunds.length === 1 ? "" : "s"} requested
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Check each paid rejection and send the refund (budget +
+          fee, as decided) by USDT yourself — refunds are manual,
+          like payouts. A campaign with no payment needs no refund.
+        </p>
+        <div className="mt-4 space-y-3">
+          {rejectedCampaigns.length === 0 && openRefunds.length === 0 && (
+            <p className="rounded-2xl border border-fg/10 bg-card p-5 text-sm text-fg/60">
+              No rejected campaigns and no refund requests.
+            </p>
+          )}
+          {rejectedCampaigns.map((c) => {
+            const paid = Boolean(
+              (c.payment_tx_id ?? "").trim()
+            );
+            const reason =
+              rejectionReasons[c.id] ?? "No reason recorded in chat.";
+            return (
+              <div
+                key={c.id}
+                className="rounded-2xl border border-fg/10 bg-card p-4 sm:p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-fg">{c.title}</p>
+                    <p className="mt-1 text-sm text-fg/60">
+                      {c.brand_name} ·{" "}
+                      {emailById.get(c.user_id ?? "") ?? "unknown brand"}{" "}
+                      · Budget {formatUSD(c.budget_total)} ·{" "}
+                      {new Date(c.created_at ?? "").toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                    <p className="mt-1 text-sm text-fg/70">
+                      Reason: {reason}
+                    </p>
+                    <p className="mt-1 break-all text-xs text-fg/50">
+                      {paid && c.payment_tx_id ? (
+                        <>
+                          Paid — TxID:{" "}
+                          <a
+                            href={`https://tronscan.org/#/transaction/${c.payment_tx_id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-mono font-bold text-fg underline"
+                          >
+                            {c.payment_tx_id}
+                          </a>
+                        </>
+                      ) : (
+                        "Not paid — nothing to refund."
+                      )}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${paid ? "bg-amber-500/15 text-amber-300" : "bg-fg/10 text-fg/60"}`}
+                  >
+                    {paid ? "Paid — refund owed" : "Not paid"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {openRefunds.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 sm:p-5">
+              <p className="font-bold text-fg">
+                Open refund requests ({openRefunds.length})
+              </p>
+              <ul className="mt-2 space-y-2">
+                {openRefunds.map((r) => {
+                  const camp = campaignById.get(r.campaign_id);
+                  return (
+                    <li
+                      key={r.id}
+                      className="text-sm leading-relaxed text-fg/70"
+                    >
+                      <span className="font-bold text-fg">
+                        {camp?.title ?? r.campaign_id.slice(0, 8)}
+                      </span>{" "}
+                      — {formatUSD(r.amount)} requested by{" "}
+                      {emailById.get(r.user_id) ?? r.user_id.slice(0, 8)}{" "}
+                      on{" "}
+                      {new Date(r.created_at).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                      {r.payment_tx_id && (
+                        <>
+                          {" · "}
+                          <a
+                            href={`https://tronscan.org/#/transaction/${r.payment_tx_id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-mono text-xs font-bold text-fg underline"
+                          >
+                            TxID
+                          </a>
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       </section>
 
@@ -667,6 +898,90 @@ export default async function AdminPage({
         </div>
       </section>
 
+      {/* Users — owner-only directory (Round-4 P2-A12). Brands and
+          creators who signed up but never created a campaign or
+          submitted a clip are invisible everywhere else on /admin;
+          this is the only place they show. Filtered by role, admin
+          status, or blocked state. */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+            Users
+          </h2>
+          <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
+            {allUsers.length} user{allUsers.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+          Everyone who signed up — brands, creators, and admins —
+          whether or not they have done anything yet.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(
+            [
+              ["all", "All"],
+              ["brand", "Brands"],
+              ["creator", "Creators"],
+              ["admin", "Admins"],
+              ["blocked", "Blocked"],
+            ] as const
+          ).map(([value, label]) => (
+            <a
+              key={value}
+              href={`/admin?userFilter=${value}`}
+              className={`rounded-full px-4 py-2 text-xs font-black transition ${
+                userFilter === value
+                  ? "bg-red-500 text-black"
+                  : "border border-fg/20 text-fg hover:border-fg/40"
+              }`}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
+        <div className="mt-4 space-y-2">
+          {filteredUsers.length === 0 ? (
+            <p className="rounded-2xl border border-fg/10 bg-card p-5 text-sm text-fg/60">
+              No users match this filter.
+            </p>
+          ) : (
+            filteredUsers.map((u) => (
+              <div
+                key={u.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-fg/10 bg-card px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-fg">{u.email}</p>
+                  <p className="mt-0.5 text-xs text-fg/50">
+                    Signed up{" "}
+                    {new Date(u.created_at).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                </div>
+                <span className="flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-fg/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-fg/70">
+                    {u.role}
+                  </span>
+                  {u.is_admin && (
+                    <span className="rounded-full bg-red-500/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-red-300">
+                      Admin
+                    </span>
+                  )}
+                  {u.is_blocked && (
+                    <span className="rounded-full bg-red-500/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-red-300">
+                      Blocked
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
       {/* Fraud watch — owner-only. Bot-view rejections counted live
           per creator across all campaigns: 6 = concern, 10 = flag,
           one more bot rejection after the flag = auto-ban (11).
@@ -708,10 +1023,11 @@ export default async function AdminPage({
         </h2>
         {statusCounts.total > REVIEW_PAGE_SIZE && (
           <p className="mt-2 max-w-2xl rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
-            Showing page {reviewPage} of the review list — the
-            Campaigns stats, Payouts, Creators and Re-check sections
-            above and below reflect the submissions on this page
-            only. Page through the list to reach older submissions.
+            Showing page {reviewPage} of the review list — only the
+            submission review list below is paged. The Campaigns
+            stats, Payouts, Creators and Re-check sections above
+            and below reflect ALL submissions, not just this page.
+            Page through the list to reach older submissions.
           </p>
         )}
         <div className="mt-4">

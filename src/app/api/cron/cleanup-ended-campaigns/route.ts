@@ -73,9 +73,11 @@ import { signInCronService } from "@/lib/supabase/cron-service";
  * up leftover objects. A campaign whose eligibility cannot be
  * determined is skipped, never failed and never deleted.
  *
- * Response: { ok, checked, deleted, skipped, failed,
+ * Response: { ok, checked, deleted, skipped, failed, remaining,
  *   expired_pending_deleted, expired_pending_failed,
- *   expired_pending_error, orphan_images_deleted, details[] }
+ *   expired_pending_remaining, expired_pending_error,
+ *   orphan_images_deleted, orphan_proofs_deleted,
+ *   orphan_files_remaining, details[] }
  * where details has one entry per candidate campaign (ended or
  * expired-pending), and `deleted` counts ended campaigns only —
  * expired pending deletions are counted separately in
@@ -86,9 +88,24 @@ import { signInCronService } from "@/lib/supabase/cron-service";
  * failed — GitHub Actions only tests the status code, so a job
  * that deleted nothing must not report 200. 200 with counts
  * otherwise (partial failures are reported in the body).
+ *
+ * CHUNKING (Round-4 P2-A6): at most MAX_CANDIDATES_PER_RUN
+ * ended campaigns and the same number of expired-pending ones
+ * are processed per run, mirroring MAX_ROWS_PER_RUN = 60 in the
+ * refresh job — the rest wait for the next daily run and are
+ * reported as `remaining` / `expired_pending_remaining` in the
+ * summary, so a large backlog no longer gets killed mid-run
+ * inside the 60s invocation with no summary. The orphan sweep
+ * below is capped the same way (MAX_ORPHAN_FILES_PER_RUN files
+ * checked per bucket per run).
  */
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+// P2-A6: per-run caps, mirroring the refresh job's
+// MAX_ROWS_PER_RUN = 60 (src/lib/views/refresh.ts).
+const MAX_CANDIDATES_PER_RUN = 60;
+const MAX_ORPHAN_FILES_PER_RUN = 100;
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -186,12 +203,18 @@ async function handle(request: Request) {
   }
   const candidates = rows as CandidateRow[];
 
+  // P2-A6: process only the first MAX_CANDIDATES_PER_RUN
+  // candidates this run — the rest wait for the next daily run
+  // and are reported as `remaining` below.
+  const processedCandidates = candidates.slice(0, MAX_CANDIDATES_PER_RUN);
+  const remaining = candidates.length - processedCandidates.length;
+
   const details: Detail[] = [];
   let deleted = 0;
   let skipped = 0;
   let failed = 0;
 
-  for (const candidate of candidates) {
+  for (const candidate of processedCandidates) {
     const campaignId = candidate.campaign_id;
     if (!campaignId) {
       // Eligibility cannot be determined for this row — skip it.
@@ -336,6 +359,7 @@ async function handle(request: Request) {
   let expiredPendingFailed = 0;
   let expiredPendingTotal = 0;
   let expiredPendingError: string | null = null;
+  let expiredPendingRemaining = 0;
 
   const { data: expiredRows, error: expiredListError } =
     await supabase.rpc("list_expired_pending_campaigns");
@@ -346,7 +370,11 @@ async function handle(request: Request) {
   } else {
     const expired = expiredRows as ExpiredPendingRow[];
     expiredPendingTotal = expired.length;
-    for (const row of expired) {
+    // P2-A6: same per-run cap as the ended-campaign loop — the
+    // rest wait for the next daily run.
+    const processedExpired = expired.slice(0, MAX_CANDIDATES_PER_RUN);
+    expiredPendingRemaining = expired.length - processedExpired.length;
+    for (const row of processedExpired) {
       const campaignId = row.campaign_id;
       if (!campaignId) {
         expiredPendingFailed += 1;
@@ -455,26 +483,62 @@ async function handle(request: Request) {
     }
   }
 
-  // --- Orphaned campaign images (migration 0032) ---
+  // --- Orphaned campaign images (migration 0032) + brand proofs
+  // (Round-4 P2-A9a) ---
   // A brand uploads its logo/thumbnail at confirmed submit and the
   // campaign POST follows at once — an upload only becomes an
-  // orphan when that POST fails. Sweep them once a day: list the
-  // bucket (objects live at <user_id>/<uuid>.<ext>), ask the
-  // SECURITY DEFINER orphan check per object (1+ day old and
-  // referenced by no campaign), and remove the orphans through
-  // the Storage API. Best-effort: a failure here never fails the
-  // job, and if migration 0032 has not been run yet the calls
-  // simply error and are skipped.
+  // orphan when that POST fails. Brand proofs become orphans the
+  // same way: a storage removal that failed after the campaign
+  // row was already deleted. Sweep both buckets once a day.
+  //
+  // campaign-images: list the bucket (objects live at
+  // <user_id>/<uuid>.<ext>), ask the SECURITY DEFINER orphan
+  // check per object (1+ day old and referenced by no campaign),
+  // and remove the orphans through the Storage API.
+  //
+  // brand-proofs: there is NO orphan-check RPC for this bucket,
+  // and the cron service account cannot reliably check whether a
+  // campaign still exists (RLS shows it live campaigns only —
+  // a pending campaign would look "gone"). The safety guard is
+  // therefore the existing storage DELETE policies themselves
+  // (migrations 0023/0030): a remove() is only allowed when the
+  // file's campaign is cleanup-eligible or expired unpaid-pending,
+  // so proofs of live, pending-paid, or recently-ended campaigns
+  // are refused by the policy and this sweep can never delete
+  // them. LIMIT: a leftover from an already-DELETED campaign is
+  // refused by those same policies too (its campaign passes
+  // neither predicate any more), so those orphans are still NOT
+  // removed by this sweep — they need a future orphan-delete
+  // policy migration. This sweep catches the ones whose campaign
+  // row is still present and eligible.
+  //
+  // Best-effort, capped per run (P2-A6): at most
+  // MAX_ORPHAN_FILES_PER_RUN old files are CHECKED per bucket per
+  // run; the rest are reported as orphan_files_remaining. A
+  // failure here never fails the job, and if migration 0032 has
+  // not been run yet the calls simply error and are skipped.
   let orphanImagesDeleted = 0;
-  try {
-    const { data: folders, error: foldersError } = await supabase.storage
-      .from("campaign-images")
-      .list("", { limit: 1000 });
-    if (!foldersError && folders) {
+  let orphanProofsDeleted = 0;
+  let orphanFilesRemaining = 0;
+  async function sweepOrphans(
+    bucket: "campaign-images" | "brand-proofs"
+  ): Promise<{ deleted: number; remaining: number }> {
+    let deleted = 0;
+    let checked = 0;
+    let remaining = 0;
+    // TS narrowing of `supabase` (non-null after the guard above)
+    // does not carry into this nested function — re-check here.
+    const client = supabase;
+    if (!client) return { deleted: 0, remaining: 0 };
+    try {
+      const { data: folders, error: foldersError } = await client.storage
+        .from(bucket)
+        .list("", { limit: 1000 });
+      if (foldersError || !folders) return { deleted: 0, remaining: 0 };
       for (const folder of folders) {
         if (!folder.name) continue;
-        const { data: files, error: filesError } = await supabase.storage
-          .from("campaign-images")
+        const { data: files, error: filesError } = await client.storage
+          .from(bucket)
           .list(folder.name, { limit: 1000 });
         if (filesError || !files) continue;
         const oldPaths = files
@@ -487,45 +551,71 @@ async function handle(request: Request) {
           )
           .map((f) => `${folder.name}/${f.name}`);
         for (const path of oldPaths) {
-          const { data: isOrphan } = await supabase.rpc(
-            "campaign_image_is_orphan",
-            { p_path: path }
-          );
-          if (isOrphan !== true) continue;
-          const { error: orphanRemoveError } = await supabase.storage
-            .from("campaign-images")
+          if (checked >= MAX_ORPHAN_FILES_PER_RUN) {
+            remaining += 1;
+            continue;
+          }
+          checked += 1;
+          if (bucket === "campaign-images") {
+            const { data: isOrphan } = await client.rpc(
+              "campaign_image_is_orphan",
+              { p_path: path }
+            );
+            if (isOrphan !== true) continue;
+          }
+          const { error: orphanRemoveError } = await client.storage
+            .from(bucket)
             .remove([path]);
-          if (!orphanRemoveError) orphanImagesDeleted += 1;
+          if (!orphanRemoveError) deleted += 1;
         }
       }
+    } catch (err) {
+      console.error(`Cleanup: orphan sweep failed for ${bucket}:`, err);
     }
-  } catch (err) {
-    console.error("Cleanup: orphan image sweep failed:", err);
+    return { deleted, remaining };
   }
+  const imagesSweep = await sweepOrphans("campaign-images");
+  orphanImagesDeleted = imagesSweep.deleted;
+  const proofsSweep = await sweepOrphans("brand-proofs");
+  orphanProofsDeleted = proofsSweep.deleted;
+  orphanFilesRemaining = imagesSweep.remaining + proofsSweep.remaining;
 
   // P1-11: a job that did nothing must not report success — the
   // GitHub workflow only tests the status code. 503 when the
   // expired-pending lookup failed (a whole half of the job did
   // nothing) or when ALL candidates failed (every eligible ended
   // campaign, and every expired pending one, failed). Partial
-  // failure stays 200 with the counts in the body.
-  const eligibleEnded = candidates.filter((c) => c.eligible).length;
+  // failure stays 200 with the counts in the body. The "all
+  // failed" checks count only what this run PROCESSED (P2-A6
+  // cap) — unprocessed candidates waiting for the next run are
+  // not failures.
+  const processedEligibleEnded = processedCandidates.filter(
+    (c) => c.eligible
+  ).length;
   const allEndedFailed =
-    eligibleEnded > 0 && deleted === 0 && failed >= eligibleEnded;
+    processedEligibleEnded > 0 &&
+    deleted === 0 &&
+    failed >= processedEligibleEnded;
+  const processedExpiredTotal =
+    expiredPendingTotal - expiredPendingRemaining;
   const allExpiredFailed =
-    expiredPendingTotal > 0 &&
+    processedExpiredTotal > 0 &&
     expiredPendingDeleted === 0 &&
-    expiredPendingFailed >= expiredPendingTotal;
+    expiredPendingFailed >= processedExpiredTotal;
   const body = {
     ok: !expiredPendingError && !allEndedFailed && !allExpiredFailed,
     checked: candidates.length,
     deleted,
     skipped,
     failed,
+    remaining,
     expired_pending_deleted: expiredPendingDeleted,
     expired_pending_failed: expiredPendingFailed,
+    expired_pending_remaining: expiredPendingRemaining,
     expired_pending_error: expiredPendingError,
     orphan_images_deleted: orphanImagesDeleted,
+    orphan_proofs_deleted: orphanProofsDeleted,
+    orphan_files_remaining: orphanFilesRemaining,
     details,
   };
   if (expiredPendingError || allEndedFailed || allExpiredFailed) {

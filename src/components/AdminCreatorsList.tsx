@@ -37,6 +37,12 @@ export default function AdminCreatorsList({
   creators: CreatorRow[];
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Round-4 P2-A12: paginate — the list used to render every
+  // creator, so the page got heavier as history grew. 50 rows per
+  // page with a Show more button.
+  const PAGE_SIZE = 50;
+  const [visible, setVisible] = useState(PAGE_SIZE);
+  const visibleCreators = creators.slice(0, visible);
 
   if (creators.length === 0) {
     return (
@@ -51,7 +57,7 @@ export default function AdminCreatorsList({
 
   return (
     <div className="space-y-3">
-      {creators.map((c) => {
+      {visibleCreators.map((c) => {
         const open = expanded === c.user_id;
         return (
           <article
@@ -116,6 +122,20 @@ export default function AdminCreatorsList({
           </article>
         );
       })}
+      {creators.length > visible && (
+        <button
+          type="button"
+          onClick={() => setVisible((v) => v + PAGE_SIZE)}
+          className="w-full rounded-2xl border border-fg/20 bg-card px-4 py-3 text-sm font-bold text-fg transition hover:border-fg/40"
+        >
+          Show more ({creators.length - visible} remaining)
+        </button>
+      )}
+      {creators.length > PAGE_SIZE && visible >= creators.length && (
+        <p className="text-center text-xs text-fg/50">
+          Showing all {creators.length} creators.
+        </p>
+      )}
     </div>
   );
 }

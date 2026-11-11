@@ -11,6 +11,12 @@ import { rateLimit } from "@/lib/rate-limit";
  * next scheduled run before reviewing a submission.
  */
 export const dynamic = "force-dynamic";
+// Round-4 P2-A5: same 60s budget as the cron routes — this runs
+// the identical refreshPendingViews job (up to 60 rows,
+// sequential per-row TikTok/YouTube calls), so without it the
+// manual run dies mid-job on the platform default timeout while
+// the scheduled run survives.
+export const maxDuration = 60;
 
 export async function POST() {
   const supabase = getServerClient();

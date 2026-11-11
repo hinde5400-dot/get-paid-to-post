@@ -167,6 +167,36 @@ export function isExpiredUnpaidPending(campaign: {
 }
 
 /**
+ * Chunked "unpaged" fetch (Round-4 P1-A1): PostgREST returns at
+ * most 1,000 rows per request when no limit is given, so any
+ * loader that claims to return "every" row must page in 1,000-row
+ * chunks until a short page arrives — the same pattern as
+ * getCreatorBotRejections below. `fetchPage` receives the chunk
+ * offset and size and returns the raw rows (or a PostgREST error).
+ * Throws on DB error, per the Forms #26 contract.
+ */
+async function fetchAllPages(
+  fetchPage: (
+    offset: number,
+    chunk: number
+  ) => Promise<{
+    rows: Record<string, unknown>[] | null;
+    error: { message: string } | null;
+  }>
+): Promise<Record<string, unknown>[]> {
+  const CHUNK = 1000;
+  const all: Record<string, unknown>[] = [];
+  for (let offset = 0; ; offset += CHUNK) {
+    const { rows, error } = await fetchPage(offset, CHUNK);
+    if (error) throw new Error(error.message);
+    if (!rows) throw new Error("Could not load data.");
+    all.push(...rows);
+    if (rows.length < CHUNK) break;
+  }
+  return all;
+}
+
+/**
  * Live funded campaigns from Supabase only. There are no sample or
  * fallback campaigns: a campaign appears here only after a brand has
  * funded its budget and it is live. When none exist, this returns []
@@ -175,21 +205,24 @@ export function isExpiredUnpaidPending(campaign: {
 export async function getCampaigns(): Promise<Campaign[]> {
   const supabase = getServerClient();
   if (supabase) {
-    const { data, error } = await supabase
-      .from("campaigns")
-      .select("*")
-      .eq("is_funded", true)
-      .eq("status", "live")
-      .order("created_at", { ascending: false });
+    // P1-A1: chunked to exhaustion — an unpaged select silently
+    // caps at 1,000 rows (PostgREST default), so past 1,000 live
+    // campaigns the oldest ones vanished from Home.
+    const rows = await fetchAllPages(async (offset, chunk) => {
+      const { data, error } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("is_funded", true)
+        .eq("status", "live")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + chunk - 1);
+      return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+    });
     // Forms #26 contract: a database error THROWS instead of
     // returning [] — [] means "no live campaigns", never "the
     // load failed". Callers render an honest error state.
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error("Could not load campaigns.");
     const now = Date.now();
-    return (data as Record<string, unknown>[])
-      .map(mapCampaign)
-      .filter((c) => isCampaignLive(c, now));
+    return rows.map(mapCampaign).filter((c) => isCampaignLive(c, now));
   }
   return [];
 }
@@ -207,17 +240,21 @@ export async function getCampaigns(): Promise<Campaign[]> {
 export async function getDiscoverCampaigns(): Promise<Campaign[]> {
   const supabase = getServerClient();
   if (supabase) {
-    const { data, error } = await supabase
-      .from("campaigns")
-      .select("*")
-      .eq("is_funded", true)
-      .eq("status", "live")
-      .order("created_at", { ascending: false });
+    // P1-A1: chunked to exhaustion (see fetchAllPages) — the
+    // unpaged select silently capped at 1,000 rows.
+    const rows = await fetchAllPages(async (offset, chunk) => {
+      const { data, error } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("is_funded", true)
+        .eq("status", "live")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + chunk - 1);
+      return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+    });
     // Forms #26 contract: throw on DB error, never [] (see
     // getCampaigns).
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error("Could not load campaigns.");
-    return (data as Record<string, unknown>[]).map(mapCampaign);
+    return rows.map(mapCampaign);
   }
   return [];
 }
@@ -239,16 +276,46 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
 export async function getPendingCampaigns(): Promise<Campaign[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("campaigns")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", { ascending: true });
+  // P1-A1: chunked to exhaustion (see fetchAllPages) — the
+  // unpaged select silently capped at 1,000 rows.
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
   // Forms #26 contract: throw on DB error, never [] (see
   // getCampaigns).
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load pending campaigns.");
-  return (data as Record<string, unknown>[]).map(mapCampaign);
+  return rows.map(mapCampaign);
+}
+
+/**
+ * Rejected campaigns, newest first — owner only. The /admin
+ * refund queue (Round-4 P1-A2): a rejected campaign appears in no
+ * other admin list, so without this loader a brand that paid and
+ * then got rejected had no admin-visible record to trigger the
+ * manual USDT refund. Chunked to exhaustion like the other
+ * unpaged loaders (P1-A1). Pair with
+ * getCampaignRejectionReasons() for the reason (stored only as a
+ * brand-chat message) and getOpenRefundRequests() for refund
+ * requests. Throws on DB error, per the Forms #26 contract.
+ */
+export async function getRejectedCampaigns(): Promise<Campaign[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("status", "rejected")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
+  return rows.map(mapCampaign);
 }
 
 /**
@@ -264,7 +331,12 @@ export async function getBrandCampaigns(userId: string): Promise<Campaign[]> {
     .from("campaigns")
     .select("*")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // Round-4 P2-A3: explicit 2,000-row cap, disclosed — past
+    // 2,000 campaigns the OLDEST rows drop out of the brand
+    // dashboard list (same truncation class as getAllWithdrawals).
+    // A brand with that many campaigns does not exist today.
+    .limit(2000);
   // Forms #26 contract: throw on DB error, never [] (see
   // getCampaigns).
   if (error) throw new Error(error.message);
@@ -555,19 +627,24 @@ function mapSubmissionWithCampaign(row: Record<string, unknown>): Submission {
  * re-check) only: those sections must see every submission, not
  * just the current review page, or approved earnings past page 1
  * would vanish from Payouts. The review list itself stays paged
- * (getAllSubmissions). Admin-only page, submissions grow slowly.
+ * (getAllSubmissions). Chunked to exhaustion in 1,000-row chunks
+ * (Round-4 P1-A1) — the old unpaged select silently capped at
+ * 1,000 rows, so past 1,000 submissions the OLDEST rows vanished
+ * from Payouts, Creators and Re-check with no disclosure.
  * Throws on DB error, per the Forms #26 contract.
  */
 export async function getAllSubmissionsUnpaged(): Promise<Submission[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("submissions")
-    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load submissions.");
-  return (data as Record<string, unknown>[]).map(mapSubmissionWithCampaign);
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("submissions")
+      .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
+  return rows.map(mapSubmissionWithCampaign);
 }
 
 export async function getWallet(userId: string): Promise<Wallet | null> {
@@ -626,7 +703,7 @@ export async function releaseMaturedHolds(): Promise<void> {
 }
 
 function mapWithdrawal(row: Record<string, unknown>): Withdrawal {
-  return {
+  const mapped: Withdrawal = {
     id: String(row.id),
     user_id: String(row.user_id),
     amount: Number(row.amount ?? 0),
@@ -637,6 +714,16 @@ function mapWithdrawal(row: Record<string, unknown>): Withdrawal {
     status: String(row.status ?? "pending"),
     created_at: String(row.created_at ?? ""),
   };
+  // Payout Transaction ID (migration 0040, Round-4 P1-A3): the
+  // on-chain transfer that paid this withdrawal, recorded when
+  // the owner marks it paid. The Withdrawal type in lib/types.ts
+  // does not declare it yet, so it is attached here without a
+  // type edit — the same pattern mapCampaign uses for
+  // payment_tx_submitted_at. Null on rows marked paid before
+  // 0040 (no TxID was ever recorded for them).
+  (mapped as unknown as Record<string, unknown>).payout_tx_id =
+    (row.payout_tx_id as string | null) ?? null;
+  return mapped;
 }
 
 export async function getWithdrawals(userId: string): Promise<Withdrawal[]> {
@@ -917,15 +1004,243 @@ export async function getBrandMessages(
 export async function getBrandMessagesUnpaged(): Promise<BrandMessage[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("brand_messages")
-    .select(
-      "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read, campaigns(title, brand_name, payment_tx_id)"
-    )
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load brand messages.");
-  return (data as Record<string, unknown>[]).map(mapBrandMessage);
+  // P1-A1: chunked to exhaustion (see fetchAllPages) — the old
+  // unpaged select silently capped at 1,000 rows, so a proof on
+  // an older inbox page showed "Proof — none yet".
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("brand_messages")
+      .select(
+        "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read, campaigns(title, brand_name, payment_tx_id)"
+      )
+      .order("created_at", { ascending: false })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
+  return rows.map(mapBrandMessage);
+}
+
+/**
+ * Rejection reasons for a set of campaigns, read back from their
+ * brand-chat threads in ONE chunked query (batched version of
+ * getCampaignRejectionReason, for the /admin refund queue — one
+ * query per campaign would be N+1). Returns the latest admin
+ * "Campaign rejected: …" message per campaign, or no entry when
+ * the campaign was never rejected that way. Throws on DB error,
+ * per the Forms #26 contract.
+ */
+export async function getCampaignRejectionReasons(
+  campaignIds: string[]
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  if (campaignIds.length === 0) return out;
+  const supabase = getServerClient();
+  if (!supabase) return out;
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("brand_messages")
+      .select("campaign_id, message, sender, created_at")
+      .in("campaign_id", campaignIds)
+      .eq("sender", "admin")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
+  // Newest first, so the first matching message per campaign is
+  // the latest rejection reason.
+  for (const row of rows) {
+    const campaignId = String(row.campaign_id ?? "");
+    if (!campaignId || out[campaignId]) continue;
+    const message = String(row.message ?? "");
+    if (message.startsWith(CAMPAIGN_REJECTED_MESSAGE_PREFIX)) {
+      const reason = message
+        .slice(CAMPAIGN_REJECTED_MESSAGE_PREFIX.length)
+        .trim();
+      if (reason) out[campaignId] = reason;
+    }
+  }
+  return out;
+}
+
+/** One row of the refund_requests table (migration 0041): a
+ *  brand's request for its paid budget back after a campaign was
+ *  rejected. `status` is 'requested' until the owner sends the
+ *  refund and marks it 'sent'. */
+export interface RefundRequest {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  amount: number;
+  payment_tx_id: string | null;
+  status: string;
+  created_at: string;
+}
+
+/**
+ * Open refund requests (status = 'requested'), newest first —
+ * owner only, for the /admin refund queue (Round-4 P1-A2). The
+ * table is consumed by the refund-request API route (another
+ * workstream); this loader only reads the open queue. Chunked to
+ * exhaustion (P1-A1). Throws on DB error, per the Forms #26
+ * contract — a failed load is a failed load, never "no refunds
+ * owed". Returns [] when migration 0041 has not been applied
+ * yet (the table does not exist): the queue is empty, not broken.
+ */
+export async function getOpenRefundRequests(): Promise<RefundRequest[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  try {
+    const rows = await fetchAllPages(async (offset, chunk) => {
+      const { data, error } = await supabase
+        .from("refund_requests")
+        .select("id, campaign_id, user_id, amount, payment_tx_id, status, created_at")
+        .eq("status", "requested")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + chunk - 1);
+      return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+    });
+    return rows.map((row) => ({
+      id: String(row.id),
+      campaign_id: String(row.campaign_id),
+      user_id: String(row.user_id),
+      amount: Number(row.amount ?? 0),
+      payment_tx_id: (row.payment_tx_id as string | null) ?? null,
+      status: String(row.status ?? "requested"),
+      created_at: String(row.created_at ?? ""),
+    }));
+  } catch {
+    // Pre-migration 0041 — no refund_requests table yet, so no
+    // open requests can exist.
+    return [];
+  }
+}
+
+/** One row of the public.users directory (Round-4 P2-A12): the
+ *  fields the /admin Users section lists. Owner-only. */
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  role: string;
+  is_admin: boolean;
+  is_blocked: boolean;
+  instagram_url: string | null;
+  created_at: string;
+}
+
+/**
+ * Every user, oldest first — owner only, for the /admin Users
+ * directory and for joining creator emails / blocked state /
+ * Instagram links. Chunked to exhaustion in 1,000-row chunks
+ * (Round-4 P1-A1): the old inline select in admin/page.tsx had
+ * no limit and silently capped at 1,000 users, so past 1,000
+ * users creator emails fell back to a user-id fragment,
+ * manually-blocked creators disappeared from the Fraud view's
+ * Banned section, and Instagram hand-check links went missing.
+ * Throws on DB error, per the Forms #26 contract.
+ */
+export async function getAllUsers(): Promise<AdminUserRow[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, email, role, is_admin, is_blocked, instagram_url, created_at")
+      .order("created_at", { ascending: true })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
+  return rows.map((row) => ({
+    id: String(row.id),
+    email: String(row.email ?? ""),
+    role: String(row.role ?? "creator"),
+    is_admin: Boolean(row.is_admin),
+    is_blocked: Boolean(row.is_blocked),
+    instagram_url: (row.instagram_url as string | null) ?? null,
+    created_at: String(row.created_at ?? ""),
+  }));
+}
+
+/** Best-effort storage usage for one bucket (Round-4 P2-A9c).
+ *  `capped` means the scan stopped at MAX_FILES_SCANNED files —
+ *  the real totals may be higher. `error` is set (and the counts
+ *  are 0) when the bucket could not be listed at all. */
+export interface StorageUsage {
+  bucket: string;
+  folders: number;
+  files: number;
+  bytes: number;
+  capped: boolean;
+  error: string | null;
+}
+
+/**
+ * Per-bucket file count + size for /admin, best-effort and cheap:
+ * lists the top-level folders, then one bounded file list per
+ * folder (objects live at <user_id>/… in campaign-images and
+ * <campaign_id>/… in brand-proofs). Never throws — a failure
+ * returns an entry with `error` set, so the admin page renders
+ * "unavailable" instead of breaking. The scan stops at 500 files
+ * per bucket; totals past that are reported as capped, never as
+ * a fake exact number.
+ */
+export async function getStorageUsage(): Promise<StorageUsage[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const MAX_FILES_SCANNED = 500;
+  const out: StorageUsage[] = [];
+  for (const bucket of ["campaign-images", "brand-proofs"]) {
+    const usage: StorageUsage = {
+      bucket,
+      folders: 0,
+      files: 0,
+      bytes: 0,
+      capped: false,
+      error: null,
+    };
+    try {
+      const { data: top, error: topError } = await supabase.storage
+        .from(bucket)
+        .list("", { limit: 1000 });
+      if (topError || !top) {
+        throw new Error(topError?.message ?? "Could not list bucket.");
+      }
+      for (const entry of top) {
+        if (usage.files >= MAX_FILES_SCANNED) {
+          usage.capped = true;
+          break;
+        }
+        // Folder entries carry no metadata; file entries carry
+        // metadata.size. A top-level file is counted directly.
+        const meta = entry.metadata as { size?: number } | null;
+        if (meta && typeof meta.size === "number") {
+          usage.files += 1;
+          usage.bytes += meta.size;
+          continue;
+        }
+        if (!entry.name) continue;
+        usage.folders += 1;
+        const { data: files, error: filesError } = await supabase.storage
+          .from(bucket)
+          .list(entry.name, { limit: 1000 });
+        if (filesError || !files) continue;
+        for (const f of files) {
+          if (usage.files >= MAX_FILES_SCANNED) {
+            usage.capped = true;
+            break;
+          }
+          const fMeta = f.metadata as { size?: number } | null;
+          usage.files += 1;
+          usage.bytes +=
+            fMeta && typeof fMeta.size === "number" ? fMeta.size : 0;
+        }
+      }
+    } catch (err) {
+      usage.error =
+        err instanceof Error ? err.message : "Could not list bucket.";
+    }
+    out.push(usage);
+  }
+  return out;
 }
 
 /**
@@ -1152,30 +1467,39 @@ export interface BudgetHistoryEntry {
 }
 
 /** Budget edit history for a set of campaigns (admin campaign
- *  cards). Throws on DB error, per the Forms #26 contract (see
- *  getCampaigns). */
+ *  cards). Capped PER campaign — the 50 most recent edits each
+ *  (Round-4 P2-A4). The old shared .limit(200) across ALL
+ *  campaigns meant that once total edits passed 200, older
+ *  campaigns' edits fell out of the newest-200 and their cards
+ *  falsely claimed "No budget edits yet", hiding the audit trail
+ *  the approve guard depends on. A campaign with no edits still
+ *  gets an empty list. Throws on DB error, per the Forms #26
+ *  contract (see getCampaigns). */
 export async function getCampaignBudgetHistory(
   campaignIds: string[]
 ): Promise<Record<string, BudgetHistoryEntry[]>> {
   if (campaignIds.length === 0) return {};
   const supabase = getServerClient();
   if (!supabase) return {};
-  const { data, error } = await supabase
-    .from("campaign_budget_history")
-    .select(
-      "campaign_id, old_budget_total, new_budget_total, old_budget_left, new_budget_left, reason, created_at"
-    )
-    .in("campaign_id", campaignIds)
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load budget history.");
+  const PER_CAMPAIGN_LIMIT = 50;
   const out: Record<string, BudgetHistoryEntry[]> = {};
-  for (const row of data as Record<string, unknown>[]) {
-    const campaignId = String(row.campaign_id ?? "");
-    if (!campaignId) continue;
-    const list = out[campaignId] ?? [];
-    list.push({
+  const results = await Promise.all(
+    campaignIds.map(async (campaignId) => {
+      const { data, error } = await supabase
+        .from("campaign_budget_history")
+        .select(
+          "campaign_id, old_budget_total, new_budget_total, old_budget_left, new_budget_left, reason, created_at"
+        )
+        .eq("campaign_id", campaignId)
+        .order("created_at", { ascending: false })
+        .limit(PER_CAMPAIGN_LIMIT);
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error("Could not load budget history.");
+      return { campaignId, rows: data as Record<string, unknown>[] };
+    })
+  );
+  for (const { campaignId, rows } of results) {
+    out[campaignId] = rows.map((row) => ({
       campaign_id: campaignId,
       old_budget_total: Number(row.old_budget_total ?? 0),
       new_budget_total: Number(row.new_budget_total ?? 0),
@@ -1183,8 +1507,7 @@ export async function getCampaignBudgetHistory(
       new_budget_left: Number(row.new_budget_left ?? 0),
       reason: String(row.reason ?? ""),
       created_at: String(row.created_at ?? ""),
-    });
-    out[campaignId] = list;
+    }));
   }
   return out;
 }
