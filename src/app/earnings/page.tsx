@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { getWallet, getWithdrawals } from "@/lib/data";
+import { getWallet, getWithdrawals, getUserSubmissions } from "@/lib/data";
 import WithdrawButton from "@/components/WithdrawButton";
 import { formatUSD } from "@/lib/money";
 import { HOLD_HOURS, WITHDRAW_MIN, WITHDRAW_METHOD_LABELS } from "@/lib/constants";
@@ -51,6 +51,22 @@ export default async function EarningsPage() {
 
   const available = wallet?.available_balance ?? 0;
   const pending = wallet?.pending_balance ?? 0;
+  // P2-C4: flagged pending earnings are PAUSED — they sit in the
+  // Pending Balance above but will not release on schedule.
+  // Best-effort load: a failure here must never break the page,
+  // so it falls back to no note (the flag still shows on My Posts).
+  let flaggedApproved: Awaited<ReturnType<typeof getUserSubmissions>> = [];
+  try {
+    flaggedApproved = (await getUserSubmissions(user.id)).filter(
+      (s) => s.status === "approved" && Boolean(s.flag_reason)
+    );
+  } catch {
+    flaggedApproved = [];
+  }
+  const flaggedPendingTotal = flaggedApproved.reduce(
+    (sum, s) => sum + Number(s.earnings ?? 0),
+    0
+  );
   // Round-3 P2-19: wallet.withdrawn_total is incremented at
   // REQUEST time, so it counts money merely requested — a pending
   // request already inflated "Total withdrawn so far". The honest
@@ -109,6 +125,20 @@ export default async function EarningsPage() {
         requests not included):{" "}
         <span className="font-bold text-fg">{formatUSD(withdrawn)}</span>
       </p>
+
+      {flaggedApproved.length > 0 && (
+        <p className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
+          ⚠ {flaggedApproved.length} approved clip
+          {flaggedApproved.length === 1 ? "" : "s"} flagged —{" "}
+          {formatUSD(flaggedPendingTotal)} of your Pending Balance is
+          paused while flagged and excluded from the release schedule:
+          it will not become withdrawable until the admin resolves the
+          flag. The totals above are unchanged.{" "}
+          <Link href="/my-posts" className="font-bold text-lime underline">
+            See the flagged clips on My Posts →
+          </Link>
+        </p>
+      )}
 
       <div className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">Payout info</h2>

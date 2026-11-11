@@ -7,6 +7,7 @@ import {
   getUserSubmissions,
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
+import { DISCORD_URL } from "@/lib/constants";
 import CampaignGrid from "@/components/CampaignGrid";
 import CampaignFilters from "@/components/CampaignFilters";
 import WinBoard from "@/components/WinBoard";
@@ -64,7 +65,8 @@ export default async function CampaignsPage({
 }) {
   // Discover (P1-a): live campaigns PLUS settling ones — ended
   // campaigns stay visible until the cleanup deletes them >= 7 days
-  // after the end (migration 0023). Home keeps live-only.
+  // after the end (migration 0023). Home uses the same loader
+  // (P2-R11), so the two pages agree on the count.
   // The data getters THROW on a Supabase error (throw-contract,
   // decided by the coordinator) instead of returning [] — so a
   // failed load renders the honest error state above, never the
@@ -205,6 +207,30 @@ export default async function CampaignsPage({
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
             New campaigns from brands will appear here soon. Check back later.
           </p>
+          {/* P1-C5: a zero-campaign Discover is not a dead end —
+              give a day-one creator the next actions. */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/connect"
+              className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+            >
+              Connect your accounts first
+            </Link>
+            <a
+              href={DISCORD_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            >
+              Join Discord for announcements
+            </a>
+            <Link
+              href="/how-it-works"
+              className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            >
+              How it works
+            </Link>
+          </div>
         </div>
       ) : tab === "joined" && !user ? (
         <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">

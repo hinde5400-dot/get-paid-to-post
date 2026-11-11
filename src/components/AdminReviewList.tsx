@@ -84,6 +84,12 @@ export default function AdminReviewList({
   const [comments, setComments] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [reasonNotes, setReasonNotes] = useState<Record<string, string>>({});
+  // P1-C4: inline error when "other" is picked with no note — the
+  // note is required for "other" (a bare "Rejected: other" tells
+  // the creator nothing). Cleared as soon as a note is typed.
+  const [otherNoteErrors, setOtherNoteErrors] = useState<
+    Record<string, string>
+  >({});
   const [busy, setBusy] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -221,14 +227,32 @@ export default function AdminReviewList({
         return;
       }
       const note = (reasonNotes[s.id] ?? "").trim();
-      // "other" with no note still stores the fixed "other" value —
-      // that is what fraud tooling counts later.
-      reason = picked === "other" && note ? `other: ${note}` : picked;
+      // P1-C4: "other" with no note is impossible — the stored
+      // reason would read "other" to the creator, which explains
+      // nothing. Block the submit (and the API 400s it too).
+      if (picked === "other" && !note) {
+        const message =
+          "A short note is required when the reason is “other” — the creator sees the reason, so it has to say what was wrong.";
+        setOtherNoteErrors((prev) => ({ ...prev, [s.id]: message }));
+        showError(message);
+        return;
+      }
+      reason = picked === "other" ? `other: ${note}` : picked;
     }
     // Round-3 P2-5: approve / reject-after-approve used to be
     // one-click — both move money, so both confirm first (same
     // window.confirm pattern as the override / block confirms).
     if (action === "approve") {
+      // P2-A11: the server refuses below-minimum approves (400),
+      // so the confirm must never promise a credit for one. Show
+      // the minimum check instead of the credit amount.
+      const minViews = Math.max(1000, s.campaign_min_views ?? 1000);
+      if (v > 0 && v < minViews) {
+        showError(
+          `This clip has ${v.toLocaleString()} views, below the campaign minimum of ${minViews.toLocaleString()} views — below minimum, will be rejected by the server. Enter the verified views (at least ${minViews.toLocaleString()}) or reject the clip instead.`
+        );
+        return;
+      }
       let est = 0;
       if (s.rate_per_1k != null && v > 0) {
         const calc = payoutForViews(
@@ -287,6 +311,7 @@ export default function AdminReviewList({
           error?: string;
           message?: string;
           needsUnverifiedOverride?: boolean;
+          legacyRateFallback?: boolean;
         };
         if (!res.ok && data.needsUnverifiedOverride) {
           if (
@@ -306,10 +331,19 @@ export default function AdminReviewList({
             error?: string;
             message?: string;
             needsUnverifiedOverride?: boolean;
+            legacyRateFallback?: boolean;
           };
         }
         if (!res.ok) throw new Error(data.error || "Action failed.");
-        showSuccess(data.message ?? "Submission approved.");
+        // P2-A1: the API flags legacyRateFallback when this clip
+        // paid a fallback rate the creator never saw — surface it
+        // in the toast, or the admin never learns the rate differed.
+        showSuccess(
+          (data.message ?? "Submission approved.") +
+            (data.legacyRateFallback
+              ? " Warning: this clip paid a fallback rate the creator never saw — fix the campaign's rate."
+              : "")
+        );
         router.refresh();
       } catch (e) {
         showError(e instanceof Error ? e.message : "Action failed.");
@@ -796,20 +830,33 @@ export default function AdminReviewList({
             </label>
             {reasons[s.id] === "other" && (
               <label className="block text-xs font-bold text-fg">
-                Short note (optional)
+                Short note (required for “other”)
                 <input
                   type="text"
                   maxLength={120}
                   placeholder="e.g. wrong platform link"
                   value={reasonNotes[s.id] ?? ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setReasonNotes((prev) => ({
                       ...prev,
                       [s.id]: e.target.value,
-                    }))
-                  }
+                    }));
+                    if (e.target.value.trim()) {
+                      setOtherNoteErrors((prev) => {
+                        if (!prev[s.id]) return prev;
+                        const next = { ...prev };
+                        delete next[s.id];
+                        return next;
+                      });
+                    }
+                  }}
                   className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 text-fg outline-none focus:border-red-500"
                 />
+                {otherNoteErrors[s.id] && (
+                  <span className="mt-1 block text-xs font-semibold normal-case text-red-300">
+                    {otherNoteErrors[s.id]}
+                  </span>
+                )}
               </label>
             )}
           </div>
@@ -830,7 +877,17 @@ export default function AdminReviewList({
             </button>
             <button
               onClick={() => review(s, "reject")}
-              disabled={busy === s.id}
+              disabled={
+                busy === s.id ||
+                (reasons[s.id] === "other" &&
+                  !(reasonNotes[s.id] ?? "").trim())
+              }
+              title={
+                reasons[s.id] === "other" &&
+                !(reasonNotes[s.id] ?? "").trim()
+                  ? "Add a short note first — “other” needs one."
+                  : undefined
+              }
               className="inline-flex items-center gap-1.5 rounded-full bg-red-500/20 px-4 py-2 text-sm font-bold text-red-300 disabled:opacity-40"
             >
               {busy === s.id && busyAction === "reject" ? (

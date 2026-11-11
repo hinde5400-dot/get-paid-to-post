@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Platform, Submission, SubmissionStatus } from "@/lib/types";
-import { formatUSD } from "@/lib/money";
+import { formatUSD, payoutForViews } from "@/lib/money";
 import {
   engagementRate,
   formatEngagementRate,
   MIN_ENGAGEMENT_RATE,
 } from "@/lib/engagement";
-import { DISCORD_URL, PLATFORM_LABELS } from "@/lib/constants";
+import { DISCORD_URL, MAX_PAYOUT_DEFAULT, PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
 import { PlatformChips } from "./PlatformIcons";
 
@@ -59,6 +59,60 @@ export default function MyPostsList({
 }) {
   const [filter, setFilter] = useState<"all" | SubmissionStatus>("all");
   const [copied, setCopied] = useState<string | null>(null);
+  // P2-C3: campaign state per row (live / ended), from the
+  // lightweight status endpoint — Submission carries no campaign
+  // status. Best-effort: a failed fetch just hides the state note,
+  // the campaign link below still works.
+  const [campaignStates, setCampaignStates] = useState<
+    Record<
+      string,
+      { status: string; title: string; ends_at: string | null; budget_left: number | null }
+    >
+  >({});
+  useEffect(() => {
+    const ids = [...new Set(submissions.map((s) => s.campaign_id))].filter(
+      Boolean
+    );
+    if (ids.length === 0) {
+      setCampaignStates({});
+      return;
+    }
+    let cancelled = false;
+    void fetch(
+      `/api/campaigns/status?ids=${encodeURIComponent(ids.join(","))}`
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        const map = (data as {
+          campaigns?: Record<
+            string,
+            { status: string; title: string; ends_at: string | null; budget_left: number | null }
+          >;
+        }).campaigns;
+        if (map) setCampaignStates(map);
+      })
+      .catch(() => {
+        // Status lookup failed — rows still render without it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [submissions]);
+
+  // A campaign is ended (settling) when it is no longer live: its
+  // stored status left "live", or its budget ran out, or its end
+  // date passed. Live campaigns keep the stored "live" status with
+  // budget left and no passed end date.
+  function campaignEnded(campaignId: string): boolean {
+    const st = campaignStates[campaignId];
+    if (!st) return false;
+    if (st.status !== "live") return true;
+    if (st.budget_left != null && st.budget_left <= 0) return true;
+    if (st.ends_at && new Date(st.ends_at).getTime() <= Date.now())
+      return true;
+    return false;
+  }
 
   const visible =
     filter === "all"
@@ -132,8 +186,19 @@ export default function MyPostsList({
                     {PLATFORM_LABELS[s.platform]}
                   </p>
                   <h3 className="mt-1 font-bold text-fg">
-                    {s.campaign_title ?? "Campaign"}
+                    <Link
+                      href={`/campaign/${s.campaign_id}`}
+                      className="hover:text-lime hover:underline"
+                    >
+                      {s.campaign_title ?? "Campaign"}
+                    </Link>
                   </h3>
+                  {campaignEnded(s.campaign_id) && (
+                    <p className="mt-1 rounded-xl bg-amber-500/10 px-3 py-1.5 text-xs font-semibold leading-relaxed text-amber-200">
+                      Campaign ended — in 3-day re-check, payout ~1
+                      week after the campaign ends.
+                    </p>
+                  )}
                   <a
                     href={s.post_url}
                     target="_blank"
@@ -215,19 +280,20 @@ export default function MyPostsList({
               </div>
               {/* Engagement self-check vs the 1% gate (likes +
                   comments only). Shown ONLY for clips under review
-                  (pending) or approved — never on rejected rows
-                  (a green check on a dead clip, or a "cannot be
-                  approved" verdict on a clip whose views are still
-                  tracking, both mislead). Pending clips are still
-                  tracking: views update every 3 hours for 14 days,
-                  so the verdict is phrased as "currently … — still
-                  tracking", not final. */}
-              {s.status !== "rejected" &&
+                  (pending) — never on approved rows (an approved
+                  clip's earnings are already locked, but its views
+                  keep tracking for 14 days, so a later dip below 1%
+                  used to print "this clip cannot be approved" next
+                  to an Approved badge) and never on rejected rows.
+                  Pending clips are still tracking: views update
+                  every 3 hours for 14 days, so the verdict is
+                  phrased as "currently … — still tracking", not
+                  final. */}
+              {s.status === "pending" &&
                 (() => {
                   const rate = engagementRate(s.likes, s.comments, s.views);
                   if (rate === null) return null;
                   const ok = rate >= MIN_ENGAGEMENT_RATE;
-                  const pending = s.status === "pending";
                   return (
                     <p
                       className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold leading-relaxed ${
@@ -239,33 +305,56 @@ export default function MyPostsList({
                       Engagement {formatEngagementRate(rate)} (likes +
                       comments / views) —{" "}
                       {ok
-                        ? pending
-                          ? "currently above the 1% minimum — still tracking (views update every 3 hours for 14 days)"
-                          : "above the 1% minimum ✓"
-                        : pending
-                          ? "currently below the 1% minimum — still tracking (views update every 3 hours for 14 days)"
-                          : "below the 1% minimum — this clip cannot be approved"}
+                        ? "currently above the 1% minimum — still tracking (views update every 3 hours for 14 days)"
+                        : "currently below the 1% minimum — still tracking (views update every 3 hours for 14 days)"}
                     </p>
                   );
                 })()}
               {/* Earnings breakdown — locked at approval: the views
                   above are the latest count and may have grown
-                  since, so the math is never restated from them. */}
+                  since, so the math is never restated from them as
+                  if it were the approval count. The one exception
+                  is the budget cap: when the paid amount is below
+                  BOTH the per-post cap and what the rate math on
+                  the latest views would pay, the clip was capped by
+                  the campaign's remaining budget — and the creator
+                  must be able to reproduce their pay from the
+                  numbers shown, instead of seeing "$30 at $2/1k"
+                  when $2/1k × the views is $200. */}
               {s.status === "approved" &&
                 s.views > 0 &&
-                s.rate_per_1k !== undefined && (
-                  <p className="mt-3 rounded-xl bg-lime/10 px-4 py-2.5 text-sm leading-relaxed text-fg/80">
-                    Your video earned {formatUSD(s.earnings)} at{" "}
-                    {formatUSD(s.rate_per_1k as number)}/1k.
-                    {s.max_payout_per_post !== undefined &&
+                s.rate_per_1k !== undefined &&
+                (() => {
+                  const rate = s.rate_per_1k as number;
+                  const cap =
+                    s.max_payout_per_post ?? MAX_PAYOUT_DEFAULT;
+                  const calc = payoutForViews(s.views, rate, cap);
+                  const capApplied =
+                    s.max_payout_per_post !== undefined &&
                     s.max_payout_per_post !== null &&
-                    s.earnings >= s.max_payout_per_post
-                      ? ` The per-post cap of ${formatUSD(s.max_payout_per_post)} applied.`
-                      : ""}{" "}
-                    Earnings were locked when the clip was approved —
-                    the views above are the latest count.
-                  </p>
-                )}
+                    s.earnings >= s.max_payout_per_post;
+                  // Budget-capped: paid less than the per-post cap
+                  // AND less than the rate math — the only other
+                  // limiter is the campaign's remaining budget at
+                  // approval (the review route truncates by it).
+                  const budgetCapped =
+                    !capApplied &&
+                    s.earnings < Math.min(calc.uncapped, cap);
+                  return (
+                    <p className="mt-3 rounded-xl bg-lime/10 px-4 py-2.5 text-sm leading-relaxed text-fg/80">
+                      Your video earned {formatUSD(s.earnings)} at{" "}
+                      {formatUSD(rate)}/1k.
+                      {capApplied
+                        ? ` The per-post cap of ${formatUSD(s.max_payout_per_post as number)} applied.`
+                        : ""}
+                      {budgetCapped
+                        ? ` Capped by the campaign's remaining budget — at ${formatUSD(rate)}/1k the latest view count would have paid ${formatUSD(calc.uncapped)} (up to the ${formatUSD(cap)} per-post cap), but only ${formatUSD(s.earnings)} was left in the campaign budget when this clip was approved, so that is what was paid.`
+                        : ""}{" "}
+                      Earnings were locked when the clip was approved —
+                      the views above are the latest count.
+                    </p>
+                  );
+                })()}
               <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-fg/60">
                 <span>
                   Submission ID:{" "}
@@ -283,9 +372,11 @@ export default function MyPostsList({
                 </button>
                 {s.hold_until && s.status === "approved" && (
                   <span>
-                    {new Date(s.hold_until).getTime() <= Date.now()
-                      ? "Hold released — available to withdraw"
-                      : `Hold releases ${new Date(s.hold_until).toLocaleString("en-US")}`}
+                    {s.flag_reason
+                      ? "Hold paused while flagged"
+                      : new Date(s.hold_until).getTime() <= Date.now()
+                        ? "Hold released — available to withdraw"
+                        : `Hold releases ${new Date(s.hold_until).toLocaleString("en-US")}`}
                   </span>
                 )}
                 <span>
