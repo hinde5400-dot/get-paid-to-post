@@ -12,7 +12,9 @@ export default function RefundPage() {
           Any budget left unspent when your campaign ends stays yours —
           ask for a refund through Discord support: the owner sends it
           manually in USDT. We aim to send it within 5–7 business days
-          of your request.
+          of your request. The 15% platform fee is not refundable — on
+          an unspent-budget refund, only the unspent budget is returned,
+          not the fee.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
           There is no refund on budget already spent on verified views:
@@ -25,7 +27,9 @@ export default function RefundPage() {
           budget has been spent, and your full budget is returned to you
           on request — ask through Discord support; the owner sends it
           manually in USDT, and we aim to send it within 5–7 business
-          days of your request.
+          days of your request. The 15% platform fee is not refundable
+          — on a rejected campaign, only the budget is returned, not
+          the fee.
         </p>
       </section>
 
@@ -47,6 +51,9 @@ export default function RefundPage() {
           ticket in the Discord server and the platform owner will
           review it. Refunds are sent back in USDT to the wallet address
           you paid from, or to the address you give in your ticket.
+          If your campaign was rejected after you paid, you can also
+          request the refund from your dashboard or the payment page —
+          the button there records the request for the owner.
         </p>
       </section>
     </div>

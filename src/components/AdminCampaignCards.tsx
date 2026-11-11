@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Campaign, Platform } from "@/lib/types";
 import { campaignStatus } from "@/lib/campaigns";
-import { budgetUsedPct, budgetBarClass, formatUSD } from "@/lib/money";
+import { budgetUsedPct, budgetBarClass, formatUSD, platformFeeFor, totalToSend } from "@/lib/money";
 import {
   engagementRate,
   formatEngagementRate,
@@ -74,6 +74,7 @@ export default function AdminCampaignCards({
   hasProof,
   hasMessages,
   budgetHistory,
+  refundRequestedById = {},
 }: {
   campaigns: Campaign[];
   statsByCampaign: Record<string, CampaignCardStats>;
@@ -83,6 +84,10 @@ export default function AdminCampaignCards({
    *  — their button reads "Chat", not "Proof". */
   hasMessages: Record<string, boolean>;
   budgetHistory: Record<string, BudgetHistoryEntry[]>;
+  /** Campaign ids with an open refund request (P2-B5) — shown as
+   *  a "Refund requested" badge. Fed by the rejected-campaigns
+   *  section on /admin; defaults to none. */
+  refundRequestedById?: Record<string, boolean>;
 }) {
   if (campaigns.length === 0) {
     return (
@@ -101,6 +106,7 @@ export default function AdminCampaignCards({
           hasProof={Boolean(hasProof[c.id])}
           hasMessages={Boolean(hasMessages[c.id])}
           history={budgetHistory[c.id] ?? []}
+          refundRequested={Boolean(refundRequestedById[c.id])}
         />
       ))}
     </div>
@@ -113,12 +119,14 @@ function AdminCampaignCard({
   hasProof,
   hasMessages,
   history,
+  refundRequested = false,
 }: {
   campaign: Campaign;
   stats: CampaignCardStats;
   hasProof: boolean;
   hasMessages: boolean;
   history: BudgetHistoryEntry[];
+  refundRequested?: boolean;
 }) {
   const router = useRouter();
   const { showError, showSuccess } = useToast();
@@ -130,6 +138,12 @@ function AdminCampaignCard({
   const [editTotal, setEditTotal] = useState("");
   const [editReason, setEditReason] = useState("");
   const [saving, setSaving] = useState(false);
+  // Round-4 P1-B4: admin edit of rate + brief on a PENDING
+  // campaign (the brand can do the same from its payment page).
+  const [detailEditOpen, setDetailEditOpen] = useState(false);
+  const [editRate, setEditRate] = useState("");
+  const [editBrief, setEditBrief] = useState("");
+  const [savingDetails, setSavingDetails] = useState(false);
   const [postsOpen, setPostsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   // Approve / Reject confirm state: approve/reject are one-tap
@@ -154,14 +168,42 @@ function AdminCampaignCard({
     c as unknown as { payment_tx_submitted_at?: string | null }
   ).payment_tx_submitted_at ?? null;
   // Budget edited while a payment was on file: the TxID may
-  // verify a SMALLER amount than the current budget. Exact
-  // ordering still cannot be proven — the TxID submission time
-  // (migration 0038) now exists, but the AMOUNT behind the TxID
-  // is still unknown — so ANY budget edit on file while a TxID
-  // is recorded raises the flag: the admin must confirm the
-  // extra budget + 15% fee arrived before approving.
+  // verify a SMALLER amount than the current budget. Round-4
+  // P2-B1: only edits AFTER the payment, and only INCREASES,
+  // raise the flag. The amount the TxID covered is the
+  // old_budget_total of the earliest post-payment edit; a
+  // DECREASE means the brand overpaid (approving is safe), and a
+  // pre-payment edit means the brand paid the new budget. The
+  // approve gate in /api/admin/campaigns uses the same rule, so
+  // the card and the gate can no longer disagree.
+  const paymentTimeMs = Number.isFinite(
+    new Date(
+      paymentTxSubmittedAt ?? c.created_at ?? ""
+    ).getTime()
+  )
+    ? new Date(paymentTxSubmittedAt ?? c.created_at ?? "").getTime()
+    : 0;
+  const postPaymentEdits = history.filter(
+    (h) => new Date(h.created_at).getTime() > paymentTimeMs
+  );
+  const earliestPostPaymentEdit =
+    postPaymentEdits.length > 0
+      ? postPaymentEdits[postPaymentEdits.length - 1]
+      : null;
+  const paidAgainst =
+    earliestPostPaymentEdit != null
+      ? Number(earliestPostPaymentEdit.old_budget_total ?? 0)
+      : null;
   const underfundedFlag =
-    isPending && history.length > 0 && Boolean(c.payment_tx_id);
+    isPending &&
+    paidAgainst != null &&
+    Boolean(c.payment_tx_id) &&
+    c.budget_total > paidAgainst;
+  const overpaidFlag =
+    isPending &&
+    paidAgainst != null &&
+    Boolean(c.payment_tx_id) &&
+    c.budget_total < paidAgainst;
   // P2-9: the same flag on LIVE cards. A live campaign's budget
   // raise has no payment check at all (the budget-edit route
   // never asks for a TxID), so creators earn from an unfunded
@@ -295,6 +337,46 @@ function AdminCampaignCard({
     }
   }
 
+  async function saveDetails() {
+    const rateNum = Number(editRate);
+    if (!Number.isFinite(rateNum) || rateNum <= 0) {
+      showError("Rate must be more than $0 per 1k views.");
+      return;
+    }
+    if (rateNum > 1000) {
+      showError("Rate must be $1,000 or less per 1k views.");
+      return;
+    }
+    if (!editBrief.trim()) {
+      showError("Campaign Brief is required.");
+      return;
+    }
+    if (editBrief.trim().length > 5000) {
+      showError("Campaign Brief must be 5,000 characters or less.");
+      return;
+    }
+    setSavingDetails(true);
+    try {
+      const res = await fetch(`/api/campaigns/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ratePer1k: rateNum,
+          description: editBrief.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save the changes.");
+      showSuccess("Campaign rate and brief updated.");
+      setDetailEditOpen(false);
+      router.refresh();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Could not save the changes.");
+    } finally {
+      setSavingDetails(false);
+    }
+  }
+
   async function saveBudget() {
     const newTotal = Number(editTotal);
     if (!Number.isFinite(newTotal) || newTotal <= 0) {
@@ -396,9 +478,12 @@ function AdminCampaignCard({
           Budget {formatUSD(c.budget_total)} · Left{" "}
           {formatUSD(c.budget_left)} · Spent {formatUSD(spent)}
         </p>
+        {/* Fee split, recomputed from the live budget (P2-B3):
+            the stored platform_fee column is a cache, and a stale
+            fee must never set the amount to verify. */}
         <p className="mt-1 text-xs font-semibold text-fg/60">
-          Platform fee (15%): {formatUSD(c.platform_fee)} · Total to
-          verify: {formatUSD(c.budget_total + c.platform_fee)} ·
+          Platform fee (15%): {formatUSD(platformFeeFor(c.budget_total))} · Total to
+          verify: {formatUSD(totalToSend(c.budget_total))} ·
           Creators pool (full budget): {formatUSD(c.budget_total)}
         </p>
       </div>
@@ -610,10 +695,29 @@ function AdminCampaignCard({
               )}
               {underfundedFlag && (
                 <p className="mt-2 text-xs font-bold leading-relaxed text-amber-300">
-                  ⚠ This campaign&apos;s budget was edited while a
-                  payment was on file — the TxID may predate the
-                  edit. Verify the extra budget + 15% fee was
+                  ⚠ This campaign&apos;s budget was RAISED after the
+                  payment was submitted — the TxID may predate the
+                  raise. Verify the extra budget + 15% fee was
                   received before approving.
+                </p>
+              )}
+              {overpaidFlag && paidAgainst != null && (
+                <p className="mt-2 text-xs font-bold leading-relaxed text-sky-300">
+                  Budget was LOWERED after the payment was submitted
+                  (from {formatUSD(paidAgainst)} to{" "}
+                  {formatUSD(c.budget_total)}) — the brand overpaid{" "}
+                  {formatUSD(
+                    totalToSend(paidAgainst) - totalToSend(c.budget_total)
+                  )}
+                  . Approving is safe; refund the difference on
+                  request.
+                </p>
+              )}
+              {refundRequested && (
+                <p className="mt-2 text-xs font-black leading-relaxed text-red-300">
+                  💸 Refund requested — this campaign was rejected
+                  after payment. Send the budget back in USDT (the
+                  15% platform fee is not refundable).
                 </p>
               )}
               {liveUnderfundedFlag && (
@@ -720,6 +824,23 @@ function AdminCampaignCard({
         >
           {editOpen ? "Close budget edit" : "Edit budget"}
         </button>
+        {/* Round-4 P1-B4: rate + brief edit, pending campaigns
+            only — a live campaign's rate is frozen. */}
+        {isPending && (
+          <button
+            type="button"
+            onClick={() => {
+              setDetailEditOpen((v) => !v);
+              if (!detailEditOpen) {
+                setEditRate(String(c.view_bonus_per_1k));
+                setEditBrief(c.description ?? "");
+              }
+            }}
+            className="flex flex-1 items-center justify-center rounded-full border border-fg/15 py-2.5 text-sm font-bold text-fg transition hover:bg-fg/5"
+          >
+            {detailEditOpen ? "Close rate & brief edit" : "Edit rate & brief"}
+          </button>
+        )}
       </div>
 
       {/* Approve / Reject confirm panel. Approve is one tap away
@@ -746,8 +867,8 @@ function AdminCampaignCard({
                     }
                     className="mt-0.5 h-5 w-5 shrink-0 accent-[#C6FF00]"
                   />
-                  This campaign&apos;s budget was edited while a
-                  payment was on file — I verified the extra budget +
+                  This campaign&apos;s budget was RAISED after the
+                  payment was submitted — I verified the extra budget +
                   15% fee was received.
                 </label>
               )}
@@ -921,6 +1042,66 @@ function AdminCampaignCard({
                 setEditTotal("");
                 setEditReason("");
               }}
+              className="rounded-full border border-fg/15 px-5 py-2.5 text-sm font-bold text-fg transition hover:bg-fg/5 disabled:opacity-40"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Rate & brief edit (P1-B4, pending only): fix a typo'd
+          rate or brief without rejecting the campaign. The brand
+          can make the same edit from its payment page. */}
+      {detailEditOpen && isPending && (
+        <div className="mt-4 rounded-2xl border border-fg/10 bg-fg/5 p-4">
+          <p className="text-xs font-black uppercase tracking-wider text-fg/50">
+            Edit rate &amp; brief
+          </p>
+          <p className="mt-2 text-sm font-semibold text-fg/70">
+            Current rate {formatUSD(c.view_bonus_per_1k)} per 1k views
+          </p>
+          <label className="mt-3 block text-xs font-bold text-fg/60">
+            Rate per 1,000 views (USD)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              value={editRate}
+              onChange={(e) => setEditRate(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-2.5 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
+            />
+          </label>
+          <label className="mt-3 block text-xs font-bold text-fg/60">
+            Campaign Brief
+            <textarea
+              value={editBrief}
+              onChange={(e) => setEditBrief(e.target.value)}
+              rows={4}
+              maxLength={5000}
+              className="mt-1 w-full resize-y rounded-xl border border-fg/15 bg-ink px-4 py-2.5 text-sm leading-relaxed text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
+            />
+          </label>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={savingDetails}
+              onClick={() => void saveDetails()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-500 py-2.5 text-sm font-black text-white transition hover:bg-red-600 disabled:opacity-40"
+            >
+              {savingDetails ? (
+                <>
+                  <Spinner /> Saving...
+                </>
+              ) : (
+                "Save rate & brief"
+              )}
+            </button>
+            <button
+              type="button"
+              disabled={savingDetails}
+              onClick={() => setDetailEditOpen(false)}
               className="rounded-full border border-fg/15 px-5 py-2.5 text-sm font-bold text-fg transition hover:bg-fg/5 disabled:opacity-40"
             >
               Cancel

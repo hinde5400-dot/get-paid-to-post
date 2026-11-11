@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { Campaign, Platform } from "@/lib/types";
 import { campaignPlatforms } from "@/lib/types";
 import type { CampaignStats } from "@/lib/data";
+import type { BrandCampaignClip } from "@/lib/brand-clips";
+import { formatUSD } from "@/lib/money";
 import {
   TikTokIcon,
   InstagramIcon,
@@ -13,10 +15,12 @@ import {
 import DiscordButton from "./DiscordButton";
 
 /**
- * TryShoot-style brand page tabs: Home / Apps / Chats / About,
- * with a lime "Join Shoot →" button. Member / active counts come from
+ * Campaign detail tabs: Home / Apps / Chats / About, with a lime
+ * "Submit a clip →" button. Member / active counts come from
  * real submissions only (see data.ts); when they cannot be computed
- * the counts are omitted, never invented.
+ * the counts are omitted, never invented. The Apps tab shows the
+ * campaign's own clips (link, platform, views, earnings, status)
+ * to the campaign's brand owner only (Round-4 P1-B3).
  */
 
 type Tab = "home" | "apps" | "chats" | "about";
@@ -44,18 +48,26 @@ export default function CampaignDetailTabs({
   stats,
   home,
   about,
+  brandClips = null,
+  isBrandOwner = false,
+  clipsUnavailable = false,
 }: {
   campaign: Campaign;
   stats: CampaignStats | null;
   home: ReactNode;
   about: ReactNode;
+  /** This campaign's clips, for the brand owner only (P1-B3). */
+  brandClips?: BrandCampaignClip[] | null;
+  isBrandOwner?: boolean;
+  /** True when clips exist but are not readable by this caller. */
+  clipsUnavailable?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("home");
   // Platforms this campaign accepts (migration 0012): the chosen
   // list, falling back to the legacy single platform column.
   const platforms = campaignPlatforms(campaign);
 
-  function joinShoot() {
+  function submitClip() {
     setTab("home");
     // Wait a tick for the Home tab (with the submit form) to render.
     requestAnimationFrame(() => {
@@ -139,6 +151,70 @@ export default function CampaignDetailTabs({
                 })}
               </div>
             </div>
+
+            {/* Round-4 P1-B3: the brand owner sees every clip on
+                its own campaign here — link, platform, views,
+                earnings and status. Creators never see this card. */}
+            {isBrandOwner && (
+              <div className="rounded-3xl border border-fg/10 bg-card p-6">
+                <h2 className="font-display text-lg font-black tracking-tight text-fg">
+                  Clips on this campaign
+                </h2>
+                {clipsUnavailable ? (
+                  <p className="mt-2 text-sm leading-relaxed text-fg/60">
+                    Clips have been submitted to this campaign, but
+                    their details are not available here yet — ask the
+                    admin on Discord for the per-clip record for your
+                    campaign.
+                  </p>
+                ) : brandClips && brandClips.length > 0 ? (
+                  <ul className="mt-4 space-y-2">
+                    {brandClips.map((clip) => (
+                      <li
+                        key={clip.id}
+                        className="rounded-2xl bg-fg/5 px-4 py-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-black text-fg">
+                            {PLATFORM_SITES.find((s) => s.key === clip.platform)
+                              ?.name ?? clip.platform}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
+                              clip.status === "approved"
+                                ? "bg-lime/15 text-lime"
+                                : clip.status === "rejected"
+                                  ? "bg-fg/10 text-fg/50"
+                                  : "bg-amber-500/15 text-amber-300"
+                            }`}
+                          >
+                            {clip.status}
+                          </span>
+                          <a
+                            href={clip.post_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-auto text-xs font-bold text-lime underline"
+                          >
+                            Open clip ↗
+                          </a>
+                        </div>
+                        <p className="mt-1 text-xs font-semibold text-fg/60">
+                          {clip.views.toLocaleString("en-US")} views ·
+                          Likes {clip.likes.toLocaleString("en-US")} ·
+                          Comments {clip.comments.toLocaleString("en-US")} ·
+                          Earned {formatUSD(clip.earnings)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm leading-relaxed text-fg/60">
+                    No clips have been submitted to this campaign yet.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -183,10 +259,10 @@ export default function CampaignDetailTabs({
           </div>
           <button
             type="button"
-            onClick={joinShoot}
+            onClick={submitClip}
             className="ml-auto rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
           >
-            Join Shoot →
+            Submit a clip →
           </button>
         </div>
       </div>

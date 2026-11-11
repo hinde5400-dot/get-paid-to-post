@@ -8,11 +8,16 @@ import {
   getCampaignMessages,
   getCampaignRejectionReason,
   isExpiredUnpaidPending,
+  UNPAID_PENDING_EXPIRY_MS,
 } from "@/lib/data";
-import { formatUSD, totalToSend } from "@/lib/money";
+import { getServerClient } from "@/lib/supabase/server";
+import { formatUSD, platformFeeFor, totalToSend } from "@/lib/money";
 import type { BrandMessage } from "@/lib/types";
 import PaymentForm from "@/components/PaymentForm";
 import BrandMessageForm from "@/components/BrandMessageForm";
+import BrandCampaignEditForm from "@/components/BrandCampaignEditForm";
+import RefundRequestButton from "@/components/RefundRequestButton";
+import PaymentPageAutoRefresh from "@/components/PaymentPageAutoRefresh";
 import CopyButton, { CopyableText } from "@/components/CopyButton";
 import DiscordButton from "@/components/DiscordButton";
 
@@ -49,14 +54,18 @@ export default async function BrandPaymentPage({
     messagesError = true;
   }
 
-  // Round-3 P1-9: budget-change banner (pending branch only).
-  // Y = the budget the brand's submitted payment covered: the
-  // earliest history row's old_budget_total (the budget before
-  // the first edit — the amount the TxID was sent against).
-  // X = current budget_total, Z = X − Y; the banner shows only
-  // when Z > 0 and a TxID is on file. The extra carries the same
-  // 15% fee on top as the payment page's own math. Best-effort:
-  // a failed history read hides the banner, never the page.
+  // Round-3 P1-9, fixed in Round-4 (P1-B2 / P2-B1): the budget
+  // the brand's submitted payment covered is the old_budget_total
+  // of the EARLIEST edit made AFTER the payment was submitted —
+  // history rows carry created_at, and the payment time is
+  // payment_tx_submitted_at (migration 0038; a legacy TxID row
+  // with no timestamp falls back to the campaign's creation
+  // date, the same fallback the expiry rule uses). An edit made
+  // BEFORE the brand paid trips nothing: the brand paid the new
+  // budget. Only a post-payment INCREASE asks for extra money;
+  // a post-payment DECREASE means the brand overpaid, and the
+  // difference is refunded on request. Best-effort: a failed
+  // history read hides the banners, never the page.
   // (Migration 0039 lets a brand read its own campaign's history
   // rows — the table was owner-only before that.)
   let budgetHistory: Awaited<
@@ -68,18 +77,94 @@ export default async function BrandPaymentPage({
   } catch {
     budgetHistory = [];
   }
-  const earliestBudgetChange =
-    budgetHistory.length > 0
-      ? budgetHistory[budgetHistory.length - 1]
+  const hasTxId = Boolean(campaign.payment_tx_id?.trim());
+  const paymentTimeRaw =
+    campaign.payment_tx_submitted_at ?? campaign.created_at ?? "";
+  const paymentTimeMs = Number.isFinite(
+    new Date(paymentTimeRaw).getTime()
+  )
+    ? new Date(paymentTimeRaw).getTime()
+    : 0;
+  // History arrives newest-first; the earliest post-payment edit
+  // is the last row whose created_at is after the payment time.
+  const postPaymentEdits = budgetHistory.filter(
+    (h) => new Date(h.created_at).getTime() > paymentTimeMs
+  );
+  const earliestPostPaymentEdit =
+    postPaymentEdits.length > 0
+      ? postPaymentEdits[postPaymentEdits.length - 1]
       : null;
   const paidBudget =
-    earliestBudgetChange != null
-      ? Number(earliestBudgetChange.old_budget_total ?? 0)
+    earliestPostPaymentEdit != null
+      ? Number(earliestPostPaymentEdit.old_budget_total ?? 0)
       : null;
-  const budgetIncrease =
+  const budgetDelta =
     paidBudget != null ? campaign.budget_total - paidBudget : 0;
-  const showBudgetChangeBanner =
-    Boolean(campaign.payment_tx_id?.trim()) && budgetIncrease > 0;
+  const showBudgetIncreaseBanner =
+    hasTxId && paidBudget != null && budgetDelta > 0;
+  const showOverpaymentBanner =
+    hasTxId && paidBudget != null && budgetDelta < 0;
+  // Overpaid = what the brand sent (budget + 15% fee on the
+  // amount the TxID covered) minus what it now owes on the
+  // lowered budget. Fee split is recomputed (P2-B3), never read
+  // from the stored platform_fee column.
+  const overpaidAmount =
+    paidBudget != null
+      ? Math.max(
+          0,
+          Math.round(
+            (totalToSend(paidBudget) - totalToSend(campaign.budget_total)) *
+              100
+          ) / 100
+        )
+      : 0;
+  // Fee split, recomputed from the live budget (P2-B3): the
+  // stored platform_fee column is a cache, and a stale fee (e.g.
+  // after a budget edit whose fee write failed) must never set
+  // the amount the brand is asked to send.
+  const platformFee = platformFeeFor(campaign.budget_total);
+  const totalDue = totalToSend(campaign.budget_total);
+  // Expiry clock (P1-B1): the same clock as
+  // isExpiredUnpaidPending — payment_tx_submitted_at + 7d when a
+  // TxID is on file, else created_at + 7d.
+  const expiryBaseRaw =
+    hasTxId && campaign.payment_tx_submitted_at
+      ? campaign.payment_tx_submitted_at
+      : campaign.created_at;
+  const expiryDate = expiryBaseRaw
+    ? new Date(
+        new Date(expiryBaseRaw).getTime() + UNPAID_PENDING_EXPIRY_MS
+      )
+    : null;
+  const expiryLabel = expiryDate
+    ? expiryDate.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+  // Refund state for the rejected branch (P2-B5): an open request
+  // in refund_requests, if the table exists yet. Best-effort —
+  // a missing table or a blocked read just means "no request
+  // known"; the button still works (the API answers 503 honestly
+  // when the table is missing).
+  let refundRequested = false;
+  if (campaign.status === "rejected" && hasTxId) {
+    try {
+      const supabase = getServerClient();
+      if (supabase) {
+        const { data } = await supabase
+          .from("refund_requests")
+          .select("id")
+          .eq("campaign_id", campaign.id)
+          .eq("status", "requested")
+          .limit(1);
+        refundRequested = Boolean(data && data.length > 0);
+      }
+    } catch {
+      refundRequested = false;
+    }
+  }
 
   if (campaign.status === "live") {
     return (
@@ -130,9 +215,66 @@ export default async function BrandPaymentPage({
                 <span className="font-bold text-fg">{rejectionReason}</span>
               </>
             ) : null}{" "}
-            If you already sent the budget, contact the admin on
-            Discord about your refund.
+            {hasTxId ? (
+              <>
+                You already sent{" "}
+                {formatUSD(
+                  totalToSend(paidBudget ?? campaign.budget_total)
+                )}{" "}
+                (
+                {formatUSD(paidBudget ?? campaign.budget_total)} budget
+                +{" "}
+                {formatUSD(
+                  platformFeeFor(paidBudget ?? campaign.budget_total)
+                )}{" "}
+                platform fee). Your budget is refunded on request —
+                the 15% platform fee is not refundable.
+              </>
+            ) : (
+              <>If you already sent the budget, contact the admin on
+              Discord about your refund.</>
+            )}
           </p>
+          {hasTxId && (
+            <div className="mx-auto mt-5 max-w-md space-y-3 text-left">
+              <div className="rounded-2xl bg-fg/5 px-4 py-3">
+                <p className="text-xs font-bold text-fg/50">
+                  Amount paid
+                </p>
+                <p className="mt-1 text-sm font-black text-fg">
+                  {formatUSD(
+                    totalToSend(paidBudget ?? campaign.budget_total)
+                  )}{" "}
+                  USDT
+                  <span className="ml-2 text-xs font-semibold text-fg/50">
+                    (
+                    {formatUSD(paidBudget ?? campaign.budget_total)}{" "}
+                    budget refundable ·{" "}
+                    {formatUSD(
+                      platformFeeFor(paidBudget ?? campaign.budget_total)
+                    )}{" "}
+                    fee not refundable)
+                  </span>
+                </p>
+                <p className="mt-2 break-all font-mono text-xs font-bold text-fg/80">
+                  TxID: {campaign.payment_tx_id}
+                </p>
+                <a
+                  href={`https://tronscan.org/#/transaction/${campaign.payment_tx_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-block text-xs font-bold text-lime hover:underline"
+                >
+                  Verify on Tronscan ↗
+                </a>
+              </div>
+              <RefundRequestButton
+                campaignId={campaign.id}
+                amount={paidBudget ?? campaign.budget_total}
+                alreadyRequested={refundRequested}
+              />
+            </div>
+          )}
           <div className="mx-auto mt-5 max-w-sm">
             <DiscordButton />
           </div>
@@ -183,6 +325,10 @@ export default async function BrandPaymentPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
+      {/* Round-4 P2-B7: while pending, refresh the page state
+          every 30s (and on window focus) so an approval / reply
+          shows without a manual reload. */}
+      <PaymentPageAutoRefresh />
       <div className="mx-auto max-w-lg rounded-3xl border border-lime/40 bg-card p-6 md:p-8">
         <h1 className="text-xl font-black leading-snug text-fg">
           Thanks! To make your campaign LIVE, send your Budget in USDT to
@@ -194,17 +340,37 @@ export default async function BrandPaymentPage({
           {campaign.brand_name}
         </p>
 
-        {/* Round-3 P1-9: the budget changed after the brand paid —
-            the old TxID covered a smaller amount. */}
-        {showBudgetChangeBanner && paidBudget != null && (
+        {/* Round-3 P1-9, fixed in Round-4 (P1-B2): the budget was
+            RAISED after the brand paid — the old TxID covered a
+            smaller amount. Only shows when the earliest edit after
+            the payment raised the budget; a pre-payment edit never
+            triggers it. */}
+        {showBudgetIncreaseBanner && paidBudget != null && (
           <div className="mt-5 rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
             <span className="font-black">
               Budget changed to {formatUSD(campaign.budget_total)}
             </span>{" "}
             — your submitted payment covered {formatUSD(paidBudget)};
-            send the extra {formatUSD(budgetIncrease)} + 15% fee (
-            {formatUSD(totalToSend(budgetIncrease))} total) so the
+            send the extra {formatUSD(budgetDelta)} + 15% fee (
+            {formatUSD(totalToSend(budgetDelta))} total) so the
             campaign can go live on the new budget.
+          </div>
+        )}
+
+        {/* Round-4 P2-B1: the budget was LOWERED after the brand
+            paid — the brand overpaid, and the difference is
+            refunded on request (the admin approves without an
+            "extra received" confirmation: a decrease is safe). */}
+        {showOverpaymentBanner && paidBudget != null && (
+          <div className="mt-5 rounded-2xl border border-sky-400/60 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed text-sky-200">
+            <span className="font-black">
+              Budget lowered to {formatUSD(campaign.budget_total)}
+            </span>{" "}
+            — your submitted payment covered {formatUSD(paidBudget)},
+            so you overpaid {formatUSD(overpaidAmount)}. Ask the
+            admin for a refund of the difference (in the chat below
+            or on Discord) — approving the campaign is not held up
+            by this.
           </div>
         )}
 
@@ -220,13 +386,15 @@ export default async function BrandPaymentPage({
           {/* Fee split: 15% flat platform fee, charged ON TOP of the
               budget. The campaign runs on the full budget — the
               creators pool is the whole budget_total. This is the
-              one place $ amounts are shown for the budget. */}
+              one place $ amounts are shown for the budget. The fee
+              and total are recomputed from the live budget (P2-B3),
+              never read from the stored platform_fee column. */}
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
             <span className="text-sm font-bold text-fg/60">
               Platform fee (15%)
             </span>
             <span className="text-sm font-black text-fg">
-              {formatUSD(campaign.platform_fee)} USDT
+              {formatUSD(platformFee)} USDT
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
@@ -242,7 +410,7 @@ export default async function BrandPaymentPage({
               Total to send
             </span>
             <span className="font-display text-lg font-black text-lime">
-              {formatUSD(campaign.budget_total + campaign.platform_fee)}{" "}
+              {formatUSD(totalDue)}{" "}
               USDT
             </span>
           </div>
@@ -254,14 +422,16 @@ export default async function BrandPaymentPage({
           </p>
           {/* Red total notice (Turn's decision 2026-11-11): the
               full amount must jump out — the campaign goes live
-              only after the WHOLE total arrives. */}
-          <p className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-black leading-relaxed text-red-200">
-            Send the full{" "}
-            {formatUSD(campaign.budget_total + campaign.platform_fee)}{" "}
-            USDT — your campaign goes live only after the FULL amount
-            arrives in the admin wallet. Sending less will delay your
-            launch.
-          </p>
+              only after the WHOLE total arrives. Hidden while no
+              admin wallet is set (P2-B4): ordering payment to an
+              address that isn't shown makes no sense. */}
+          {wallet && (
+            <p className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-black leading-relaxed text-red-200">
+              Send the full {formatUSD(totalDue)} USDT — your campaign
+              goes live only after the FULL amount arrives in the
+              admin wallet. Sending less will delay your launch.
+            </p>
+          )}
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
             <span className="text-sm font-bold text-fg/60">Network</span>
             <span className="text-sm font-black text-fg">USDT TRC20</span>
@@ -293,19 +463,22 @@ export default async function BrandPaymentPage({
           {/* TRC20-only warning (Turn's decision 2026-11-11): the
               brand must send USDT on the TRON network only, to this
               exact address. Any other coin or network loses the
-              funds forever — this is unmissable on purpose. */}
-          <div className="rounded-2xl border-2 border-red-500 bg-red-500/15 px-4 py-3">
-            <p className="text-sm font-black leading-relaxed text-red-200">
-              ⚠️ Send ONLY USDT on the TRON network (TRC20) to this exact
-              address.
-            </p>
-            <p className="mt-1 text-sm font-semibold leading-relaxed text-red-200/90">
-              Do NOT send any other coin, and do NOT use any other
-              network — for example ERC20 or any other chain. Funds
-              sent the wrong way are lost forever and cannot be
-              recovered.
-            </p>
-          </div>
+              funds forever — this is unmissable on purpose. Hidden
+              while no admin wallet is set (P2-B4). */}
+          {wallet && (
+            <div className="rounded-2xl border-2 border-red-500 bg-red-500/15 px-4 py-3">
+              <p className="text-sm font-black leading-relaxed text-red-200">
+                ⚠️ Send ONLY USDT on the TRON network (TRC20) to this exact
+                address.
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-relaxed text-red-200/90">
+                Do NOT send any other coin, and do NOT use any other
+                network — for example ERC20 or any other chain. Funds
+                sent the wrong way are lost forever and cannot be
+                recovered.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="mt-6">
@@ -325,21 +498,27 @@ export default async function BrandPaymentPage({
           After the admin verifies your payment, your campaign will go
           live.
         </p>
+        {/* Round-4 P1-B1: the expiry date runs on the same clock
+            as isExpiredUnpaidPending — 7 days from the payment
+            submission when a TxID is on file, 7 days from creation
+            when there is none — and the note says which clock it
+            is, so a paid brand never reads a past date and pays
+            twice. */}
         <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-amber-200">
-          Unpaid pending campaigns expire after 7 days
-          {campaign.created_at
-            ? ` — this one expires ${new Date(
-                new Date(campaign.created_at).getTime() +
-                  7 * 24 * 60 * 60 * 1000
-              ).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}`
-            : ""}
-          . Chatting alone does not count as payment.
+          {hasTxId
+            ? `Your payment was submitted — this campaign stays payable until ${expiryLabel ?? "7 days after you submitted the payment"}.`
+            : `Unpaid pending campaigns expire after 7 days${expiryLabel ? ` — this one expires ${expiryLabel} (7 days from creation)` : ""}.`}{" "}
+          Chatting alone does not count as payment.
         </p>
       </div>
+
+      {/* Round-4 P1-B4: fix a typo'd rate, brief, requirements or
+          Drive link while the campaign is still pending — no
+          reject → recreate → repay. The admin sees the same edit
+          on the campaign card in /admin. */}
+      {!isOwner(profile) && (
+        <BrandCampaignEditForm campaign={campaign} />
+      )}
 
       <BrandChat
         campaignId={campaign.id}

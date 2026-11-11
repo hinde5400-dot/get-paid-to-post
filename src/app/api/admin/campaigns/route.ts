@@ -166,32 +166,66 @@ export async function POST(request: Request) {
     }
     // Budget edited after payment: the TxID may verify a SMALLER
     // amount than the current budget, and approving would put the
-    // campaign live underfunded. Exact ordering still cannot be
-    // proven from the stored data — the TxID submission time
-    // (migration 0038) now exists, but the AMOUNT behind the TxID
-    // is still unknown, so an edit made before the brand paid
-    // trips the same flag. The check is therefore conservative:
-    // ANY budget edit on file for this campaign
-    // (campaign_budget_history, migration 0033) while a TxID is
-    // recorded blocks approval until the admin explicitly
-    // confirms the extra budget + 15% fee arrived
-    // ({ confirmUnderfunded: true }).
+    // campaign live underfunded. The ordering IS provable now:
+    // payment_tx_submitted_at (migration 0038) is the payment
+    // time, and every history row carries created_at — so only
+    // edits AFTER the payment matter, and only an INCREASE matters.
+    // The amount the TxID was sent against is the old_budget_total
+    // of the earliest post-payment edit; a DECREASE after payment
+    // means the brand OVERPAID, and approving is safe (the
+    // overpaid difference is refunded on request — see the payment
+    // page's overpayment banner). An edit made BEFORE the brand
+    // paid trips nothing: the brand paid the new budget.
+    const paymentSubmittedAt = String(
+      (campaign as { payment_tx_submitted_at?: string | null })
+        .payment_tx_submitted_at ?? ""
+    ).trim();
+    // (a legacy TxID row with no timestamp falls back to the
+    // campaign's creation date — the same fallback the expiry
+    // rule uses.)
+    const paymentTimeRaw =
+      paymentSubmittedAt ||
+      (campaign as { created_at?: string | null }).created_at ||
+      "";
+    const paymentTimeMs = Number.isFinite(new Date(paymentTimeRaw).getTime())
+      ? new Date(paymentTimeRaw).getTime()
+      : 0;
     const { data: budgetEdits } = await supabase
       .from("campaign_budget_history")
-      .select("created_at")
+      .select("created_at, old_budget_total, new_budget_total")
       .eq("campaign_id", campaign.id)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    const budgetEdited = Boolean(budgetEdits && budgetEdits.length > 0);
+      .order("created_at", { ascending: true });
+    const postPaymentEdits = (budgetEdits ?? []).filter(
+      (row) =>
+        new Date(
+          (row as { created_at?: string }).created_at ?? ""
+        ).getTime() > paymentTimeMs
+    );
+    const earliestPostPaymentEdit =
+      postPaymentEdits[0] as
+        | { created_at?: string; old_budget_total?: number }
+        | undefined;
+    const paidAgainst =
+      earliestPostPaymentEdit != null
+        ? Number(earliestPostPaymentEdit.old_budget_total ?? 0)
+        : null;
+    const budgetIncreasedAfterPayment =
+      paidAgainst != null &&
+      Number(campaign.budget_total ?? 0) > paidAgainst;
+    const budgetEdited =
+      Boolean(postPaymentEdits.length > 0) && budgetIncreasedAfterPayment;
     if (budgetEdited && !body.confirmUnderfunded) {
       return NextResponse.json(
         {
           error:
-            "Budget was changed after this payment was submitted — verify the extra budget + 15% fee was received before approving.",
+            "Budget was raised after this payment was submitted — verify the extra budget + 15% fee was received before approving.",
           underfundedRisk: true,
           latestBudgetEditAt:
-            (budgetEdits?.[0] as { created_at?: string } | undefined)
-              ?.created_at ?? null,
+            (
+              postPaymentEdits[postPaymentEdits.length - 1] as
+                | { created_at?: string }
+                | undefined
+            )?.created_at ?? null,
         },
         { status: 400 }
       );

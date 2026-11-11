@@ -64,14 +64,92 @@ export default function BrandMessageForm({
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const markReadInFlight = useRef(false);
 
   // Keep the thread scrolled to the latest message.
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  // Round-4 P2-B6: when the BRAND opens this chat, the admin's
+  // replies are marked read, so the dashboard's "New reply from
+  // admin" badge clears. The PATCH is brand-scoped server-side
+  // (admin messages only, never content). A failed mark-read is
+  // silent — the badge just stays until the next poll.
+  // NOTE: this only takes effect once the DB lets a brand update
+  // is_read (there is no brand UPDATE policy on brand_messages
+  // yet — only the owner can update it — so until that policy
+  // lands the PATCH updates zero rows and the badge stays; the
+  // call itself is harmless).
+  async function markReadIfNeeded(list: BrandMessage[]) {
+    if (viewerIsAdmin) return;
+    if (!list.some((m) => m.sender === "admin" && !m.is_read)) return;
+    if (markReadInFlight.current) return;
+    markReadInFlight.current = true;
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/messages`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markRead: true }),
+      });
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.sender === "admin" ? { ...m, is_read: true } : m
+          )
+        );
+      }
+    } catch {
+      // Badge stays until the next poll.
+    } finally {
+      markReadInFlight.current = false;
+    }
+  }
+
+  // Mark read on open.
+  useEffect(() => {
+    void markReadIfNeeded(initialMessages);
+    // Only on mount — later arrivals are handled by refresh().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Round-4 P2-B7: poll the thread every 30s and on window focus,
+  // so an admin reply shows without a manual reload. Polling
+  // replaces the whole list (server order, oldest first) and then
+  // marks any newly arrived admin replies read.
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/messages`);
+      const data = await res.json();
+      if (res.ok && Array.isArray((data as { messages?: unknown }).messages)) {
+        const list = (data as { messages: BrandMessage[] }).messages;
+        setMessages(list);
+        void markReadIfNeeded(list);
+      }
+    } catch {
+      // Keep the old messages; the next poll retries.
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    const timer = setInterval(() => void refresh(), 30_000);
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+    // Only on mount — refresh() reads current state via setState.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId]);
 
   function isOwn(m: BrandMessage) {
     return viewerIsAdmin ? m.sender === "admin" : m.sender === "brand";
@@ -134,6 +212,16 @@ export default function BrandMessageForm({
 
   return (
     <div>
+      <div className="mb-3 flex justify-end">
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          disabled={refreshing}
+          className="rounded-full border border-fg/20 px-3 py-1 text-xs font-bold text-fg hover:border-lime hover:text-lime disabled:opacity-40"
+        >
+          {refreshing ? "Refreshing..." : "↻ Refresh chat"}
+        </button>
+      </div>
       {/* WhatsApp-style thread: always visible (even before the
           first message, so the chat never looks closed), tall and
           scrollable, with breathing room around the bubbles. */}

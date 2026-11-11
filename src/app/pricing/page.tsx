@@ -125,6 +125,24 @@ export default function PricingPage() {
 
       <section className="rounded-3xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">
+          What if no creators post, or my campaign gets no views?
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-fg/70">
+          Your campaign runs until its duration ends or its budget
+          ends. Then it settles: a 3-day re-check, payouts for any
+          approved clips, and the campaign is deleted 1 day after the
+          last hold matures. If no creators posted, nothing was spent
+          — any budget left unspent stays yours and is refunded on
+          request, per the{" "}
+          <Link href="/refund" className="font-bold text-lime hover:underline">
+            Refund Policy
+          </Link>
+          . You never pay for views that were not verified.
+        </p>
+      </section>
+
+      <section className="rounded-3xl border border-fg/10 bg-card p-6">
+        <h2 className="text-lg font-extrabold text-fg">
           How brand funds are protected
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">

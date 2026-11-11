@@ -39,8 +39,17 @@ function findTronTxId(text: string): string | null {
  *         Drive/Imgur links are accepted any more. Any campaign
  *         status: a brand may also follow up after the campaign
  *         goes live.
- * PATCH — admin only: mark this campaign's messages as read
+ * PATCH — mark this campaign's messages as read
  *         ({ markRead: true }).
+ *         Admin: marks every message in the thread read (existing
+ *         behaviour — the admin inbox badge counts all unread
+ *         rows, so this is left as-is).
+ *         Brand owner: marks only the ADMIN's messages read — the
+ *         brand reading a reply clears its own "New reply from
+ *         admin" badge (Round-4 P2-B6). The brand can never edit
+ *         content: the only accepted body is { markRead: true },
+ *         and the update touches is_read only (enforced again by
+ *         the DB trigger in migration 0014).
  */
 async function loadCampaign(
   supabase: NonNullable<ReturnType<typeof getServerClient>>,
@@ -356,18 +365,28 @@ export async function PATCH(
     return NextResponse.json({ error: "Please log in first." }, { status: 401 });
   }
   const profile = await getProfile(auth.user.id);
-  if (!isOwner(profile)) {
-    return NextResponse.json({ error: "Admin only." }, { status: 403 });
-  }
-  // A blocked owner account marks nothing read.
+  const admin = isOwner(profile);
+  // A blocked account marks nothing read.
   if (profile?.is_blocked) {
     return NextResponse.json(
       { error: "This account is blocked." },
       { status: 403 }
     );
   }
+  // Admin-only before Round-4 P2-B6; now the campaign's brand
+  // owner may also mark read — but only the admin's messages
+  // (their own badge), never the brand's own rows and never any
+  // content. Anyone else gets 403.
+  const campaign = await loadCampaign(supabase, params.id);
+  if (!campaign) {
+    return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  }
+  const isBrandOwner = campaign.user_id === auth.user.id;
+  if (!admin && !isBrandOwner) {
+    return NextResponse.json({ error: "Admin only." }, { status: 403 });
+  }
   // Best-effort rate limit (see lib/rate-limit.ts): 20 mark-read
-  // calls per minute per admin per campaign.
+  // calls per minute per user per campaign.
   const rl = rateLimit(
     `messages-read:${auth.user.id}:${params.id}`,
     20,
@@ -391,11 +410,16 @@ export async function PATCH(
       { status: 400 }
     );
   }
-  const { error } = await supabase
+  // The brand marks only admin replies read; the admin marks the
+  // whole thread read (existing behaviour — see header).
+  const query = supabase
     .from("brand_messages")
     .update({ is_read: true })
     .eq("campaign_id", params.id)
     .eq("is_read", false);
+  const { error } = admin
+    ? await query
+    : await query.eq("sender", "admin");
   if (error) {
     if (tableMissing(error)) {
       return NextResponse.json(
