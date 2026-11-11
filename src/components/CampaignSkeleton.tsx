@@ -1,4 +1,4 @@
-/** Skeleton loading cards for campaign lists (TryShoot-style loading state). */
+/** Skeleton loading cards for campaign lists. */
 export default function CampaignSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

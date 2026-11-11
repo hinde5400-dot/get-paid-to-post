@@ -12,7 +12,7 @@ export interface DropdownOption {
  * Premium dropdown — dark card #1A1A1A, rounded 16px, small icons, a
  * lime checkmark on the selected option, smooth open animation and a
  * soft shadow. No native <select> white list. Closes on outside tap
- * or Escape. The dark card stays dark in both themes (TryShoot-style).
+ * or Escape. The dark card stays dark in both themes.
  */
 export default function Dropdown({
   value,

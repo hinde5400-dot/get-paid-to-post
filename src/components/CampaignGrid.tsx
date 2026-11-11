@@ -8,7 +8,7 @@ import CampaignModal from "./CampaignModal";
 
 /**
  * Client wrapper for campaign grids (Home + Discover): renders the
- * cards and owns the TryShoot-style popup modal state. Clicking a card
+ * cards and owns the popup modal state. Clicking a card
  * opens the modal; the modal's buttons navigate to the detail page.
  */
 export default function CampaignGrid({

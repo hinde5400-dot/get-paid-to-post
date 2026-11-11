@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "gptp-theme";
 
 /**
- * Light / Dark mode toggle (TryShoot has one in its profile dropdown).
+ * Light / Dark mode toggle.
  * Flips data-theme on <html> (see globals.css for the variables) and
  * persists the choice in localStorage. Default is dark.
  */

@@ -8,7 +8,7 @@ import { TikTokIcon, InstagramIcon, YouTubeIcon } from "./PlatformIcons";
 import { CAMPAIGN_CATEGORIES } from "@/lib/types";
 
 /**
- * Premium filter dropdowns (TryShoot-style): dark #1A1A1A cards,
+ * Premium filter dropdowns: dark #1A1A1A cards,
  * rounded 16px, small icons, lime checkmark on the selected option,
  * smooth animation, shadow. Changing an option updates the URL query
  * params so the server page re-filters / re-sorts the real list.

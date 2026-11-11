@@ -20,7 +20,7 @@ import CampaignBanner from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
 /**
- * TryShoot-style campaign popup modal. Clicking a campaign card opens
+ * Campaign popup modal. Clicking a campaign card opens
  * this instead of navigating away: banner, description, budget bar,
  * a real approval rate (approved / total submissions — omitted when
  * there are no submissions yet, never invented), a big lime

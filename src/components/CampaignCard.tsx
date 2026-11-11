@@ -17,7 +17,7 @@ import CampaignBanner, { BrandLogoTile } from "./CampaignBanner";
 import { PlatformChips } from "./PlatformIcons";
 
 /**
- * TryShoot-style campaign card: big colourful banner on top with the
+ * Campaign card: big colourful banner on top with the
  * rate badge on it, brand row, title, budget progress bar, platform
  * chips and a lime View button. Clicking anywhere on the card opens
  * the campaign popup modal (via onOpen) instead of navigating away.

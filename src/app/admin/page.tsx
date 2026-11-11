@@ -672,6 +672,9 @@ export default async function AdminPage({
             hasProof={hasProof}
             hasMessages={hasMessages}
             budgetHistory={budgetHistory}
+            refundRequestedById={Object.fromEntries(
+              openRefunds.map((r) => [r.campaign_id, true])
+            )}
           />
         </div>
       </section>
@@ -695,9 +698,10 @@ export default async function AdminPage({
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
-          Check each paid rejection and send the refund (budget +
-          fee, as decided) by USDT yourself — refunds are manual,
-          like payouts. A campaign with no payment needs no refund.
+          Check each paid rejection and send the refund (budget
+          only — the 15% platform fee is not refundable) by USDT
+          yourself — refunds are manual, like payouts. A campaign
+          with no payment needs no refund.
         </p>
         <div className="mt-4 space-y-3">
           {rejectedCampaigns.length === 0 && openRefunds.length === 0 && (
