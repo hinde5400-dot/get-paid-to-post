@@ -496,7 +496,7 @@ export default async function HomePage() {
         </h2>
         <div className="grid gap-4 md:grid-cols-4">
           {[
-            { n: "1", t: "Sign up free", d: "Create your account with email and password, or continue with Google. Then connect your TikTok and YouTube accounts and add your Instagram profile link." },
+            { n: "1", t: "Sign up free", d: "Create your account with email and password. Then connect your TikTok and YouTube accounts and add your Instagram profile link." },
             { n: "2", t: "Pick a campaign", d: "Browse funded campaigns and choose one that fits your style. Check the brief, rate and rules first." },
             { n: "3", t: "Post your clip", d: "Film a vertical 9:16 clip with captions and a hook in the first 3 seconds. Post it, then submit the link." },
             { n: "4", t: "Get paid per view", d: "Approved earnings sit in a 72-hour hold, then land in your wallet. Withdraw from $15 in USDT (TRC20 only)." },

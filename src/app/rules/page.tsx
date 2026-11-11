@@ -59,7 +59,7 @@ export default function RulesPage() {
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">
         Rules
       </h1>
-      <p className="text-sm text-fg/50">Last updated: 10 November 2026</p>
+      <p className="text-sm text-fg/50">Last updated: 11 November 2026</p>
       <p className="text-sm leading-relaxed text-fg/70">
         Every rule on {BRAND_NAME} in one place — for creators and for
         brands. Nothing here is new: it is the same rules already in the{" "}
@@ -98,7 +98,7 @@ export default function RulesPage() {
       <Section id="who-can-join" n="1" title="Who can join">
         <Rule>
           Anyone can sign up and browse campaigns — you sign up with email
-          and password, or continue with Google. No phone, no address. One account per person.
+          and password. No phone, no address. One account per person.
         </Rule>
         <Rule>
           There is no follower minimum. You are paid per view, so a small

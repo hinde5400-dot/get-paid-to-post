@@ -141,8 +141,8 @@ export default function SignupForm({ role }: { role: Role | null }) {
           Join Get Paid To Post
         </h1>
         <p className="mx-auto mt-2 max-w-md text-center text-sm text-fg/60">
-          Pick your side — creator or brand. Email and password, or
-          continue with Google — we never ask for your phone, address,
+          Pick your side — creator or brand. Sign up with email and
+          password — we never ask for your phone, address,
           or extra details.
         </p>
         <div className="mt-7">
@@ -174,8 +174,8 @@ export default function SignupForm({ role }: { role: Role | null }) {
       </h1>
       <p className="mt-2 text-center text-sm text-fg/60">
         {role === "brand"
-          ? "Launch a campaign and get real clips from creators. Email and password, or continue with Google."
-          : "Post clips, get paid per view. Email and password, or continue with Google."}
+          ? "Launch a campaign and get real clips from creators. Sign up with email and password."
+          : "Post clips, get paid per view. Sign up with email and password."}
       </p>
       <p className="mt-3 text-center text-sm">
         <Link href="/signup" className="font-bold text-lime hover:underline">

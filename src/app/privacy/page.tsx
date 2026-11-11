@@ -4,21 +4,20 @@ export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Privacy Policy</h1>
-      <p className="text-sm text-fg/50">Last updated: 10 November 2026</p>
+      <p className="text-sm text-fg/50">Last updated: 11 November 2026</p>
 
       <section className="rounded-2xl border border-fg/10 bg-card p-6">
         <h2 className="text-lg font-extrabold text-fg">1. What we collect</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg/70">
-          When you sign up, we collect your email address and password
-          (stored securely by our authentication provider). If you
-          continue with Google, we receive your name and email from
-          Google instead. After signup you can add your TikTok,
-          Instagram and YouTube profile links. If you connect TikTok or
-          YouTube, we store your connected account name/channel and the
-          login tokens needed to read your own videos&apos; view counts
-          (tokens are stored encrypted). When you submit a post, we
-          store the post links, your note on how you made it, and your
-          proof screenshot links.
+          When you sign up, we collect your name, email address and
+          password (stored securely by our authentication provider).
+          Sign-up is by email and password only. After signup you can
+          add your TikTok, Instagram and YouTube profile links. If you
+          connect TikTok or YouTube, we store your connected account
+          name/channel and the login tokens needed to read your own
+          videos&apos; view counts (tokens are stored encrypted). When
+          you submit a post, we store the post links, your note on how
+          you made it, and your proof screenshot links.
         </p>
       </section>
 
