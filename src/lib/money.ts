@@ -8,11 +8,21 @@ import { HOLD_HOURS, PLATFORM_FEE_RATE, WITHDRAW_FEE_RATE } from "./constants";
 export function payoutForViews(
   views: number,
   ratePer1k: number,
-  cap: number
+  cap: number,
+  minViews: number = 1000
 ): { uncapped: number; earnings: number; capped: boolean } {
-  const uncapped = Math.round(((views / 1000) * ratePer1k) * 100) / 100;
-  const earnings = Math.min(uncapped, cap);
-  return { uncapped, earnings, capped: uncapped > cap };
+  // Guards: invalid inputs never pay. The min-views floor lives
+  // here (default 1,000, the decided floor) so every caller — not
+  // just the review route — pays $0 below it.
+  const safeViews = Number.isFinite(views) ? Math.max(0, views) : 0;
+  const safeRate = Number.isFinite(ratePer1k) ? Math.max(0, ratePer1k) : 0;
+  const safeCap = Number.isFinite(cap) ? Math.max(0, cap) : 0;
+  if (safeViews < minViews) {
+    return { uncapped: 0, earnings: 0, capped: false };
+  }
+  const uncapped = Math.round(((safeViews / 1000) * safeRate) * 100) / 100;
+  const earnings = Math.min(uncapped, safeCap);
+  return { uncapped, earnings, capped: uncapped > safeCap };
 }
 
 /** 5% withdrawal fee. */
@@ -23,10 +33,13 @@ export function feeFor(amount: number): number {
 /**
  * Platform fee (15% flat, charged ON TOP of the campaign budget):
  * the brand sends budget + fee, and the campaign runs on the full
- * budget — there is no reduced internal pool.
+ * budget — there is no reduced internal pool. Minimum fee $0.01:
+ * without it a $0.01 budget would round to a $0.00 fee, so the
+ * "15% on every budget" claim would be false at the floor.
  */
 export function platformFeeFor(budget: number): number {
-  return Math.round(budget * PLATFORM_FEE_RATE * 100) / 100;
+  if (!budget || budget <= 0) return 0;
+  return Math.max(0.01, Math.round(budget * PLATFORM_FEE_RATE * 100) / 100);
 }
 
 /** Total the brand sends: campaign budget + 15% platform fee. */
