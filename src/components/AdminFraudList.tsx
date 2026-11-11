@@ -37,6 +37,10 @@ export interface FraudCreator {
   flagged_at: string | null;
   banned_at: string | null;
   unblocked_at: string | null;
+  /** Why the owner last unblocked this creator (migration 0043,
+   *  Round-5 P1) — null when never unblocked or when 0043 has
+   *  not been applied yet. Shown next to the unblock date. */
+  unblock_reason?: string | null;
   latest: {
     campaign_id: string;
     campaign_title: string | null;
@@ -143,12 +147,30 @@ export default function AdminFraudList({
     if (!window.confirm(lines.join("\n"))) {
       return;
     }
+    // Reason + confirm first (decided spec, Round-5 P1): a reason
+    // is required and recorded, max 200 chars like campaign
+    // reject / budget edit. Cancelling the prompt aborts the
+    // unblock — nothing is sent.
+    const reason = window.prompt(
+      `Why are you unblocking ${c.email}? The reason is recorded (max 200 characters).`,
+      ""
+    );
+    if (reason === null) return;
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      showError("A reason is required to unblock a creator.");
+      return;
+    }
+    if (trimmed.length > 200) {
+      showError("The unblock reason must be 200 characters or less.");
+      return;
+    }
     setBusy(c.user_id);
     try {
       const res = await fetch("/api/admin/unblock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: c.user_id }),
+        body: JSON.stringify({ userId: c.user_id, reason: trimmed }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unblock failed.");
@@ -217,6 +239,11 @@ export default function AdminFraudList({
               <p className="mt-1 text-xs text-fg/50">
                 Previously banned — unblocked{" "}
                 {new Date(c.unblocked_at).toLocaleString("en-US")}
+                {c.unblock_reason && (
+                  <>
+                    {" · "}Reason: {c.unblock_reason}
+                  </>
+                )}
               </p>
             )}
           </div>

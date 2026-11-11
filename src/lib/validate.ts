@@ -122,6 +122,17 @@ export function isValidTronTxId(raw: string): boolean {
 }
 
 /**
+ * Short display form of a TRON Transaction ID: first 8 chars +
+ * "…" + last 8. The full hash always stays behind the Tronscan
+ * link — admin screens never print all 64 chars (Round-5 P2).
+ */
+export function truncateTxId(raw: string): string {
+  const t = raw.trim();
+  if (t.length <= 16) return t;
+  return `${t.slice(0, 8)}…${t.slice(-8)}`;
+}
+
+/**
  * Originality-proof screenshot links must be image links, not any
  * URL. Accepted: a direct image link (.png / .jpg / .jpeg / .webp /
  * .gif) or a link from a screenshot host (Imgur, Lightshot /

@@ -103,6 +103,16 @@ function mapSubmission(row: Record<string, unknown>): Submission {
     // on rows written before the migration.
     posted_at: (row.posted_at as string | null) ?? null,
     posted_time_unverified: Boolean(row.posted_time_unverified ?? false),
+    // Approval-time facts (migration 0043, Round-5 P1): stored
+    // at approve time by the review route, so My Posts can render
+    // the budget-cap fact instead of inferring it from
+    // post-approval view growth. All mapSubmission call sites
+    // load rows with select("*"), which never errors on a missing
+    // column — on the pre-0043 DB the keys are simply absent, so
+    // these defaults keep the mapper working with no guard.
+    budget_capped: Boolean(row.budget_capped ?? false),
+    approval_views:
+      row.approval_views == null ? null : Number(row.approval_views),
     // Instagram handle that matched at submit time (migration
     // 0039, round-3 P2-17).
     instagram_handle_matched:
@@ -745,20 +755,21 @@ export async function getWithdrawals(userId: string): Promise<Withdrawal[]> {
 export async function getAllWithdrawals(): Promise<Withdrawal[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("withdrawals")
-    .select("*")
-    .order("created_at", { ascending: false })
-    // Same truncation class as the old review limit (P1-7): past
-    // 2,000 the oldest requests would vanish from /admin. The
-    // admin Withdrawals section shows the whole list, so keep the
-    // cap high; withdrawals grow slowly (one row per request).
-    .limit(2000);
+  // Chunked to exhaustion (Round-4 P1-A1, Round-5 P2) — the old
+  // .limit(2000) silently dropped the oldest requests past 2,000
+  // rows from /admin, the same truncation class as the review
+  // limit it replaced.
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("withdrawals")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
   // Forms #26 contract: throw on DB error, never [] (see
   // getCampaigns).
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load withdrawals.");
-  return (data as Record<string, unknown>[]).map(mapWithdrawal);
+  return rows.map(mapWithdrawal);
 }
 
 /**
@@ -888,6 +899,13 @@ function mapBrandMessage(row: Record<string, unknown>): BrandMessage {
     image_path: (row.image_path as string | null) ?? null,
     created_at: String(row.created_at ?? ""),
     is_read: Boolean(row.is_read),
+    // Brand-side read state (migration 0043, Round-5 P2) — only
+    // present when the column was selected (getCampaignMessages
+    // selects it; the admin inbox does not need it). Rows loaded
+    // before 0043 leave it undefined; callers fall back to
+    // is_read in that case.
+    brand_read:
+      typeof row.brand_read === "boolean" ? row.brand_read : undefined,
     campaign_title: camp?.title,
     brand_name: camp?.brand_name,
     payment_tx_id: camp?.payment_tx_id ?? null,
@@ -949,13 +967,38 @@ export async function getCampaignMessages(
 ): Promise<BrandMessage[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
+  // brand_read (migration 0043, Round-5 P2) is the brand's own
+  // read state — the chat form needs it to clear the dashboard
+  // badge. Select it when the column exists; before 0043 is
+  // applied the select errors (42703), so retry without it and
+  // let callers fall back to is_read.
+  const selectWithBrandRead =
+    "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read, brand_read";
+  const selectLegacy =
+    "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read";
+  let data: Record<string, unknown>[] | null = null;
+  let error: { message: string } | null = null;
+  const first = await supabase
     .from("brand_messages")
-    .select(
-      "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read"
-    )
+    .select(selectWithBrandRead)
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: true });
+  if (!first.error) {
+    data = first.data as Record<string, unknown>[] | null;
+  } else if (
+    first.error.code === "42703" &&
+    /brand_read/.test(first.error.message ?? "")
+  ) {
+    const retry = await supabase
+      .from("brand_messages")
+      .select(selectLegacy)
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: true });
+    data = retry.data as Record<string, unknown>[] | null;
+    error = retry.error;
+  } else {
+    error = first.error;
+  }
   // Forms #26 contract: throw on DB error, never [] (see
   // getCampaigns). Callers that can live without the chat
   // (payment page, rejection-reason lookup) catch it themselves.
@@ -1065,7 +1108,11 @@ export async function getCampaignRejectionReasons(
 /** One row of the refund_requests table (migration 0041): a
  *  brand's request for its paid budget back after a campaign was
  *  rejected. `status` is 'requested' until the owner sends the
- *  refund and marks it 'sent'. */
+ *  refund and marks it 'sent'. `kind` (migration 0043, Round-5
+ *  P2) is 'rejected' for a rejected campaign or 'overpayment'
+ *  when the budget was lowered after payment — undefined on rows
+ *  loaded before 0043, where the kind is derived from the
+ *  campaign's status instead. */
 export interface RefundRequest {
   id: string;
   campaign_id: string;
@@ -1073,6 +1120,7 @@ export interface RefundRequest {
   amount: number;
   payment_tx_id: string | null;
   status: string;
+  kind?: string;
   created_at: string;
 }
 
@@ -1099,7 +1147,7 @@ export async function getOpenRefundRequests(): Promise<RefundRequest[]> {
         .range(offset, offset + chunk - 1);
       return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
     });
-    return rows.map((row) => ({
+    const mapped = rows.map((row) => ({
       id: String(row.id),
       campaign_id: String(row.campaign_id),
       user_id: String(row.user_id),
@@ -1108,6 +1156,29 @@ export async function getOpenRefundRequests(): Promise<RefundRequest[]> {
       status: String(row.status ?? "requested"),
       created_at: String(row.created_at ?? ""),
     }));
+    // kind (migration 0043, Round-5 P2) — best-effort second
+    // read: selecting it in the main query would break the whole
+    // queue before 0043 is applied (42703), and the loader's
+    // catch-all would then hide every open refund. When the
+    // column is missing, kind stays undefined and the admin
+    // queue derives it from the campaign's status instead.
+    const { data: kindRows, error: kindError } = await supabase
+      .from("refund_requests")
+      .select("id, kind")
+      .eq("status", "requested");
+    if (!kindError && kindRows) {
+      const kindById = new Map(
+        (kindRows as Record<string, unknown>[]).map((r) => [
+          String(r.id),
+          String(r.kind ?? ""),
+        ])
+      );
+      for (const row of mapped) {
+        const kind = kindById.get(row.id);
+        if (kind) (row as RefundRequest).kind = kind;
+      }
+    }
+    return mapped;
   } catch {
     // Pre-migration 0041 — no refund_requests table yet, so no
     // open requests can exist.
@@ -1379,6 +1450,10 @@ export interface CreatorFlag {
   flagged_at: string | null;
   banned_at: string | null;
   unblocked_at: string | null;
+  /** Why the owner last unblocked this creator (migration 0043,
+   *  Round-5 P1) — null when never unblocked, or when 0043 has
+   *  not been applied yet and no reason was recorded. */
+  unblock_reason?: string | null;
 }
 
 export async function getCreatorFlags(): Promise<
@@ -1419,6 +1494,27 @@ export async function getCreatorFlags(): Promise<
     }
   } catch {
     // Migration 0027 not run yet — no unblocked_at to carry.
+  }
+  // Unblock reason (migration 0043, Round-5 P1) — its own
+  // best-effort read, same pattern as unblocked_at: selecting it
+  // in the main query would break the whole flag load before
+  // 0043 is applied, and a failed reason read must not hide the
+  // flagged/banned dates either.
+  try {
+    const { data: reasons, error: reasonsError } = await supabase
+      .from("creator_flags")
+      .select("user_id, unblock_reason");
+    if (!reasonsError) {
+      for (const row of (reasons ?? []) as Record<string, unknown>[]) {
+        const userId = String(row.user_id ?? "");
+        if (userId && out[userId]) {
+          out[userId].unblock_reason =
+            (row.unblock_reason as string | null) ?? null;
+        }
+      }
+    }
+  } catch {
+    // Migration 0043 not run yet — no unblock reason to carry.
   }
   return out;
 }
@@ -1510,6 +1606,37 @@ export async function getCampaignBudgetHistory(
     }));
   }
   return out;
+}
+
+/**
+ * The budget a payment covered (Round-4 P1-B2 / P2-B1 logic, now
+ * shared by the overpayment refund route and the brand
+ * dashboard): the old_budget_total of the EARLIEST edit made
+ * AFTER the payment was submitted — history rows arrive
+ * newest-first, and the payment time is payment_tx_submitted_at
+ * (migration 0038; a legacy TxID row with no timestamp falls
+ * back to the campaign's creation date, the same fallback the
+ * expiry rule uses). An edit made BEFORE the brand paid trips
+ * nothing: the brand paid the new budget. Returns null when no
+ * post-payment edit exists — the payment covered the current
+ * budget, so nothing was overpaid.
+ */
+export function paidBudgetCoveredByPayment(
+  history: BudgetHistoryEntry[],
+  paymentTxSubmittedAt: string | null | undefined,
+  createdAt: string | null | undefined
+): number | null {
+  const paymentTimeMs = Number.isFinite(
+    new Date(paymentTxSubmittedAt ?? createdAt ?? "").getTime()
+  )
+    ? new Date(paymentTxSubmittedAt ?? createdAt ?? "").getTime()
+    : 0;
+  const postPaymentEdits = history.filter(
+    (h) => new Date(h.created_at).getTime() > paymentTimeMs
+  );
+  if (postPaymentEdits.length === 0) return null;
+  const earliest = postPaymentEdits[postPaymentEdits.length - 1];
+  return Number(earliest.old_budget_total ?? 0);
 }
 
 /** One row of the Win Board (Top Clippers): a creator's real

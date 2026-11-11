@@ -38,7 +38,7 @@ function downloadCsv(filename: string, header: string[], rows: (string | number)
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-300",
   approved: "bg-sky-500/15 text-sky-300",
-  paid: "bg-lime/15 text-lime",
+  paid: "bg-sky-500/15 text-sky-300",
   rejected: "bg-red-500/15 text-red-300",
 };
 
@@ -52,7 +52,11 @@ export default function AdminWithdrawalList({
   const [busy, setBusy] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   // Mark-paid confirm panel (P1-A3): which row is being confirmed,
-  // and the payout Transaction ID typed into it (optional).
+  // and the payout Transaction ID typed into it. The TxID is
+  // REQUIRED in the UI (Round-5 P2) — a "Paid" row without it
+  // cannot be verified on Tronscan. The API still accepts a
+  // missing TxID for rows marked paid before 0040, so this is a
+  // UI-level requirement only, never a breaking API change.
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payoutTxId, setPayoutTxId] = useState("");
   const { showError, showSuccess } = useToast();
@@ -120,15 +124,24 @@ export default function AdminWithdrawalList({
 
   function confirmPaid(w: WithdrawalWithCreator) {
     const txId = payoutTxId.trim();
+    // Round-5 P2: the payout TxID is REQUIRED — warn and stop
+    // when it is skipped, instead of marking a payout "Paid"
+    // that nobody can verify on Tronscan.
+    if (!txId) {
+      showError(
+        "Paste the payout Transaction ID first — the 64-character hash from your wallet app (Tronscan). A payout without its TxID cannot be verified."
+      );
+      return;
+    }
     // P1-A3: when a TxID is given it must be a real TRON hash
     // (exactly 64 hex chars) — the API re-validates it too.
-    if (txId && !/^[0-9a-fA-F]{64}$/.test(txId)) {
+    if (!/^[0-9a-fA-F]{64}$/.test(txId)) {
       showError(
         "Invalid payout Transaction ID — it must be exactly 64 hexadecimal characters (the hash of the USDT transfer)."
       );
       return;
     }
-    void act(w.id, "paid", txId || undefined);
+    void act(w.id, "paid", txId);
   }
 
   function exportCsv() {
@@ -283,8 +296,9 @@ export default function AdminWithdrawalList({
                     {w.details}
                   </p>
                   <label className="mt-3 block text-xs font-bold text-fg">
-                    Payout Transaction ID (optional — paste the hash
-                    from your wallet app so the payment is verifiable)
+                    Payout Transaction ID — required: paste the Tronscan
+                    TxID of the USDT transfer so the payment is verifiable
+                    (64 hex characters from your wallet app)
                     <input
                       type="text"
                       value={payoutTxId}
@@ -295,6 +309,10 @@ export default function AdminWithdrawalList({
                       className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-3 py-2.5 font-mono text-sm text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
                     />
                   </label>
+                  <p className="mt-1.5 text-xs font-semibold leading-relaxed text-amber-300">
+                    ⚠ Without the TxID this payout cannot be verified on
+                    Tronscan — do not mark it paid until you have pasted it.
+                  </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"

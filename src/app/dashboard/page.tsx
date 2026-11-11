@@ -5,10 +5,12 @@ import {
   campaignStatus,
   getBrandCampaigns,
   getBrandCampaignStats,
+  getCampaignBudgetHistory,
   getCampaignRejectionReason,
   getUserSubmissions,
   getWallet,
   isExpiredUnpaidPending,
+  paidBudgetCoveredByPayment,
   type BrandCampaignStats,
 } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
@@ -320,39 +322,53 @@ async function BrandDashboard({
     const reason = await getCampaignRejectionReason(c.id);
     if (reason) rejectionReasons.set(c.id, reason);
   }
-  // Unread admin replies (round-3 P1-8, fixed in round-4 P2-B6):
-  // the badge is is_read-based — an admin message the brand has
-  // not read yet (is_read=false). The brand marks admin messages
+  // Unread admin replies (round-3 P1-8, fixed in round-4 P2-B6,
+  // split in round-5 P2): the badge counts admin-sent rows the
+  // BRAND has not read yet (brand_read=false, migration 0043) —
+  // never is_read, which is the ADMIN's read state: the admin
+  // opening a thread in /admin used to clear this badge before
+  // the brand read the reply. The brand marks admin messages
   // read by opening the chat (BrandMessageForm PATCHes the
   // messages route on load), so reading the reply clears the
-  // badge; merely opening the chat used to leave it until the
-  // brand replied. Best-effort: a failed chat read shows no badge
-  // rather than breaking the dashboard.
-  // NOTE: the admin's own mark-read (opening a thread in /admin)
-  // flips every row in that thread, so a re-opened thread can
-  // clear this badge before the brand reads the reply — a second
-  // read column would be needed to separate the two, which is a
-  // migration, not in this batch.
+  // badge. Bounded to the newest 1,000 unread admin rows, and
+  // filtered server-side to admin-sent unread rows only, so a
+  // long thread cannot swallow the badge. Before 0043 is applied
+  // the brand_read column does not exist and the query falls back
+  // to the old is_read check. Best-effort: a failed chat read
+  // shows no badge rather than breaking the dashboard.
   const unreadAdminReplyById = new Map<string, boolean>();
   if (campaigns.length > 0) {
     try {
       const supabase = getServerClient();
       if (supabase) {
-        const { data: chatRows } = await supabase
+        const campaignIds = campaigns.map((c) => c.id);
+        let chatRows: { campaign_id: string }[] | null = null;
+        const withBrandRead = await supabase
           .from("brand_messages")
-          .select("campaign_id, sender, is_read")
-          .in(
-            "campaign_id",
-            campaigns.map((c) => c.id)
-          );
-        for (const row of (chatRows ?? []) as {
-          campaign_id: string;
-          sender: string;
-          is_read: boolean;
-        }[]) {
-          if (row.sender === "admin" && !row.is_read) {
-            unreadAdminReplyById.set(row.campaign_id, true);
+          .select("campaign_id, sender, is_read, brand_read")
+          .in("campaign_id", campaignIds)
+          .eq("sender", "admin")
+          .eq("brand_read", false)
+          .order("created_at", { ascending: false })
+          .limit(1000);
+        if (!withBrandRead.error) {
+          chatRows = (withBrandRead.data ?? []) as { campaign_id: string }[];
+        } else {
+          // Pre-migration 0043 — brand_read does not exist yet.
+          const legacy = await supabase
+            .from("brand_messages")
+            .select("campaign_id, sender, is_read")
+            .in("campaign_id", campaignIds)
+            .eq("sender", "admin")
+            .eq("is_read", false)
+            .order("created_at", { ascending: false })
+            .limit(1000);
+          if (!legacy.error) {
+            chatRows = (legacy.data ?? []) as { campaign_id: string }[];
           }
+        }
+        for (const row of chatRows ?? []) {
+          unreadAdminReplyById.set(row.campaign_id, true);
         }
       }
     } catch {
@@ -387,6 +403,64 @@ async function BrandDashboard({
       }
     } catch {
       // No refund state — the dashboard still loads.
+    }
+  }
+  // Overpayment refunds (Round-5 P2): a pending/live campaign
+  // whose budget was LOWERED after the brand paid — the brand
+  // overpaid the difference (paid budget minus current budget;
+  // the 15% fee is not refundable, so the amount is budget-only).
+  // The paid budget comes from the budget history, server-side,
+  // with the same earliest-post-payment-edit logic as the B2
+  // banner — never a client-sent number. "Already requested" is
+  // any open request on a pending/live campaign: a rejected
+  // refund cannot exist there, so it must be an overpayment one
+  // (no kind column is needed for the check, so it works before
+  // migration 0043 too). Best-effort — the dashboard still loads
+  // when the history read fails; the button then hides until the
+  // read works.
+  const overpaymentById = new Map<string, number>();
+  const overpaymentRequestedById = new Map<string, boolean>();
+  const paidCampaigns = campaigns.filter(
+    (c) =>
+      (c.status === "pending" || c.status === "live") &&
+      Boolean(c.payment_tx_id?.trim())
+  );
+  if (paidCampaigns.length > 0) {
+    try {
+      const historyById = await getCampaignBudgetHistory(
+        paidCampaigns.map((c) => c.id)
+      );
+      for (const c of paidCampaigns) {
+        const paidBudget = paidBudgetCoveredByPayment(
+          historyById[c.id] ?? [],
+          (
+            c as unknown as { payment_tx_submitted_at?: string | null }
+          ).payment_tx_submitted_at ?? null,
+          c.created_at ?? null
+        );
+        if (paidBudget == null) continue;
+        const overpaid =
+          Math.round((paidBudget - Number(c.budget_total ?? 0)) * 100) / 100;
+        if (overpaid > 0) overpaymentById.set(c.id, overpaid);
+      }
+      const supabase = getServerClient();
+      if (supabase) {
+        const { data: refundRows } = await supabase
+          .from("refund_requests")
+          .select("campaign_id")
+          .in(
+            "campaign_id",
+            paidCampaigns.map((c) => c.id)
+          )
+          .eq("status", "requested");
+        for (const row of (refundRows ?? []) as {
+          campaign_id: string;
+        }[]) {
+          overpaymentRequestedById.set(row.campaign_id, true);
+        }
+      }
+    } catch {
+      // No overpayment state — the dashboard still loads.
     }
   }
   // Round-4 P2-B8: warn when the brand already has an unpaid
@@ -484,6 +558,10 @@ async function BrandDashboard({
                 rejectionReason={rejectionReasons.get(c.id) ?? null}
                 hasUnreadAdminReply={unreadAdminReplyById.get(c.id) ?? false}
                 refundRequested={refundRequestedById.get(c.id) ?? false}
+                overpaymentAmount={overpaymentById.get(c.id) ?? 0}
+                overpaymentRequested={
+                  overpaymentRequestedById.get(c.id) ?? false
+                }
               />
             ))}
           </div>
@@ -510,12 +588,18 @@ function BrandCampaignCard({
   rejectionReason,
   hasUnreadAdminReply = false,
   refundRequested = false,
+  overpaymentAmount = 0,
+  overpaymentRequested = false,
 }: {
   campaign: Campaign;
   stats: BrandCampaignStats | null;
   rejectionReason?: string | null;
   hasUnreadAdminReply?: boolean;
   refundRequested?: boolean;
+  /** Overpaid budget (paid budget minus current budget_total),
+   *  > 0 only when the budget was lowered after payment. */
+  overpaymentAmount?: number;
+  overpaymentRequested?: boolean;
 }) {
   const status = brandStatus(c);
   const usedPct = Math.round(budgetUsedPct(c.budget_total, c.budget_left));
@@ -679,6 +763,31 @@ function BrandCampaignCard({
           records are never deleted.
         </div>
       )}
+      {/* Overpayment (Round-5 P2): the budget was lowered after
+          this campaign was paid, so the brand overpaid the
+          difference — request it back in-app. The amount is
+          computed server-side from the budget history, never
+          trusted from the client. */}
+      {overpaymentAmount > 0 &&
+        (c.status === "pending" || c.status === "live") && (
+          <div className="mt-4 rounded-xl border border-sky-400/40 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed text-sky-200">
+            <span className="font-black">
+              You overpaid {formatUSD(overpaymentAmount)}.
+            </span>{" "}
+            Your payment covered a bigger budget than this campaign
+            has now — the budget was lowered after you paid. Request
+            the overpaid budget back; the 15% platform fee is not
+            refundable.
+            <div className="mt-3">
+              <RefundRequestButton
+                campaignId={c.id}
+                amount={overpaymentAmount}
+                alreadyRequested={overpaymentRequested}
+                kind="overpayment"
+              />
+            </div>
+          </div>
+        )}
 
       {/* Budget — % used bar (same rule as public cards) plus the
           $ total, because this is the brand's own money. Spent and

@@ -30,7 +30,11 @@ function findTronTxId(text: string): string | null {
  * write here — the proof and the conversation stay attached to the
  * campaign and the owner's personal email is never involved.
  *
- * GET   — list the campaign's messages, oldest first.
+ * GET   — list the campaign's messages, oldest first. Bounded
+ *         to the NEWEST 200 (desc + limit + reverse): the old
+ *         unbounded read silently capped at PostgREST's 1,000
+ *         rows and the newest admin replies vanished first
+ *         (Round-5 P2).
  * POST  — send a message: text and/or one image upload (JPEG, PNG,
  *         WebP or GIF, max 5 MB) as multipart/form-data. A text-only
  *         JSON body is also accepted. At least one of text or image
@@ -41,15 +45,22 @@ function findTronTxId(text: string): string | null {
  *         goes live.
  * PATCH — mark this campaign's messages as read
  *         ({ markRead: true }).
- *         Admin: marks every message in the thread read (existing
- *         behaviour — the admin inbox badge counts all unread
- *         rows, so this is left as-is).
- *         Brand owner: marks only the ADMIN's messages read — the
- *         brand reading a reply clears its own "New reply from
- *         admin" badge (Round-4 P2-B6). The brand can never edit
- *         content: the only accepted body is { markRead: true },
- *         and the update touches is_read only (enforced again by
- *         the DB trigger in migration 0014).
+ *         Admin: marks every message in the thread read
+ *         (is_read only — the admin's own read state; it must
+ *         NEVER touch brand_read, or opening a thread in /admin
+ *         clears the brand's "New reply from admin" badge before
+ *         the brand reads the reply).
+ *         Brand owner: marks only the ADMIN's messages read, on
+ *         the brand's OWN read column brand_read (migration
+ *         0043, Round-5 P2) — is_read is left alone. The brand
+ *         can never edit content: the only accepted body is
+ *         { markRead: true }, and the update touches the read
+ *         flags only (enforced again by the DB trigger in
+ *         migration 0014, widened in 0043 to allow both flags).
+ *         Before 0043 is applied the brand_read column does not
+ *         exist and the brand's mark-read falls back to the old
+ *         is_read behaviour (the dashboard badge is is_read-
+ *         based until then too).
  */
 async function loadCampaign(
   supabase: NonNullable<ReturnType<typeof getServerClient>>,
@@ -96,6 +107,21 @@ function tableMissing(error: { message?: string } | null) {
   );
 }
 
+/** True when a PostgREST error is "column X does not exist"
+ *  (42703) — i.e. a migration that adds the column has not been
+ *  applied yet. Used to fall back to the pre-migration column
+ *  instead of failing the request. */
+function columnMissing(
+  error: { message?: string; code?: string } | null,
+  column: string
+) {
+  if (!error) return false;
+  return (
+    error.code === "42703" &&
+    (error.message ?? "").includes(column)
+  );
+}
+
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -135,11 +161,16 @@ export async function GET(
   if (!(await canAccess(supabase, campaign, auth.user.id))) {
     return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
   }
+  // Newest 200 only (Round-5 P2): order newest-first with a
+  // limit, then reverse for the chat UI. An unbounded oldest-
+  // first read silently capped at PostgREST's 1,000 rows, so
+  // past 1,000 messages the NEWEST admin replies vanished.
   const { data, error } = await supabase
     .from("brand_messages")
     .select("*")
     .eq("campaign_id", params.id)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (error) {
     if (tableMissing(error)) {
       return NextResponse.json(
@@ -149,7 +180,7 @@ export async function GET(
     }
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  return NextResponse.json({ messages: data ?? [] });
+  return NextResponse.json({ messages: (data ?? []).reverse() });
 }
 
 export async function POST(
@@ -410,24 +441,66 @@ export async function PATCH(
       { status: 400 }
     );
   }
-  // The brand marks only admin replies read; the admin marks the
-  // whole thread read (existing behaviour — see header).
-  const query = supabase
-    .from("brand_messages")
-    .update({ is_read: true })
-    .eq("campaign_id", params.id)
-    .eq("is_read", false);
-  const { error } = admin
-    ? await query
-    : await query.eq("sender", "admin");
-  if (error) {
-    if (tableMissing(error)) {
-      return NextResponse.json(
-        { error: "Messages are not set up yet (migration 0015). Please try again later." },
-        { status: 400 }
-      );
+  // Two separate read columns (Round-5 P2) — they must never be
+  // set together:
+  // - the ADMIN marks the whole thread read on is_read only;
+  //   brand_read is the brand's state and the admin opening a
+  //   thread must not clear the brand's badge.
+  // - the BRAND marks only admin replies read, on brand_read
+  //   only; is_read is the admin's state and the brand reading a
+  //   reply must not clear the admin's inbox badge.
+  // Before migration 0043 the brand_read column does not exist,
+  // so the brand's mark-read falls back to the old is_read
+  // behaviour (the dashboard badge is is_read-based until then).
+  if (admin) {
+    const { error } = await supabase
+      .from("brand_messages")
+      .update({ is_read: true })
+      .eq("campaign_id", params.id)
+      .eq("is_read", false);
+    if (error) {
+      if (tableMissing(error)) {
+        return NextResponse.json(
+          { error: "Messages are not set up yet (migration 0015). Please try again later." },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
   }
-  return NextResponse.json({ ok: true });
+  const brandRead = await supabase
+    .from("brand_messages")
+    .update({ brand_read: true })
+    .eq("campaign_id", params.id)
+    .eq("sender", "admin")
+    .eq("brand_read", false);
+  if (!brandRead.error) {
+    return NextResponse.json({ ok: true });
+  }
+  if (columnMissing(brandRead.error, "brand_read")) {
+    const { error } = await supabase
+      .from("brand_messages")
+      .update({ is_read: true })
+      .eq("campaign_id", params.id)
+      .eq("sender", "admin")
+      .eq("is_read", false);
+    if (error) {
+      if (tableMissing(error)) {
+        return NextResponse.json(
+          { error: "Messages are not set up yet (migration 0015). Please try again later." },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true });
+  }
+  if (tableMissing(brandRead.error)) {
+    return NextResponse.json(
+      { error: "Messages are not set up yet (migration 0015). Please try again later." },
+      { status: 400 }
+    );
+  }
+  return NextResponse.json({ error: brandRead.error.message }, { status: 400 });
 }
