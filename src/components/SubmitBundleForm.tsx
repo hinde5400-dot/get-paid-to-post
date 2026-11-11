@@ -275,10 +275,17 @@ export default function SubmitBundleForm({
           </a>
         </p>
       )}
+      {/* 30-minute submit rule, platform-aware: TikTok and YouTube
+          post times are checked automatically, so a link posted
+          more than 30 minutes ago is not accepted. Instagram has
+          no automatic check yet — its post time is hand-checked by
+          the admin instead, so the notice must NOT say an Instagram
+          link is "not accepted" for timing. */}
       <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
-        ⏱ Submit your link within 30 minutes of posting — a link
-        posted more than 30 minutes ago is not accepted. Instagram
-        links are hand-checked by the admin (no automatic check yet).
+        ⏱ Submit your link within 30 minutes of posting
+        {allowedPlatforms.includes("instagram")
+          ? ". TikTok and YouTube links posted more than 30 minutes ago are not accepted. Instagram post times can't be verified automatically — the admin hand-checks the 30-minute rule instead."
+          : " — a link posted more than 30 minutes ago is not accepted. Instagram links are hand-checked by the admin (no automatic check yet)."}
       </p>
       {isLoggedIn && (
         <p className="mt-1 text-sm text-fg/60">

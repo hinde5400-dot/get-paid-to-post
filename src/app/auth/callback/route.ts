@@ -29,7 +29,7 @@ function safeNext(raw: string | null): string {
  * window is the same signup that just started the OAuth flow.
  *
  * Blocked accounts cannot log in here either — same as email login.
- * A Google sign-in with the same verified email as an existing
+ * An OAuth sign-in with the same verified email as an existing
  * account lands on that existing account (GoTrue links the identity
  * instead of creating a duplicate, the default while "Allow
  * duplicate emails" stays off in the Supabase dashboard).

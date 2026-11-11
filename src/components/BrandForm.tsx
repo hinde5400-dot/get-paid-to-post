@@ -326,6 +326,17 @@ export default function BrandForm({
         "Rate per 1,000 views must be more than $0 per 1k views"
       );
     }
+    // Rate cap (round-5 P2): the server rejects anything over
+    // $1,000 per 1k views — check it here so the brand learns it
+    // on the form, not at the review panel. Compared after the
+    // server's cent-rounding, so $1,000.004 (rounds to $1,000.00)
+    // is not falsely rejected.
+    if (Math.round(rateNum * 100) / 100 > 1000) {
+      return fail(
+        "rate",
+        "Rate per 1,000 views must be $1,000 or less per 1k views"
+      );
+    }
     // Minimum views per clip: floor 1,000. Blank = 1,000 (the
     // floor default); anything below 1,000 is rejected.
     const minViewsNum =
@@ -334,6 +345,15 @@ export default function BrandForm({
       return fail(
         "minViews",
         "Minimum views per clip must be at least 1,000"
+      );
+    }
+    // Min-views cap (round-5 P2): the server rejects anything over
+    // 1,000,000 — check it here so the brand learns it on the
+    // form, not at the review panel.
+    if (minViewsNum > 1_000_000) {
+      return fail(
+        "minViews",
+        "Minimum views per clip must be 1,000,000 or less"
       );
     }
     // Max Payout Per Post: blank = $100 default; a filled value

@@ -82,8 +82,10 @@ export default function OnboardingPage() {
   // OAuth connections made on /connect (same tables /connect reads:
   // tiktok_connections, youtube_connections). The value is the
   // account/channel name when known, or "saved" when a row exists
-  // but no name could be confirmed — either way the account is
-  // linked and counts toward Continue.
+  // but no name could be confirmed. Only a CONFIRMED login counts
+  // toward Continue — an unconfirmed ("Saved — reconnect") row
+  // does not: its token may be expired, and the breakage would
+  // only surface at submit time.
   const [oauthNames, setOauthNames] = useState<{
     tiktok: string | null;
     youtube: string | null;
@@ -138,9 +140,10 @@ export default function OnboardingPage() {
       // saved row in tiktok_connections / youtube_connections,
       // with the name confirmed live via the profile endpoint
       // (?validate=1). A stored name whose token could not be
-      // confirmed still counts as linked (the creator can
-      // reconnect on /connect); it is shown as "Saved", never as
-      // a confirmed "Connected as @…".
+      // confirmed is shown as "Saved", never as a confirmed
+      // "Connected as @…" — and it does NOT count toward Continue
+      // (round-5 P2): an expired token only breaks at submit time,
+      // so the creator must reconnect on /connect first.
       const loadOAuth = async (
         table: "tiktok_connections" | "youtube_connections",
         nameFields: string[],
@@ -239,10 +242,20 @@ export default function OnboardingPage() {
   // P1-C1: the Instagram paste card OR any OAuth account counts.
   // (Legacy tiktok_url / youtube_url pastes are dead data and
   // never count — only a real OAuth login on /connect does.)
+  // Round-5 P2: an UNCONFIRMED OAuth row ("Saved — reconnect",
+  // token could not be confirmed, possibly expired) does NOT
+  // count — counting it let creators through Continue and the
+  // breakage only surfaced at submit time.
   const connectedCount =
     (connected.instagram ? 1 : 0) +
-    (oauthNames.tiktok ? 1 : 0) +
-    (oauthNames.youtube ? 1 : 0);
+    (oauthNames.tiktok && !oauthUnconfirmed.tiktok ? 1 : 0) +
+    (oauthNames.youtube && !oauthUnconfirmed.youtube ? 1 : 0);
+  // Platforms whose saved login could not be confirmed — shown as
+  // a warning above Continue so the creator reconnects first.
+  const unconfirmedPlatforms = [
+    ...(oauthUnconfirmed.tiktok ? ["TikTok"] : []),
+    ...(oauthUnconfirmed.youtube ? ["YouTube"] : []),
+  ];
 
   async function connectOne(key: PlatformKey) {
     setError("");
@@ -365,6 +378,18 @@ export default function OnboardingPage() {
             : `${connectedCount} account${connectedCount === 1 ? "" : "s"} connected`}
         </span>
       </p>
+      {unconfirmedPlatforms.length > 0 && (
+        <p className="mx-auto mt-3 max-w-md rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-amber-200">
+          Your {unconfirmedPlatforms.join(" / ")} login couldn&apos;t be
+          confirmed — it doesn&apos;t count toward Continue yet.
+          Reconnect it on the{" "}
+          <Link href="/connect" className="font-bold text-lime underline">
+            My accounts page
+          </Link>{" "}
+          before continuing, or your clips may not match to you at
+          submit time.
+        </p>
+      )}
 
       <div className="mt-6 space-y-4">
         {PLATFORMS.map(({ key, name, placeholder, Icon }) => (

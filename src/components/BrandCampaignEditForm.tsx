@@ -66,6 +66,16 @@ export default function BrandCampaignEditForm({
       showError("Error: Rate must be $1,000 or less per 1k views.");
       return;
     }
+    // Rounds-to-$0 (round-5 P2): the server rounds the rate to
+    // cents and rejects anything that rounds to $0.00 — a tiny
+    // rate like $0.001 passes the "> $0" check above but would
+    // fail at save. Check it here, with the server's exact message.
+    if (Math.round(rateNum * 100) / 100 <= 0) {
+      showError(
+        "Error: Rate is too small — after rounding it is $0.00 per 1k views."
+      );
+      return;
+    }
     if (!driveTrim) {
       showError("This field is required: Google Drive Link.");
       return;

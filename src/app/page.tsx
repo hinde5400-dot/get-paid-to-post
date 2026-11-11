@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   campaignStatus,
@@ -7,7 +8,14 @@ import {
   isCampaignLive,
 } from "@/lib/data";
 import { getCurrentUser, getProfile } from "@/lib/auth";
+import { DISCORD_URL } from "@/lib/constants";
 import CampaignGrid from "@/components/CampaignGrid";
+
+export const metadata: Metadata = {
+  title: "Get Paid to Post on TikTok, Instagram & YouTube",
+  description:
+    "Post short clips on TikTok, Instagram and YouTube and get paid per verified view. No follower minimum — every live campaign is funded upfront by the brand.",
+};
 import CampaignBanner from "@/components/CampaignBanner";
 import Faq from "@/components/Faq";
 import DiscordButton from "@/components/DiscordButton";
@@ -489,7 +497,23 @@ export default async function HomePage() {
               New campaigns from brands will appear here soon. Check back
               later.
             </p>
+            {/* Same three next actions as Discover's empty state —
+                a zero-campaign home is not a dead end. */}
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/connect"
+                className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+              >
+                Connect your accounts first
+              </Link>
+              <a
+                href={DISCORD_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+              >
+                Join Discord for announcements
+              </a>
               <Link
                 href="/how-it-works"
                 className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"

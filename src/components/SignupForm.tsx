@@ -32,8 +32,8 @@ export default function SignupForm({ role }: { role: Role | null }) {
   const [busy, setBusy] = useState(false);
   // Already signed in? (friend's brand test, 2026-11-11): the
   // friend was logged in on his own phone and could not tell why
-  // signup "did nothing" for a second account. Say it plainly
-  // above the form — do NOT block signup and do NOT redirect.
+  // signup "did nothing" while he was already signed in. Say it
+  // plainly above the form — do NOT block signup and do NOT redirect.
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
