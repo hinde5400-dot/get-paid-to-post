@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import SignupForm from "@/components/SignupForm";
+
+export const metadata: Metadata = {
+  title: "Sign up",
+  description:
+    "Create your free Get Paid To Post account — as a creator to post clips and earn per view, or as a brand to launch a funded campaign.",
+};
 
 type Role = "creator" | "brand";
 

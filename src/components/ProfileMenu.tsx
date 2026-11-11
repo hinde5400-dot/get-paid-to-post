@@ -7,17 +7,19 @@ import ThemeToggle from "./ThemeToggle";
 import SignOutButton from "./SignOutButton";
 
 /**
- * TryShoot-style profile icon at the top-right of the header, opening a
+ * Profile icon at the top-right of the header, opening a
  * dropdown menu. Guests see Create Account / Sign in / Light mode.
  * Signed-in users see Dashboard / Profile / Earnings / Light mode /
- * Log out.
+ * Log out. The owner also sees an Admin entry.
  */
 export default function ProfileMenu({
   userEmail,
   userName,
+  isAdmin = false,
 }: {
   userEmail: string | null;
   userName?: string | null;
+  isAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -99,6 +101,11 @@ export default function ProfileMenu({
                 <Link href="/earnings" className={itemCls}>
                   <span className="w-5 text-center">$</span> Earnings
                 </Link>
+                {isAdmin && (
+                  <Link href="/admin" className={itemCls}>
+                    <span className="w-5 text-center">⚙</span> Admin
+                  </Link>
+                )}
               </>
             ) : (
               <>

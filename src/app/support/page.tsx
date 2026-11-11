@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import { BRAND_NAME } from "@/lib/constants";
 import DiscordButton from "@/components/DiscordButton";
+
+export const metadata: Metadata = {
+  title: "Support",
+  description:
+    "Get help with Get Paid To Post on Discord: payouts, submissions, account problems, campaigns, and brand payments and refunds.",
+};
 
 export default function SupportPage() {
   return (

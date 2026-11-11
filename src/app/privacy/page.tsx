@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { BRAND_NAME } from "@/lib/constants";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description:
+    "What Get Paid To Post collects when you sign up, connect accounts and submit clips, how it is used, and how to ask for your account to be deleted.",
+};
 
 export default function PrivacyPage() {
   return (
@@ -12,7 +19,8 @@ export default function PrivacyPage() {
           When you sign up, we collect your name, email address and
           password (stored securely by our authentication provider).
           Sign-up is by email and password only. After signup you can
-          add your TikTok, Instagram and YouTube profile links. If you
+          add your Instagram profile link, and connect TikTok and
+          YouTube with login on My accounts. If you
           connect TikTok or YouTube, we store your connected account
           name/channel and the login tokens needed to read your own
           videos&apos; view counts (tokens are stored encrypted). When
@@ -33,7 +41,7 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-extrabold text-fg">3. How we use your data</h2>
         <ul className="mt-2 space-y-2 text-sm leading-relaxed text-fg/70">
           <li>• To run your account, dashboard and wallet.</li>
-          <li>• To match your submitted clips to your profile.</li>
+          <li>• To match your submitted clips to your connected accounts.</li>
           <li>• To pay your approved earnings to the payout details you provide.</li>
           <li>• To keep the platform fair — for example, spotting duplicate submissions and fake engagement.</li>
         </ul>

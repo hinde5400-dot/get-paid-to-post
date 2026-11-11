@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import BrandForm from "@/components/BrandForm";
+
+export const metadata: Metadata = {
+  title: "For Brands",
+  description:
+    "Launch a funded campaign: set your rate per 1,000 views and your budget, fund it in USDT, and get real clips from creators on TikTok, Instagram and YouTube.",
+};
 
 const FUNDING_STEPS = [
   { n: "1", t: "Create your campaign", d: "Fill in the form below: brand, logo, title, rate per 1K views, budget and brief. You set your own rate and budget — any amount above $0, no minimums." },

@@ -12,8 +12,9 @@ import DiscordButton from "./DiscordButton";
 /**
  * Top-left hamburger menu opening a slide-in sidebar drawer. One
  * clean menu only — Home, Explore, My Clips, Profile, Earnings,
- * Support (Discord) — plus the Discord community button and the
- * JOINED list. No filler, no duplicate menus.
+ * Support — plus the Discord community button and the
+ * JOINED list. No filler, no duplicate menus. The owner also sees
+ * an Admin entry here.
  */
 const MENU = [
   { href: "/", label: "Home", icon: "⌂" },
@@ -21,16 +22,18 @@ const MENU = [
   { href: "/my-posts", label: "My Clips", icon: "▣" },
   { href: "/dashboard", label: "Profile", icon: "○" },
   { href: "/earnings", label: "Earnings", icon: "$" },
-  { href: "/support", label: "Support (Discord)", icon: "💬" },
+  { href: "/support", label: "Support", icon: "💬" },
 ];
 
 export default function SideMenu({
   userEmail,
   userName,
+  isAdmin = false,
   joined = [],
 }: {
   userEmail: string | null;
   userName?: string | null;
+  isAdmin?: boolean;
   joined?: { id: string; title: string }[];
 }) {
   const [open, setOpen] = useState(false);
@@ -133,6 +136,24 @@ export default function SideMenu({
                   </Link>
                 );
               })}
+
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  onClick={() => setOpen(false)}
+                  className={`mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
+                    pathname === "/admin"
+                      ? "bg-lime text-black"
+                      : "text-fg/80 hover:bg-fg/5 hover:text-fg"
+                  }`}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-fg/5 text-base">
+                    ⚙
+                  </span>
+                  Admin
+                  <span className="ml-auto text-fg/30">›</span>
+                </Link>
+              )}
 
               <DiscordButton className="mt-3 px-3" />
             </nav>

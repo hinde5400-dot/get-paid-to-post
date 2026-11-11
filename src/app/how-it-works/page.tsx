@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { BRAND_NAME } from "@/lib/constants";
 import { getCurrentUser } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "How It Works",
+  description:
+    "Seven steps from signup to payout: sign up, connect your profiles, pick a funded campaign, post your clip, submit it, get approved, and withdraw in USDT.",
+};
 
 const STEPS = [
   { n: "1", t: "Sign up free", d: "Create your account with email and password. No phone, no address, no extra details." },

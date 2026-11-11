@@ -54,7 +54,7 @@ body {
   color: #0a0a0a;
 }
 
-/* Skeleton loading shimmer (campaign lists, like TryShoot's loading state) */
+/* Skeleton loading shimmer (campaign lists) */
 @keyframes skeleton-shimmer {
   0% {
     background-position: -400px 0;

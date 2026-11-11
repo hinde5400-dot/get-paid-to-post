@@ -14,18 +14,36 @@ const PROTECTED_PREFIXES = [
   "/connect",
   "/submit",
   "/onboarding",
+  "/brands/payment",
 ];
+
+/** Only relative in-site paths are accepted as a post-login target —
+ *  the same rule as safeNext() in src/app/auth/callback/route.ts. */
+function safeNext(raw: string | null): string | null {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return null;
+}
 
 export async function middleware(request: NextRequest) {
   const { response, user } = await updateSession(request);
   const pathname = request.nextUrl.pathname;
+  // /contact is retired — /support is the one support page.
+  if (pathname === "/contact") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/support";
+    url.search = "";
+    return NextResponse.redirect(url, 308);
+  }
   const isProtected = PROTECTED_PREFIXES.some((p) =>
     pathname.startsWith(p)
   );
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.search = "message=login-required";
+    url.search = "";
+    url.searchParams.set("message", "login-required");
+    const next = safeNext(pathname);
+    if (next) url.searchParams.set("next", next);
     return NextResponse.redirect(url);
   }
   // Logged-in users never see the auth pages: /login and /signup

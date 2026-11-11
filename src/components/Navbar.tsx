@@ -1,4 +1,4 @@
-import { getCurrentUser, getProfile } from "@/lib/auth";
+import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import { getCampaigns, getUserSubmissions } from "@/lib/data";
 import SideMenu from "./SideMenu";
 import ProfileMenu from "./ProfileMenu";
@@ -17,8 +17,10 @@ export default async function Navbar() {
   // profile row (migration 0005) first, then the signup metadata
   // (saved before the migration runs), then the email.
   let userName: string | null = null;
+  let isAdmin = false;
   if (user) {
     const profile = await getProfile(user.id);
+    isAdmin = isOwner(profile);
     const metaName = user.user_metadata?.full_name;
     userName =
       profile?.full_name ??
@@ -54,6 +56,7 @@ export default async function Navbar() {
         <SideMenu
           userEmail={user?.email ?? null}
           userName={userName}
+          isAdmin={isAdmin}
           joined={joined}
         />
 
@@ -65,7 +68,7 @@ export default async function Navbar() {
         {/* Discord + profile icon at the top-right. */}
         <div className="flex items-center gap-2">
           <DiscordButton compact />
-          <ProfileMenu userEmail={user?.email ?? null} userName={userName} />
+          <ProfileMenu userEmail={user?.email ?? null} userName={userName} isAdmin={isAdmin} />
         </div>
       </div>
     </header>
