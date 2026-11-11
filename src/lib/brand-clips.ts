@@ -25,11 +25,11 @@ export interface BrandCampaignClipsResult {
   /**
    * True when the campaign HAS submissions (per the stats RPC) but
    * this read returned none — i.e. the rows are RLS-blocked for
-   * this caller, not genuinely absent. Submissions are readable
-   * only by their creator and by the admin (migrations 0001/0002);
-   * there is no brand-read policy and no SECURITY DEFINER
-   * per-clip function yet, so until one lands a brand sees this
-   * flag instead of a false "no clips" list. Callers must show an
+   * this caller, not genuinely absent. Migration 0042 added a
+   * brand-read policy (a brand reads submissions on campaigns it
+   * owns), so this is now only a safety net for a policy/RLS
+   * mismatch — but the flag stays: if the read ever comes back
+   * empty while the stats say clips exist, callers must show an
    * honest "clip details unavailable" note when this is true,
    * never a fake empty state.
    */

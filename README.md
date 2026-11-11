@@ -13,11 +13,8 @@ verified views.
 - **Stack:** Next.js 14 (App Router), TypeScript, Tailwind CSS, Supabase
   (Auth + Database) — all free tiers, no paid domain, hosting, or API.
 
-> Note: a GitHub repo named `clipora` already exists at
-> `github.com/hinde5400-dot/clipora` (README only, no code pushed yet).
-> Rename that repo to **`get-paid-to-post`** (GitHub → repo Settings →
-> General → Repository name) before the first push, or push this code there
-> and rename it — Vercel will follow the repo name when you import it.
+> GitHub repo: **`get-paid-to-post`** at
+> `github.com/hinde5400-dot/get-paid-to-post`.
 
 ## Money rules
 
@@ -68,8 +65,7 @@ signup, login, submissions and withdrawals need Supabase configured.
 
 ## Deploy free on Vercel
 
-1. Push the code to GitHub (private repo named `get-paid-to-post` — see
-   the rename note above). Confirm `.env.local` is NOT in the repo.
+1. Push the code to GitHub (private repo named `get-paid-to-post`). Confirm `.env.local` is NOT in the repo.
 2. Go to [vercel.com](https://vercel.com/signup) → **Add New → Project**
    and import the repo. Framework auto-detects as Next.js — leave build
    settings on default.

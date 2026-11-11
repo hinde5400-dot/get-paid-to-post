@@ -60,6 +60,52 @@ export default async function MyPostsPage() {
   let loadError = false;
   try {
     submissions = await getUserSubmissions(user.id);
+    // Round-5 P1: approval-time facts (migration 0043 —
+    // budget_capped + approval_views). getUserSubmissions lives in
+    // lib/data.ts (another workstream's file), and its mapper does
+    // not carry these columns yet, so they are merged here from a
+    // narrow second read of this creator's own rows. Best-effort:
+    // before migration 0043 is applied live the select fails on
+    // the unknown columns and the merge is skipped — My Posts
+    // then renders the plain breakdown (budget_capped falls back
+    // to false), never the false capped claim.
+    try {
+      const supabase = getServerClient();
+      if (supabase && submissions.length > 0) {
+        const { data: facts, error: factsError } = await supabase
+          .from("submissions")
+          .select("id, budget_capped, approval_views")
+          .eq("user_id", user.id)
+          .in(
+            "id",
+            submissions.map((s) => s.id)
+          );
+        if (!factsError && facts) {
+          const byId = new Map(
+            (facts as Record<string, unknown>[]).map((row) => [
+              String(row.id ?? ""),
+              {
+                budget_capped: Boolean(row.budget_capped ?? false),
+                approval_views:
+                  row.approval_views == null
+                    ? null
+                    : Number(row.approval_views),
+              },
+            ])
+          );
+          submissions = submissions.map((s) => ({
+            ...s,
+            ...(byId.get(s.id) ?? {
+              budget_capped: false,
+              approval_views: null,
+            }),
+          }));
+        }
+      }
+    } catch {
+      // Pre-migration 0043 (unknown columns) or a transient DB
+      // error — rows render without the stored facts.
+    }
   } catch {
     loadError = true;
   }

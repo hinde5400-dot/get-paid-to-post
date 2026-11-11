@@ -24,7 +24,7 @@ import { PlatformChips } from "./PlatformIcons";
  * this instead of navigating away: banner, description, budget bar,
  * a real approval rate (approved / total submissions — omitted when
  * there are no submissions yet, never invented), a big lime
- * "Join Shoot" button (to the detail page's submit form) and a
+ * "Submit a clip" button (to the detail page's submit form) and a
  * "View campaign" button. Closes on X, overlay tap, or Escape.
  * A settling campaign (ended, still in its settlement window) shows
  * a Completed badge with "Campaign Review" below it and no Join
@@ -255,7 +255,7 @@ export default function CampaignModal({
               href={`/campaign/${campaign.id}#submit`}
               className="mt-6 block rounded-full bg-lime py-3.5 text-center text-base font-black text-black transition hover:bg-limedark"
             >
-              Join Shoot →
+              Submit a clip →
             </Link>
           ) : (
             <p className="mt-6 rounded-2xl bg-amber-400/10 px-4 py-3 text-center text-sm font-semibold text-amber-300">
