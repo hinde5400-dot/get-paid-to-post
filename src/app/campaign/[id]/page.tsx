@@ -27,12 +27,13 @@ import {
 import { VIDEO_RULES } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
 import { campaignPlatforms, platformNamesText } from "@/lib/types";
+import { getBrandCampaignClips, type BrandCampaignClip } from "@/lib/brand-clips";
 
 /**
- * Campaign detail, TryShoot brand-page style: brand profile
- * header (logo tile, brand name, real Members / Active counts, never
- * invented names), tabs Home / Apps / Chats / About, and a sticky
- * Join Shoot bar. The submit bundle form lives in the Home tab.
+ * Campaign detail: brand profile header (logo tile, brand name,
+ * real Members / Active counts, never invented names), tabs Home /
+ * Apps / Chats / About, and a sticky Submit bar. The submit bundle
+ * form lives in the Home tab.
  */
 export default async function CampaignDetailPage({
   params,
@@ -53,12 +54,12 @@ export default async function CampaignDetailPage({
   // getCampaign returns null and the page 404s as before.
   const live = isCampaignLive(campaign);
   const settling = isCampaignSettling(campaign);
+  const isBrandOwner = user !== null && campaign.user_id === user.id;
   if (!live && !settling) {
     const profile = user ? await getProfile(user.id) : null;
     // The site owner can preview any campaign; the brand that owns
     // this campaign can preview its own pending campaign (it must
     // NOT appear on public Discover until live).
-    const isBrandOwner = user !== null && campaign.user_id === user.id;
     if (!isOwner(profile) && !isBrandOwner) notFound();
   }
   const isPreview = !live && !settling;
@@ -67,6 +68,21 @@ export default async function CampaignDetailPage({
   // clips only — empty (all counts 0) until the first clip here
   // is approved.
   const topClippers = await getCampaignTopClippers(campaign.id, 5);
+  // Round-4 P1-B3: the brand owner sees each clip of its own
+  // campaign in the Apps tab. Best-effort — a failed load reads
+  // as "no clips" and the page still renders.
+  let brandClips: BrandCampaignClip[] | null = null;
+  let clipsUnavailable = false;
+  if (isBrandOwner) {
+    try {
+      const loaded = await getBrandCampaignClips(campaign.id, user.id);
+      brandClips = loaded.clips;
+      clipsUnavailable = loaded.unavailable;
+    } catch {
+      brandClips = null;
+      clipsUnavailable = false;
+    }
+  }
   let lastByPlatform: LastSubmission[] = [];
   // Approved clips per platform for this creator on this campaign
   // (P0 batch 2): only status='approved' counts — rejected clips do
@@ -338,6 +354,9 @@ export default async function CampaignDetailPage({
       <CampaignDetailTabs
         campaign={campaign}
         stats={stats}
+        brandClips={brandClips}
+        isBrandOwner={isBrandOwner}
+        clipsUnavailable={clipsUnavailable}
         home={
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="space-y-6">

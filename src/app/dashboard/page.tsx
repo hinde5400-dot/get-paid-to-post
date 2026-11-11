@@ -13,7 +13,10 @@ import {
 } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import MyPostsList from "@/components/MyPostsList";
+import MyPostsList, {
+  type CampaignHistoryRow,
+} from "@/components/MyPostsList";
+import RefundRequestButton from "@/components/RefundRequestButton";
 import CopyButton from "@/components/CopyButton";
 import SignOutButton from "@/components/SignOutButton";
 import { SITE_URL } from "@/lib/constants";
@@ -61,6 +64,10 @@ export default async function DashboardPage() {
   } catch {
     loadError = true;
   }
+  // Round-4 P2-C1: the creator dashboard embeds the same list as
+  // /my-posts, so it passes the same past-campaigns history —
+  // without it the dashboard always said "No past campaigns yet".
+  const pastCampaigns = await getUserCampaignHistory(user.id);
   if (loadError) {
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-red-500/40 bg-card p-8 text-center">
@@ -189,7 +196,7 @@ export default async function DashboardPage() {
 
       <section>
         <h2 className="mb-4 text-xl font-extrabold text-fg">My Posts</h2>
-        <MyPostsList submissions={submissions} />
+        <MyPostsList submissions={submissions} pastCampaigns={pastCampaigns} />
       </section>
 
       <section
@@ -212,6 +219,42 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
+}
+
+/**
+ * Participant history (migration 0027): the logged-in creator's own
+ * rows only — same loader as /my-posts (see src/app/my-posts/
+ * page.tsx). Returns [] when the table doesn't exist yet or on any
+ * error, so the page still renders with the honest empty state.
+ */
+async function getUserCampaignHistory(
+  userId: string
+): Promise<CampaignHistoryRow[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("campaign_history")
+    .select(
+      "id, campaign_id, campaign_title, brand_name, platforms, joined_at, clips_submitted, clips_approved, total_views, total_earned, status"
+    )
+    .eq("user_id", userId)
+    .order("joined_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id ?? ""),
+    campaign_id: (row.campaign_id as string | null) ?? null,
+    campaign_title: (row.campaign_title as string | null) ?? null,
+    brand_name: (row.brand_name as string | null) ?? null,
+    platforms: Array.isArray(row.platforms)
+      ? (row.platforms as string[])
+      : null,
+    joined_at: (row.joined_at as string | null) ?? null,
+    clips_submitted: Number(row.clips_submitted ?? 0),
+    clips_approved: Number(row.clips_approved ?? 0),
+    total_views: Number(row.total_views ?? 0),
+    total_earned: Number(row.total_earned ?? 0),
+    status: String(row.status ?? "completed"),
+  }));
 }
 
 /**
@@ -277,19 +320,19 @@ async function BrandDashboard({
     const reason = await getCampaignRejectionReason(c.id);
     if (reason) rejectionReasons.set(c.id, reason);
   }
-  // Unread admin replies (round-3 P1-8): the brand chat notifies
-  // nobody, so the dashboard card carries the badge instead.
-  // brand_messages.is_read is the ADMIN's read marker — the
-  // admin-only PATCH marks every message in a thread read, so it
-  // cannot say whether the BRAND saw a reply. The badge rule
-  // instead: an admin message newer than the brand's latest
-  // message in that thread (an admin reply the brand has not
-  // answered since — a brand with no messages yet counts any
-  // admin message as unread). The badge clears when the brand
-  // replies; merely opening the chat does not clear it yet — a
-  // brand-side mark-read needs a messages-route change (not in
-  // this batch). Best-effort: a failed chat read shows no badge
+  // Unread admin replies (round-3 P1-8, fixed in round-4 P2-B6):
+  // the badge is is_read-based — an admin message the brand has
+  // not read yet (is_read=false). The brand marks admin messages
+  // read by opening the chat (BrandMessageForm PATCHes the
+  // messages route on load), so reading the reply clears the
+  // badge; merely opening the chat used to leave it until the
+  // brand replied. Best-effort: a failed chat read shows no badge
   // rather than breaking the dashboard.
+  // NOTE: the admin's own mark-read (opening a thread in /admin)
+  // flips every row in that thread, so a re-opened thread can
+  // clear this badge before the brand reads the reply — a second
+  // read column would be needed to separate the two, which is a
+  // migration, not in this batch.
   const unreadAdminReplyById = new Map<string, boolean>();
   if (campaigns.length > 0) {
     try {
@@ -297,44 +340,65 @@ async function BrandDashboard({
       if (supabase) {
         const { data: chatRows } = await supabase
           .from("brand_messages")
-          .select("campaign_id, sender, created_at")
+          .select("campaign_id, sender, is_read")
           .in(
             "campaign_id",
             campaigns.map((c) => c.id)
-          )
-          .order("created_at", { ascending: true });
-        const byCampaign = new Map<
-          string,
-          { sender: string; created_at: string }[]
-        >();
+          );
         for (const row of (chatRows ?? []) as {
           campaign_id: string;
           sender: string;
-          created_at: string;
+          is_read: boolean;
         }[]) {
-          const list = byCampaign.get(row.campaign_id) ?? [];
-          list.push(row);
-          byCampaign.set(row.campaign_id, list);
-        }
-        for (const [campaignId, thread] of byCampaign) {
-          const lastBrandAt = Math.max(
-            0,
-            ...thread
-              .filter((m) => m.sender === "brand")
-              .map((m) => new Date(m.created_at).getTime())
-          );
-          const unread = thread.some(
-            (m) =>
-              m.sender === "admin" &&
-              new Date(m.created_at).getTime() > lastBrandAt
-          );
-          if (unread) unreadAdminReplyById.set(campaignId, true);
+          if (row.sender === "admin" && !row.is_read) {
+            unreadAdminReplyById.set(row.campaign_id, true);
+          }
         }
       }
     } catch {
       // No badge — the dashboard still loads.
     }
   }
+  // Refund requests (P2-B5): an open request per rejected campaign
+  // with a payment on file. Best-effort — a missing table (or a
+  // blocked read) just means "no request known"; the button still
+  // works (the API answers 503 honestly when the table is missing).
+  const refundRequestedById = new Map<string, boolean>();
+  const rejectedWithPayment = campaigns.filter(
+    (c) => c.status === "rejected" && Boolean(c.payment_tx_id?.trim())
+  );
+  if (rejectedWithPayment.length > 0) {
+    try {
+      const supabase = getServerClient();
+      if (supabase) {
+        const { data: refundRows } = await supabase
+          .from("refund_requests")
+          .select("campaign_id")
+          .in(
+            "campaign_id",
+            rejectedWithPayment.map((c) => c.id)
+          )
+          .eq("status", "requested");
+        for (const row of (refundRows ?? []) as {
+          campaign_id: string;
+        }[]) {
+          refundRequestedById.set(row.campaign_id, true);
+        }
+      }
+    } catch {
+      // No refund state — the dashboard still loads.
+    }
+  }
+  // Round-4 P2-B8: warn when the brand already has an unpaid
+  // pending campaign — fund it first instead of stacking new
+  // ones. "Unpaid" = pending with no TxID on file and not expired
+  // (an expired one can no longer be funded).
+  const unpaidPending = campaigns.find(
+    (c) =>
+      c.status === "pending" &&
+      !c.payment_tx_id?.trim() &&
+      !isExpiredUnpaidPending(c)
+  );
 
   const metaName = user.user_metadata?.full_name;
   const displayName =
@@ -374,6 +438,21 @@ async function BrandDashboard({
         </Link>
       </div>
 
+      {unpaidPending && (
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm leading-relaxed text-amber-200">
+          <span className="font-black">
+            You already have a pending campaign — fund it first.
+          </span>{" "}
+          <Link
+            href={`/brands/payment/${unpaidPending.id}`}
+            className="font-bold text-lime hover:underline"
+          >
+            &ldquo;{unpaidPending.title}&rdquo; is still waiting for
+            payment →
+          </Link>
+        </div>
+      )}
+
       <section>
         <h2 className="mb-4 text-xl font-extrabold text-fg">My Campaigns</h2>
         {campaigns.length === 0 ? (
@@ -404,6 +483,7 @@ async function BrandDashboard({
                 stats={statsById.get(c.id) ?? null}
                 rejectionReason={rejectionReasons.get(c.id) ?? null}
                 hasUnreadAdminReply={unreadAdminReplyById.get(c.id) ?? false}
+                refundRequested={refundRequestedById.get(c.id) ?? false}
               />
             ))}
           </div>
@@ -429,11 +509,13 @@ function BrandCampaignCard({
   stats,
   rejectionReason,
   hasUnreadAdminReply = false,
+  refundRequested = false,
 }: {
   campaign: Campaign;
   stats: BrandCampaignStats | null;
   rejectionReason?: string | null;
   hasUnreadAdminReply?: boolean;
+  refundRequested?: boolean;
 }) {
   const status = brandStatus(c);
   const usedPct = Math.round(budgetUsedPct(c.budget_total, c.budget_left));
@@ -441,6 +523,10 @@ function BrandCampaignCard({
   // 50–75% yellow, 75–90% red, >90% dark red.
   const barCls = budgetBarClass(usedPct);
   const rate = c.view_bonus_per_1k;
+  // Round-4 P1-B3: explicit $ spent / $ remaining — spent is
+  // budget_total − budget_left, remaining is budget_left.
+  const spent = Math.max(0, c.budget_total - c.budget_left);
+  const remaining = Math.max(0, c.budget_left);
   // "Payment submitted" keys off payment_tx_id, NOT is_funded:
   // is_funded only becomes true at approve time, so keying off it
   // made "payment submitted" unreachable and kept showing the
@@ -495,6 +581,16 @@ function BrandCampaignCard({
             Chat with admin
             {hasUnreadAdminReply ? " •" : ""}
           </Link>
+          {/* Round-4 P1-B4: fix a typo'd rate, brief or Drive link
+              while the campaign is still pending. */}
+          {c.status === "pending" && (
+            <Link
+              href={`/brands/payment/${c.id}#edit-campaign`}
+              className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
+            >
+              Edit details
+            </Link>
+          )}
           <Link
             href={`/campaign/${c.id}`}
             className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
@@ -542,8 +638,26 @@ function BrandCampaignCard({
           ) : (
             <>This campaign will not go live. </>
           )}
-          If you already sent the budget, contact the admin on
-          Discord about your refund.
+          {paymentSubmitted ? (
+            <>
+              Your budget is refunded on request — the 15% platform
+              fee is not refundable.
+            </>
+          ) : (
+            <>
+              If you already sent the budget, contact the admin on
+              Discord about your refund.
+            </>
+          )}
+          {paymentSubmitted && (
+            <div className="mt-3">
+              <RefundRequestButton
+                campaignId={c.id}
+                amount={c.budget_total}
+                alreadyRequested={refundRequested}
+              />
+            </div>
+          )}
         </div>
       )}
       {campaignStatus(c) === "live" && (
@@ -567,7 +681,9 @@ function BrandCampaignCard({
       )}
 
       {/* Budget — % used bar (same rule as public cards) plus the
-          $ total, because this is the brand's own money. */}
+          $ total, because this is the brand's own money. Spent and
+          remaining are explicit (P1-B3): spent = budget_total −
+          budget_left. */}
       <div className="mt-4">
         <div className="flex justify-between text-xs text-fg/60">
           <span>
@@ -581,6 +697,9 @@ function BrandCampaignCard({
             style={{ width: `${Math.min(100, Math.max(0, usedPct))}%` }}
           />
         </div>
+        <p className="mt-2 text-xs font-semibold text-fg/60">
+          Spent {formatUSD(spent)} · Remaining {formatUSD(remaining)}
+        </p>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-3 text-center">

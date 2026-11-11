@@ -45,6 +45,14 @@ export default function PaymentForm({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the payment.");
+      // Round-4 P2-B2: the identical TxID is already on file —
+      // nothing changed, no re-stamp, no second alert.
+      if ((data as { unchanged?: boolean }).unchanged) {
+        showSuccess(
+          "This Transaction ID is already on file — nothing changed."
+        );
+        return;
+      }
       const corrected = Boolean(
         (data as { corrected?: boolean }).corrected
       );

@@ -181,11 +181,25 @@ export async function POST(
   ).trim();
   const isCorrection = Boolean(previousTxId) && previousTxId.toLowerCase() !== txIdLower;
 
+  // Round-4 P2-B2: re-submitting the IDENTICAL TxID changes
+  // nothing — no re-stamp of payment_tx_submitted_at (which would
+  // restart the 7-day expiry) and no second Discord alert. The
+  // brand just gets told it is already on file.
+  if (Boolean(previousTxId) && previousTxId.toLowerCase() === txIdLower) {
+    return NextResponse.json({
+      ok: true,
+      unchanged: true,
+      message:
+        "This Transaction ID is already on file — nothing changed.",
+    });
+  }
+
   // P1-7 (migration 0038): stamp the server time of this TxID
   // submission — first submit and every correction. The 7-day
   // expiry for a TxID-on-file campaign runs from this stamp, so
   // a correction restarts the window; without it a pasted hash
-  // would defeat expiry forever.
+  // would defeat expiry forever. An IDENTICAL re-submit never
+  // reaches this update (returned early above, P2-B2).
   const { error } = await supabase
     .from("campaigns")
     .update({

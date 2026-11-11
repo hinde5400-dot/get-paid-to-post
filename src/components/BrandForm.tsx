@@ -214,7 +214,7 @@ export default function BrandForm({
         msg
       )
     ) {
-      return "Connection failed — check your internet connection and try again. Your entries are saved, just tap Submit again.";
+      return "Connection failed — check your internet connection and try again. Your entries are still on this page — tap Submit again (don't refresh).";
     }
     return msg || "Could not save the campaign.";
   }
@@ -447,7 +447,11 @@ export default function BrandForm({
       // Read as text first — same reason as uploadImage: a
       // non-JSON error page must not become a SyntaxError.
       const text = await res.text();
-      let data: { id?: string; error?: string } = {};
+      let data: {
+        id?: string;
+        error?: string;
+        existingUnpaidPending?: { id: string; title: string } | null;
+      } = {};
       try {
         data = JSON.parse(text) as typeof data;
       } catch {
@@ -460,8 +464,12 @@ export default function BrandForm({
         );
       // Approval cannot happen until the brand pays: the campaign
       // stays pending, and the payment page is the next step.
+      // Round-4 P2-B8: if the brand already had an unpaid pending
+      // campaign, say so — it should be funded first.
       showSuccess(
-        "Campaign saved as pending. Now send your budget plus the 15% fee on the payment page — your campaign goes live only after the admin verifies your payment."
+        data.existingUnpaidPending
+          ? `Campaign saved as pending. Now send your budget plus the 15% fee on the payment page — your campaign goes live only after the admin verifies your payment. Note: you already have an unpaid pending campaign ("${data.existingUnpaidPending.title}") — fund it first from your dashboard.`
+          : "Campaign saved as pending. Now send your budget plus the 15% fee on the payment page — your campaign goes live only after the admin verifies your payment."
       );
       setDone(true);
       // Next step is payment: the campaign stays pending until the

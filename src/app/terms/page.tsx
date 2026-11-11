@@ -102,7 +102,10 @@ export default function TermsPage() {
           pay only for verified views. Unspent budget stays the
           brand&apos;s: ask for a refund through Discord support — the
           owner sends it manually in USDT. We aim to send it within 5–7
-          business days of your request. A campaign that stays pending
+          business days of your request. The 15% platform fee is not
+          refundable — on a rejected campaign or an unspent-budget
+          refund, only the budget (or the unspent part of it) is
+          returned, not the fee. A campaign that stays pending
           without payment expires after 7 days. The campaign, its proofs
           and its chat are deleted 1 day after the last hold matures —
           never earlier than 7 days after the campaign ended; money

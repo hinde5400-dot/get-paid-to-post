@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
+import { getBrandCampaigns, isExpiredUnpaidPending } from "@/lib/data";
 import BrandForm from "@/components/BrandForm";
 
 const FUNDING_STEPS = [
@@ -30,6 +31,25 @@ export default async function BrandsPage() {
   // "I am a Brand / I am a Creator" choice cards. Logged-out
   // visitors and creators still see the full page as before.
   const isBrand = user !== null && canLaunch;
+
+  // Round-4 P2-B8: a brand with an unpaid pending campaign is
+  // told to fund it first instead of stacking new ones.
+  // Best-effort — a failed load hides the banner, never the page.
+  let unpaidPending: { id: string; title: string } | null = null;
+  if (isBrand && user) {
+    try {
+      const brandCampaigns = await getBrandCampaigns(user.id);
+      const found = brandCampaigns.find(
+        (c) =>
+          c.status === "pending" &&
+          !c.payment_tx_id?.trim() &&
+          !isExpiredUnpaidPending(c)
+      );
+      if (found) unpaidPending = { id: found.id, title: found.title };
+    } catch {
+      unpaidPending = null;
+    }
+  }
 
   // The WHOLE card is the link (friend's brand test, 2026-11-11):
   // tapping the card body or title did nothing — only the small
@@ -179,8 +199,7 @@ export default async function BrandsPage() {
       <p className="text-sm leading-relaxed text-fg/80">
         We are a professional creator marketplace. All campaigns are
         funded before going live. Creators are paid for real verified
-        views only. You can check our domain on VirusTotal
-        / Google Safe Browsing.
+        views only.
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         {[
@@ -199,6 +218,26 @@ export default async function BrandsPage() {
         <Link href="/pricing" className="font-bold text-lime hover:underline">
           See full pricing — 15% fee, $500 budget → $575 total →
         </Link>
+      </p>
+    </section>
+  );
+
+  const faq = (
+    <section className="rounded-3xl border border-fg/10 bg-card p-6">
+      <h2 className="text-lg font-extrabold text-fg">
+        What if no creators post, or my campaign gets no views?
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-fg/70">
+        Your campaign runs until its duration ends or its budget
+        ends. Then it settles: a 3-day re-check, payouts for any
+        approved clips, and the campaign is deleted 1 day after the
+        last hold matures. If no creators posted, nothing was spent
+        — any budget left unspent stays yours and is refunded on
+        request, per the{" "}
+        <Link href="/refund" className="font-bold text-lime hover:underline">
+          Refund Policy
+        </Link>
+        . You never pay for views that were not verified.
       </p>
     </section>
   );
@@ -240,8 +279,8 @@ export default async function BrandsPage() {
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
             Campaigns are launched from brand accounts. Browse funded
-            campaigns to earn, or sign up as a brand with a different
-            email to launch one.
+            campaigns to earn, or sign out first, then sign up as a
+            brand to launch one.
           </p>
           <Link
             href="/campaigns"
@@ -268,11 +307,26 @@ export default async function BrandsPage() {
             goes live once payment is verified.
           </p>
         </section>
+        {unpaidPending && (
+          <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm leading-relaxed text-amber-200">
+            <span className="font-black">
+              You already have a pending campaign — fund it first.
+            </span>{" "}
+            <Link
+              href={`/brands/payment/${unpaidPending.id}`}
+              className="font-bold text-lime hover:underline"
+            >
+              &ldquo;{unpaidPending.title}&rdquo; is still waiting for
+              payment →
+            </Link>
+          </div>
+        )}
         {formSection}
         {howFunding}
         {benefit}
         {protection}
         {trust}
+        {faq}
       </div>
     );
   }
@@ -284,6 +338,7 @@ export default async function BrandsPage() {
       {benefit}
       {protection}
       {trust}
+      {faq}
       {formSection}
     </div>
   );

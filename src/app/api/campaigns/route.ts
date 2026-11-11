@@ -10,6 +10,7 @@ import { platformFeeFor } from "@/lib/money";
 import { DRIVE_FOLDER_ERROR, isDriveFolderUrl } from "@/lib/validate";
 import { notifyCampaignCreated } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
+import { isExpiredUnpaidPending } from "@/lib/data";
 import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 
@@ -491,6 +492,47 @@ export async function POST(request: Request) {
   insertRow.thumbnail_url = thumbnailUrl;
   if (durationDays !== null) insertRow.duration_days = durationDays;
 
+  // Round-4 P2-B8: warn when the brand already has an unpaid
+  // pending campaign — the response names it (id + title) so the
+  // form and the dashboard can link it ("fund it first" instead
+  // of stacking new pendings). Creation is NOT blocked.
+  // "Unpaid" = pending with no TxID on file; an expired one is
+  // skipped — it can no longer be funded, so it is not the one
+  // to fund first. Looked up before the insert, so the new
+  // campaign itself is never listed.
+  let existingUnpaidPending: { id: string; title: string } | null = null;
+  try {
+    const { data: pendingRows } = await supabase
+      .from("campaigns")
+      .select("id, title, payment_tx_id, payment_tx_submitted_at, created_at, status")
+      .eq("user_id", auth.user.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(10);
+    for (const row of (pendingRows ?? []) as Record<string, unknown>[]) {
+      if (String(row.payment_tx_id ?? "").trim()) continue;
+      if (
+        isExpiredUnpaidPending(
+          row as {
+            status?: string | null;
+            payment_tx_id?: string | null;
+            payment_tx_submitted_at?: string | null;
+            created_at?: string | null;
+          }
+        )
+      ) {
+        continue;
+      }
+      existingUnpaidPending = {
+        id: String(row.id ?? ""),
+        title: String(row.title ?? ""),
+      };
+      break;
+    }
+  } catch {
+    existingUnpaidPending = null;
+  }
+
   const { data, error } = await supabase
     .from("campaigns")
     .insert(insertRow)
@@ -521,6 +563,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     id: (data as { id: string }).id,
+    existingUnpaidPending,
     message:
       "Campaign saved as pending. Now send your budget plus the 15% fee on the payment page — it goes live only after the admin verifies your payment.",
   });
