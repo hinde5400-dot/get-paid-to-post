@@ -313,33 +313,40 @@ export default function MyPostsList({
               {/* Earnings breakdown — locked at approval: the views
                   above are the latest count and may have grown
                   since, so the math is never restated from them as
-                  if it were the approval count. The one exception
-                  is the budget cap: when the paid amount is below
-                  BOTH the per-post cap and what the rate math on
-                  the latest views would pay, the clip was capped by
-                  the campaign's remaining budget — and the creator
-                  must be able to reproduce their pay from the
-                  numbers shown, instead of seeing "$30 at $2/1k"
-                  when $2/1k × the views is $200. */}
+                  if it were the approval count. The budget cap is
+                  a STORED fact (migration 0043: budget_capped +
+                  approval_views, written by the review route at
+                  approve time) — never inferred from post-approval
+                  view growth, which falsely flagged every approved
+                  clip whose views grew. Rows approved before 0043
+                  carry budget_capped=false and render the plain
+                  breakdown, never the capped claim. */}
               {s.status === "approved" &&
-                s.views > 0 &&
                 s.rate_per_1k !== undefined &&
                 (() => {
                   const rate = s.rate_per_1k as number;
                   const cap =
                     s.max_payout_per_post ?? MAX_PAYOUT_DEFAULT;
-                  const calc = payoutForViews(s.views, rate, cap);
                   const capApplied =
                     s.max_payout_per_post !== undefined &&
                     s.max_payout_per_post !== null &&
                     s.earnings >= s.max_payout_per_post;
-                  // Budget-capped: paid less than the per-post cap
-                  // AND less than the rate math — the only other
-                  // limiter is the campaign's remaining budget at
-                  // approval (the review route truncates by it).
-                  const budgetCapped =
-                    !capApplied &&
-                    s.earnings < Math.min(calc.uncapped, cap);
+                  // Stored fact only: the approval was truncated
+                  // by the campaign's remaining budget.
+                  const budgetCapped = s.budget_capped === true;
+                  // Reproduce the approval-time math from the
+                  // stored approval views when they exist — the
+                  // latest view count above is NOT the approval
+                  // count and must never be used for it.
+                  const approvalViews =
+                    typeof s.approval_views === "number" &&
+                    Number.isFinite(s.approval_views)
+                      ? s.approval_views
+                      : null;
+                  const approvalCalc =
+                    approvalViews !== null
+                      ? payoutForViews(approvalViews, rate, cap)
+                      : null;
                   return (
                     <p className="mt-3 rounded-xl bg-lime/10 px-4 py-2.5 text-sm leading-relaxed text-fg/80">
                       Your video earned {formatUSD(s.earnings)} at{" "}
@@ -348,13 +355,29 @@ export default function MyPostsList({
                         ? ` The per-post cap of ${formatUSD(s.max_payout_per_post as number)} applied.`
                         : ""}
                       {budgetCapped
-                        ? ` Capped by the campaign's remaining budget — at ${formatUSD(rate)}/1k the latest view count would have paid ${formatUSD(calc.uncapped)} (up to the ${formatUSD(cap)} per-post cap), but only ${formatUSD(s.earnings)} was left in the campaign budget when this clip was approved, so that is what was paid.`
+                        ? approvalCalc
+                          ? ` Capped by the campaign's remaining budget — at ${formatUSD(rate)}/1k the ${approvalViews!.toLocaleString()} views at approval would have paid ${formatUSD(approvalCalc.uncapped)} (up to the ${formatUSD(cap)} per-post cap), but only ${formatUSD(s.earnings)} was left in the campaign budget when this clip was approved, so that is what was paid.`
+                          : ` Capped by the campaign's remaining budget — only ${formatUSD(s.earnings)} was left in the campaign budget when this clip was approved, so that is what was paid.`
                         : ""}{" "}
                       Earnings were locked when the clip was approved —
                       the views above are the latest count.
                     </p>
                   );
                 })()}
+              {/* Posted time unverified (Instagram, migration 0031):
+                  the 30-minute rule could not be checked
+                  automatically, so the admin hand-checks it. The
+                  creator must see that on a pending row instead of
+                  a plain "Under Review" with no hint the timing
+                  is still being checked. */}
+              {s.status === "pending" &&
+                s.platform === "instagram" &&
+                s.posted_time_unverified === true && (
+                  <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">
+                    Post time unverified — admin hand-checks the
+                    30-minute rule.
+                  </p>
+                )}
               <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-fg/60">
                 <span>
                   Submission ID:{" "}

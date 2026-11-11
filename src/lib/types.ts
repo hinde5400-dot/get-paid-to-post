@@ -239,6 +239,20 @@ export interface Submission {
    *  has no API access yet) — the admin checks the post time by
    *  hand before approving (migration 0031). */
   posted_time_unverified?: boolean;
+  /**
+   * Approval-time FACTS (migration 0043, round-5 P1): was this
+   * approval actually truncated by the campaign's remaining
+   * budget, and the view count earnings were locked on. My Posts
+   * renders the "Capped by the campaign's remaining budget" line
+   * ONLY from budget_capped — never inferred from post-approval
+   * view growth (earnings are locked at approval, so that
+   * inference falsely flagged every clip whose views grew).
+   * Optional with a false/null fallback: rows approved before
+   * 0043 (or read before it is applied live) render the plain
+   * earnings breakdown, never the capped claim.
+   */
+  budget_capped?: boolean;
+  approval_views?: number | null;
   /** Instagram handle that matched the creator's linked profile
    *  at submit time (migration 0039, round-3 P2-17) — the admin
    *  hand-check anchors on this, not the creator's current

@@ -643,6 +643,46 @@ export async function POST(request: Request) {
       );
     }
 
+    // Round-5 P1: store the approval-time FACTS (migration 0043)
+    // — budget_capped (was this approval actually truncated by
+    // the remaining budget?) and approval_views (the view count
+    // earnings were locked on). My Posts renders the capped line
+    // ONLY from these columns; the old heuristic inferred capping
+    // from post-approval view growth and falsely flagged every
+    // clip whose views grew after approval.
+    // Best-effort in its own update, NOT in the claim above: the
+    // columns only exist once migration 0043 is applied live, and
+    // a missing-column error on the claim itself would fail the
+    // whole approval. A failed write here is swallowed (logged)
+    // — the approval, budget decrement and wallet credit below
+    // still go through, and the row just reads as a pre-0043
+    // approval (plain breakdown, never the capped claim).
+    // NOTE: if a later step fails and revertClaim() returns this
+    // row to pending, these two fields stay set — revertClaim is
+    // owned by another workstream and does not clear them. That
+    // is invisible: My Posts shows the capped line only on
+    // approved rows, and a later re-approve overwrites both.
+    try {
+      const { error: factsError } = await supabase
+        .from("submissions")
+        .update({ budget_capped: budgetCapped, approval_views: views })
+        .eq("id", submission.id)
+        .eq("status", "approved");
+      if (factsError) {
+        // PostgREST returns the failure (e.g. unknown column
+        // before migration 0043) as an error value, not a throw.
+        console.error(
+          "[admin/review] could not store budget_capped/approval_views (migration 0043 not applied yet?):",
+          factsError.message
+        );
+      }
+    } catch (err) {
+      console.error(
+        "[admin/review] could not store budget_capped/approval_views (migration 0043 not applied yet?):",
+        err instanceof Error ? err.message : err
+      );
+    }
+
     // P0-2: atomic budget decrement (migration 0036). The old
     // code read budget_left once and wrote an absolute value, so
     // two concurrent approves both read $100, each earned $80,
