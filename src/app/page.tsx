@@ -2,8 +2,9 @@ import Link from "next/link";
 import {
   campaignStatus,
   getBrandCampaigns,
-  getCampaigns,
+  getDiscoverCampaigns,
   getCampaignStatsMap,
+  isCampaignLive,
 } from "@/lib/data";
 import { getCurrentUser, getProfile } from "@/lib/auth";
 import CampaignGrid from "@/components/CampaignGrid";
@@ -316,12 +317,17 @@ export default async function HomePage() {
   if (user && profile?.role === "brand") {
     return <BrandHome user={user} profile={profile} />;
   }
-  // Forms #26: getCampaigns THROWS on DB error — a failed load
+  // Forms #26: getDiscoverCampaigns THROWS on DB error — a failed load
   // renders an honest error state, never the "No Live Campaigns
   // Yet" empty state.
-  let campaigns: Awaited<ReturnType<typeof getCampaigns>>;
+  // P2-R11: home uses the SAME loader as /campaigns (live +
+  // settling) — the old live-only getCampaigns() made home say
+  // "0 live campaigns" the moment a campaign ended while Discover
+  // still listed it. The count below splits live / completed so
+  // the hero line stays honest.
+  let campaigns: Awaited<ReturnType<typeof getDiscoverCampaigns>>;
   try {
-    campaigns = await getCampaigns();
+    campaigns = await getDiscoverCampaigns();
   } catch {
     return (
       <div className="space-y-14">
@@ -347,6 +353,8 @@ export default async function HomePage() {
   const featured = campaigns[0];
   const rest = campaigns.slice(1, 7);
   const stats = await getCampaignStatsMap(rest.map((c) => c.id));
+  const liveCount = campaigns.filter((c) => isCampaignLive(c)).length;
+  const settlingCount = campaigns.length - liveCount;
 
   return (
     <div className="space-y-14">
@@ -399,8 +407,14 @@ export default async function HomePage() {
         )}
         <p className="mt-8 text-sm font-bold text-fg/50">
           <span className="font-black text-lime">
-            {campaigns.length} live campaign{campaigns.length === 1 ? "" : "s"}
+            {liveCount} live campaign{liveCount === 1 ? "" : "s"}
           </span>
+          {settlingCount > 0 && (
+            <>
+              {" · "}
+              {settlingCount} completed
+            </>
+          )}
           {" · "}Every live campaign is funded upfront by the brand
         </p>
       </section>

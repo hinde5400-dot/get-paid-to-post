@@ -24,6 +24,9 @@ import { useToast } from "@/components/Toast";
  * /connect instead — so those two cards send creators to /connect.
  * At least 1 connection is required to continue; Skip is also
  * offered. Then: "Welcome! Now Browse Campaigns" → Discover.
+ * An OAuth connection made on /connect counts toward Continue
+ * exactly like the Instagram paste — the cards below show the
+ * connected state instead of always offering "Connect with login".
  */
 
 type PlatformKey = "tiktok" | "instagram" | "youtube";
@@ -76,6 +79,19 @@ export default function OnboardingPage() {
     youtube: false,
   });
   const [profileExists, setProfileExists] = useState(false);
+  // OAuth connections made on /connect (same tables /connect reads:
+  // tiktok_connections, youtube_connections). The value is the
+  // account/channel name when known, or "saved" when a row exists
+  // but no name could be confirmed — either way the account is
+  // linked and counts toward Continue.
+  const [oauthNames, setOauthNames] = useState<{
+    tiktok: string | null;
+    youtube: string | null;
+  }>({ tiktok: null, youtube: null });
+  const [oauthUnconfirmed, setOauthUnconfirmed] = useState<{
+    tiktok: boolean;
+    youtube: boolean;
+  }>({ tiktok: false, youtube: false });
   const [error, setError] = useState("");
   const [busyKey, setBusyKey] = useState<PlatformKey | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -118,12 +134,115 @@ export default function OnboardingPage() {
           youtube: Boolean(p.youtube_url),
         });
       }
+      // OAuth connections (P1-C1): same check /connect does — a
+      // saved row in tiktok_connections / youtube_connections,
+      // with the name confirmed live via the profile endpoint
+      // (?validate=1). A stored name whose token could not be
+      // confirmed still counts as linked (the creator can
+      // reconnect on /connect); it is shown as "Saved", never as
+      // a confirmed "Connected as @…".
+      const loadOAuth = async (
+        table: "tiktok_connections" | "youtube_connections",
+        nameFields: string[],
+        profileUrl: string,
+        key: "tiktok" | "youtube"
+      ) => {
+        try {
+          const { data: conn } = await supabase
+            .from(table)
+            .select(nameFields.join(", "))
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const c = conn as Record<string, string | null> | null;
+          if (!c) return;
+          const stored =
+            nameFields.map((f) => c[f]).find((v) => v?.trim()) ?? null;
+          let name: string | null = null;
+          let unconfirmed = false;
+          try {
+            const res = await fetch(`${profileUrl}?validate=1`);
+            if (res.ok) {
+              const prof = (await res.json()) as {
+                connected?: boolean;
+                username?: string | null;
+                display_name?: string | null;
+                channel_title?: string | null;
+                channel_handle?: string | null;
+              };
+              if (prof.connected !== false) {
+                name =
+                  prof.username ??
+                  prof.display_name ??
+                  prof.channel_title ??
+                  prof.channel_handle ??
+                  null;
+              }
+            }
+          } catch {
+            // Validation failed — fall back to the stored name.
+          }
+          if (!name && stored) {
+            name = stored;
+            unconfirmed = true;
+          } else if (!name) {
+            // Row exists but no name anywhere: try the plain
+            // profile re-read once, like /connect does.
+            try {
+              const res = await fetch(profileUrl);
+              if (res.ok) {
+                const prof = (await res.json()) as {
+                  username?: string | null;
+                  display_name?: string | null;
+                  channel_title?: string | null;
+                  channel_handle?: string | null;
+                };
+                name =
+                  prof.username ??
+                  prof.display_name ??
+                  prof.channel_title ??
+                  prof.channel_handle ??
+                  null;
+                if (!name) unconfirmed = true;
+              } else {
+                unconfirmed = true;
+              }
+            } catch {
+              unconfirmed = true;
+            }
+          }
+          if (name || unconfirmed) {
+            setOauthNames((prev) => ({ ...prev, [key]: name ?? "saved" }));
+            setOauthUnconfirmed((prev) => ({ ...prev, [key]: unconfirmed }));
+          }
+        } catch {
+          // Table not set up yet — the OAuth cards still work.
+        }
+      };
+      await loadOAuth(
+        "tiktok_connections",
+        ["username", "display_name"],
+        "/api/auth/tiktok/profile",
+        "tiktok"
+      );
+      await loadOAuth(
+        "youtube_connections",
+        ["channel_title", "channel_handle"],
+        "/api/auth/youtube/profile",
+        "youtube"
+      );
       setLoading(false);
     }
     void load();
   }, []);
 
-  const connectedCount = PLATFORMS.filter((p) => connected[p.key]).length;
+  // P1-C1: the Instagram paste card OR any OAuth account counts.
+  // (Legacy tiktok_url / youtube_url pastes are dead data and
+  // never count — only a real OAuth login on /connect does.)
+  const connectedCount =
+    (connected.instagram ? 1 : 0) +
+    (oauthNames.tiktok ? 1 : 0) +
+    (oauthNames.youtube ? 1 : 0);
 
   async function connectOne(key: PlatformKey) {
     setError("");
@@ -241,7 +360,9 @@ export default function OnboardingPage() {
       </p>
       <p className="mt-4 text-center text-sm font-bold text-fg">
         <span className="text-lime">
-          {connected.instagram ? "Instagram link added" : "No link added yet"}
+          {connectedCount < 1
+            ? "No account connected yet"
+            : `${connectedCount} account${connectedCount === 1 ? "" : "s"} connected`}
         </span>
       </p>
 
@@ -305,33 +426,64 @@ export default function OnboardingPage() {
             </button>
           </div>
         ))}
-        {OAUTH_PLATFORMS.map(({ key, name, Icon }) => (
-          <div
-            key={key}
-            className="rounded-3xl border border-fg/10 bg-card p-5 md:p-6"
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-fg/5 text-fg">
-                <Icon className="h-6 w-6" />
-              </span>
-              <span>
-                <span className="block font-display text-lg font-black tracking-tight text-fg">
-                  Connect {name}
-                </span>
-                <span className="block text-xs text-fg/50">
-                  Log in with {name} to verify your account — pasting a
-                  link does not match your clips to you.
-                </span>
-              </span>
-            </div>
-            <Link
-              href="/connect"
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-black text-black transition hover:bg-limedark"
+        {OAUTH_PLATFORMS.map(({ key, name, Icon }) => {
+          const oauthName = oauthNames[key];
+          const unconfirmed = oauthUnconfirmed[key];
+          return (
+            <div
+              key={key}
+              className={`rounded-3xl border p-5 md:p-6 ${
+                oauthName
+                  ? "border-lime/60 bg-card"
+                  : "border-fg/10 bg-card"
+              }`}
             >
-              Connect {name} with login →
-            </Link>
-          </div>
-        ))}
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-fg/5 text-fg">
+                  <Icon className="h-6 w-6" />
+                </span>
+                <span>
+                  <span className="block font-display text-lg font-black tracking-tight text-fg">
+                    Connect {name}
+                  </span>
+                  <span className="block text-xs text-fg/50">
+                    {oauthName
+                      ? unconfirmed
+                        ? `Saved${oauthName !== "saved" ? ` as ${key === "tiktok" ? "@" : ""}${oauthName}` : ""} — couldn't confirm the login, reconnect it on My accounts.`
+                        : `Connected as ${key === "tiktok" ? "@" : ""}${oauthName}.`
+                      : `Log in with ${name} to verify your account — pasting a link does not match your clips to you.`}
+                  </span>
+                </span>
+                {oauthName && (
+                  <span
+                    className={`ml-auto shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+                      unconfirmed
+                        ? "bg-amber-400/20 text-amber-200"
+                        : "bg-lime/15 text-lime"
+                    }`}
+                  >
+                    {unconfirmed ? "Saved — reconnect" : "Connected"}
+                  </span>
+                )}
+              </div>
+              {oauthName ? (
+                <Link
+                  href="/connect"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-lime/50 py-3 text-sm font-black text-lime transition hover:bg-lime/10"
+                >
+                  Manage on My accounts →
+                </Link>
+              ) : (
+                <Link
+                  href="/connect"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-black text-black transition hover:bg-limedark"
+                >
+                  Connect {name} with login →
+                </Link>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {error && (
@@ -376,7 +528,8 @@ export default function OnboardingPage() {
       </button>
       {connectedCount < 1 && (
         <p className="mt-3 text-center text-xs text-fg/40">
-          Add your Instagram link to continue — or skip and connect later.
+          Add your Instagram link, or connect TikTok / YouTube with
+          login, to continue — or skip and connect later.
         </p>
       )}
     </div>

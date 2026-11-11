@@ -7,7 +7,7 @@ import { getBrowserClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/Toast";
 
 /**
- * Step 2 after signup: connect TikTok / Instagram / YouTube accounts
+ * Connect TikTok / Instagram / YouTube accounts
  * through OAuth — no manual profile links. TikTok works today via
  * Login Kit, YouTube via Google OAuth; the Instagram card is shown
  * the same way and switches on when its login is ready.
@@ -289,7 +289,7 @@ export default function ConnectPage() {
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
       <p className="mt-2 text-sm text-fg/60">
-        Step 2 — connect your TikTok and YouTube accounts so your
+        Connect your TikTok and YouTube accounts so your
         submitted clips can be matched to you. Only videos from your
         own connected TikTok and YouTube accounts count — a link to
         someone else&apos;s video will not earn. (Instagram connects

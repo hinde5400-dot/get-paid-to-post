@@ -163,6 +163,18 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // P1-C4 (server half): "other" with no note is impossible — a
+  // bare "other" tells the creator nothing about what was wrong.
+  // The UI blocks it too; this is defense in depth.
+  if (body.action === "reject" && reason === "other") {
+    return NextResponse.json(
+      {
+        error:
+          "A short note is required when the rejection reason is “other” — the creator sees the reason, so it has to say what was wrong.",
+      },
+      { status: 400 }
+    );
+  }
 
   if (body.action === "reject") {
     if (submission.status === "rejected") {
@@ -534,7 +546,12 @@ export async function POST(request: Request) {
     const { uncapped, earnings: cappedEarnings, capped } = payoutForViews(
       views,
       ratePer1k,
-      cap
+      cap,
+      // Defense in depth: the campaign minimum, passed explicitly
+      // (the function defaults to the 1,000 floor, but the
+      // campaign may set a higher minimum — same value the guard
+      // above enforced).
+      minViews
     );
     // Never pay beyond the per-post cap or the remaining campaign budget.
     let earnings = Math.min(cappedEarnings, budgetLeft);
@@ -641,6 +658,13 @@ export async function POST(request: Request) {
     // plainly that the submission may still show as approved and
     // needs a manual check — the old message claimed "nothing
     // was credited" while the row stayed "approved".
+    // P2-A10: revertClaim restores the row's PRIOR views/likes/
+    // comments too — the claim just wrote the admin's typed values,
+    // and a failed approval must not leave a $0 pending clip
+    // displaying admin-entered view counts as if they were verified.
+    const priorViews = Number(submission.views ?? 0);
+    const priorLikes = Number(submission.likes ?? 0);
+    const priorComments = Number(submission.comments ?? 0);
     async function revertClaim(): Promise<boolean> {
       // Narrowed locally: TS does not carry the top-of-function
       // null check into a closure.
@@ -648,7 +672,14 @@ export async function POST(request: Request) {
       if (!client) return false;
       const { data: reverted, error: revertError } = await client
         .from("submissions")
-        .update({ status: "pending", earnings: 0, hold_until: null })
+        .update({
+          status: "pending",
+          earnings: 0,
+          hold_until: null,
+          views: priorViews,
+          likes: priorLikes,
+          comments: priorComments,
+        })
         .eq("id", submission.id)
         .eq("status", "approved")
         .select("id");

@@ -37,8 +37,17 @@ export default function WithdrawModal({
   const [addressInvalid, setAddressInvalid] = useState(false);
 
   const amountNum = useMemo(() => Number(amount) || 0, [amount]);
-  const fee = feeFor(amountNum);
-  const final = finalFor(amountNum);
+  // P2-C2: round the typed amount to cents FIRST — exactly like
+  // the server (Math.round(amount * 100) / 100) — before computing
+  // fee / final, so the preview matches the stored payout. A typed
+  // $15.095 used to preview $14.35 while the server stored $15.10
+  // and paid $14.34.
+  const roundedAmount = useMemo(
+    () => Math.round(amountNum * 100) / 100,
+    [amountNum]
+  );
+  const fee = feeFor(roundedAmount);
+  const final = finalFor(roundedAmount);
   const address = details.trim();
 
   function fillMax() {
@@ -66,7 +75,7 @@ export default function WithdrawModal({
         headers: { "Content-Type": "application/json" },
         // TRC20 is the only payout method (Turn's decision
         // 2026-11-11) — the server rejects anything else.
-        body: JSON.stringify({ amount: amountNum, method: "usdt_trc20", details: address }),
+        body: JSON.stringify({ amount: roundedAmount, method: "usdt_trc20", details: address }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Withdrawal failed.");
@@ -186,7 +195,7 @@ export default function WithdrawModal({
               <div className="mt-4 rounded-xl bg-fg/5 p-4 text-sm text-fg/70">
                 <div className="flex justify-between">
                   <span>Amount</span>
-                  <span className="font-bold text-fg">{formatUSD(amountNum)}</span>
+                  <span className="font-bold text-fg">{formatUSD(roundedAmount)}</span>
                 </div>
                 <div className="mt-1 flex justify-between">
                   <span>Fee (5%)</span>
