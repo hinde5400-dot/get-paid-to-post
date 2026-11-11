@@ -55,6 +55,11 @@ alter table public.submissions
 alter table public.brand_messages
   add column if not exists brand_read boolean not null default false;
 
+-- Drop the OLD 0014 guard FIRST: it only allows is_read to
+-- change, so it blocks this backfill (brand_read changes).
+-- The new widened trigger is installed below, after backfill.
+drop trigger if exists brand_messages_read_guard on public.brand_messages;
+
 update public.brand_messages
   set brand_read = is_read
   where brand_read = false and is_read = true;
