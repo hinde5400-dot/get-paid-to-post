@@ -11,6 +11,7 @@ import {
   MIN_ENGAGEMENT_RATE,
 } from "@/lib/engagement";
 import { PLATFORM_LABELS } from "@/lib/constants";
+import { truncateTxId } from "@/lib/validate";
 import { BrandLogoTile } from "./CampaignBanner";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
@@ -667,14 +668,16 @@ function AdminCampaignCard({
               <p className="mt-1 text-xs font-black text-red-300">
                 Payment submitted
               </p>
+              {/* TxID is truncated on display (Round-5 P2) — the
+                  full hash stays behind the Tronscan link. */}
               <p className="mt-1 break-all font-mono text-xs font-bold text-fg/80">
-                TxID: {c.payment_tx_id}
+                TxID: {truncateTxId(c.payment_tx_id)}
               </p>
               <a
                 href={`https://tronscan.org/#/transaction/${c.payment_tx_id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-1 inline-block text-xs font-bold text-lime hover:underline"
+                className="mt-1 inline-block text-xs font-bold text-red-300 hover:underline"
               >
                 Verify on Tronscan ↗
               </a>
@@ -755,7 +758,7 @@ function AdminCampaignCard({
             href={c.brief_url}
             target="_blank"
             rel="noreferrer"
-            className="font-bold text-lime hover:underline"
+            className="font-bold text-red-300 hover:underline"
           >
             Campaign brief (Google Drive) ↗
           </a>

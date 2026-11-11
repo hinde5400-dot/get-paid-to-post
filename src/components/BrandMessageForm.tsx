@@ -75,19 +75,27 @@ export default function BrandMessageForm({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  // Round-4 P2-B6: when the BRAND opens this chat, the admin's
-  // replies are marked read, so the dashboard's "New reply from
-  // admin" badge clears. The PATCH is brand-scoped server-side
-  // (admin messages only, never content). A failed mark-read is
+  // Round-4 P2-B6, split in Round-5 P2: when the BRAND opens this
+  // chat, the admin's replies are marked read on the brand's OWN
+  // read column brand_read (migration 0043) — NOT is_read, which
+  // is the admin's read state. The PATCH is brand-scoped
+  // server-side (admin messages only, never content), and before
+  // 0043 is applied it falls back to is_read (the dashboard badge
+  // is is_read-based until then too). A failed mark-read is
   // silent — the badge just stays until the next poll.
-  // NOTE: this only takes effect once the DB lets a brand update
-  // is_read (there is no brand UPDATE policy on brand_messages
-  // yet — only the owner can update it — so until that policy
-  // lands the PATCH updates zero rows and the badge stays; the
-  // call itself is harmless).
   async function markReadIfNeeded(list: BrandMessage[]) {
     if (viewerIsAdmin) return;
-    if (!list.some((m) => m.sender === "admin" && !m.is_read)) return;
+    // brand_read undefined = row loaded before 0043: fall back
+    // to the old is_read check for that row.
+    if (
+      !list.some(
+        (m) =>
+          m.sender === "admin" &&
+          (m.brand_read === undefined ? !m.is_read : !m.brand_read)
+      )
+    ) {
+      return;
+    }
     if (markReadInFlight.current) return;
     markReadInFlight.current = true;
     try {
@@ -99,7 +107,7 @@ export default function BrandMessageForm({
       if (res.ok) {
         setMessages((prev) =>
           prev.map((m) =>
-            m.sender === "admin" ? { ...m, is_read: true } : m
+            m.sender === "admin" ? { ...m, brand_read: true } : m
           )
         );
       }

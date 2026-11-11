@@ -25,6 +25,15 @@ import { rateLimit } from "@/lib/rate-limit";
  * restarts from zero, so the flag alert must be able to fire
  * again on a fresh climb to 10 — otherwise only the re-ban alert
  * would work after an unblock.
+ *
+ * Round-5 P1: unblocking now REQUIRES a reason (≤200 chars, the
+ * same pattern as campaign reject / budget edit) — the decided
+ * spec is "reason+confirm first", and until now nothing recorded
+ * why a banned creator was let back in. The reason is stored on
+ * creator_flags.unblock_reason (migration 0043); before 0043 is
+ * applied the upsert is retried without the column, so the
+ * unblock itself never fails for a missing column — the reason
+ * is just not recorded, and the message says so.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -57,9 +66,9 @@ export async function POST(request: Request) {
       { status: 429 }
     );
   }
-  let body: { userId?: string };
+  let body: { userId?: string; reason?: string };
   try {
-    body = (await request.json()) as { userId?: string };
+    body = (await request.json()) as { userId?: string; reason?: string };
   } catch {
     return NextResponse.json(
       { error: "Invalid request — send a valid JSON body." },
@@ -68,6 +77,21 @@ export async function POST(request: Request) {
   }
   if (!body.userId) {
     return NextResponse.json({ error: "userId is required." }, { status: 400 });
+  }
+  // A reason is required — unblocking without one leaves no
+  // record of why a banned creator was let back in.
+  const reason = String(body.reason ?? "").trim();
+  if (!reason) {
+    return NextResponse.json(
+      { error: "A reason is required to unblock a creator." },
+      { status: 400 }
+    );
+  }
+  if (reason.length > 200) {
+    return NextResponse.json(
+      { error: "The unblock reason must be 200 characters or less." },
+      { status: 400 }
+    );
   }
   // A Supabase update matching zero rows returns NO error, so
   // verify the user exists first — otherwise a typo'd id reports
@@ -91,18 +115,38 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const { error: flagError } = await supabase
+  const flagRow = {
+    user_id: body.userId,
+    flagged_at: null,
+    banned_at: null,
+    unblocked_at: new Date().toISOString(),
+    unblock_reason: reason,
+    updated_at: new Date().toISOString(),
+  };
+  let { error: flagError } = await supabase
     .from("creator_flags")
-    .upsert(
-      {
-        user_id: body.userId,
-        flagged_at: null,
-        banned_at: null,
-        unblocked_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
+    .upsert(flagRow, { onConflict: "user_id" });
+  if (
+    flagError &&
+    flagError.code === "42703" &&
+    /unblock_reason/.test(flagError.message ?? "")
+  ) {
+    // Migration 0043 not applied yet — the column does not exist.
+    // Retry the ladder reset without the reason so the unblock
+    // itself still lands; the user is unblocked either way.
+    const { unblock_reason: _dropped, ...flagRowLegacy } = flagRow;
+    const retry = await supabase
+      .from("creator_flags")
+      .upsert(flagRowLegacy, { onConflict: "user_id" });
+    if (!retry.error) {
+      return NextResponse.json({
+        ok: true,
+        message:
+          "Creator unblocked. Their bot-rejection count restarts from zero — earlier rejections stay visible as history but no longer count toward a re-ban. (The unblock reason could not be recorded — migration 0043 has not been applied yet.)",
+      });
+    }
+    flagError = retry.error;
+  }
   if (flagError) {
     // The user IS unblocked; only the ladder reset failed. Say so
     // plainly — the owner can re-run the unblock to retry the

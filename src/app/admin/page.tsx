@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import type { BrandMessage, Campaign } from "@/lib/types";
 import { getAllSubmissions, getAllSubmissionsUnpaged, getPendingCampaigns, getAllWithdrawals, getAdminUsdtWallet, getBrandMessages, getBrandMessagesUnpaged, getCreatorBotRejections, getCreatorFlags, getSubmissionFlags, getDiscoverCampaigns, getCampaignBudgetHistory, getSubmissionStatusCounts, getBrandMessagesCount, getUnreadBrandMessagesCount, getBotRejectionRowCount, getRejectedCampaigns, getCampaignRejectionReasons, getOpenRefundRequests, getAllUsers, getStorageUsage, isCampaignSettling, campaignStatus } from "@/lib/data";
@@ -16,6 +17,14 @@ import AdminCampaignCards, {
 import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
 import AdminSettingsForm from "@/components/AdminSettingsForm";
+import MarkRefundSentButton from "@/components/MarkRefundSentButton";
+import { truncateTxId } from "@/lib/validate";
+
+export const metadata: Metadata = {
+  title: "Admin Review — Get Paid To Post",
+  description:
+    "Owner-only admin review for Get Paid To Post: submissions, campaigns, refund requests, withdrawals and fraud watch.",
+};
 
 /** Human-readable bytes for the storage readout (P2-A9c). */
 function formatBytes(bytes: number): string {
@@ -43,16 +52,12 @@ export default async function AdminPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const profile = await getProfile(user.id);
+  // Non-owners do not get a rendered "Access denied" page (200)
+  // — they are redirected to their dashboard (Round-5 P2). The
+  // gate itself is unchanged: only the first account (the owner)
+  // may open /admin.
   if (!isOwner(profile)) {
-    return (
-      <div className="mx-auto max-w-lg rounded-3xl border border-fg/10 bg-card p-8 text-center">
-        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">Access denied</h1>
-        <p className="mt-3 text-sm text-fg/60">
-          Admin Review is owner-only. The first account created on the site
-          is the owner.
-        </p>
-      </div>
-    );
+    redirect("/dashboard");
   }
 
   // Pagination (Brand P1-7): the review list and the inbox page
@@ -429,6 +434,7 @@ export default async function AdminPage({
       flagged_at: flag?.flagged_at ?? null,
       banned_at: flag?.banned_at ?? null,
       unblocked_at: flag?.unblocked_at ?? null,
+      unblock_reason: flag?.unblock_reason ?? null,
       latest: row.latest,
     };
   });
@@ -451,6 +457,7 @@ export default async function AdminPage({
       flagged_at: flag?.flagged_at ?? null,
       banned_at: flag?.banned_at ?? null,
       unblocked_at: flag?.unblocked_at ?? null,
+      unblock_reason: flag?.unblock_reason ?? null,
       latest: null,
     });
   }
@@ -746,7 +753,7 @@ export default async function AdminPage({
                             rel="noreferrer"
                             className="font-mono font-bold text-fg underline"
                           >
-                            {c.payment_tx_id}
+                            {truncateTxId(c.payment_tx_id)}
                           </a>
                         </>
                       ) : (
@@ -771,35 +778,71 @@ export default async function AdminPage({
               <ul className="mt-2 space-y-2">
                 {openRefunds.map((r) => {
                   const camp = campaignById.get(r.campaign_id);
+                  // kind (migration 0043, Round-5 P2): 'rejected'
+                  // = whole budget back on a rejected campaign,
+                  // 'overpayment' = the overpaid difference on a
+                  // campaign whose budget was lowered after
+                  // payment. Before 0043 the kind is not recorded
+                  // and is derived from the campaign's status —
+                  // an open request on a non-rejected campaign
+                  // can only be an overpayment one.
+                  const kind =
+                    r.kind === "overpayment" || r.kind === "rejected"
+                      ? r.kind
+                      : camp?.status === "rejected"
+                        ? "rejected"
+                        : "overpayment";
                   return (
                     <li
                       key={r.id}
-                      className="text-sm leading-relaxed text-fg/70"
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-card/60 px-3 py-2.5 text-sm leading-relaxed text-fg/70"
                     >
-                      <span className="font-bold text-fg">
-                        {camp?.title ?? r.campaign_id.slice(0, 8)}
-                      </span>{" "}
-                      — {formatUSD(r.amount)} requested by{" "}
-                      {emailById.get(r.user_id) ?? r.user_id.slice(0, 8)}{" "}
-                      on{" "}
-                      {new Date(r.created_at).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                      {r.payment_tx_id && (
-                        <>
-                          {" · "}
-                          <a
-                            href={`https://tronscan.org/#/transaction/${r.payment_tx_id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-mono text-xs font-bold text-fg underline"
-                          >
-                            TxID
-                          </a>
-                        </>
-                      )}
+                      <div className="min-w-0">
+                        <span
+                          className={`mr-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-wide ${
+                            kind === "overpayment"
+                              ? "bg-sky-500/15 text-sky-300"
+                              : "bg-red-500/15 text-red-300"
+                          }`}
+                        >
+                          {kind === "overpayment"
+                            ? "Overpayment"
+                            : "Rejected campaign"}
+                        </span>
+                        <span className="font-bold text-fg">
+                          {camp?.title ?? r.campaign_id.slice(0, 8)}
+                        </span>{" "}
+                        — {formatUSD(r.amount)} requested by{" "}
+                        {emailById.get(r.user_id) ?? r.user_id.slice(0, 8)}{" "}
+                        on{" "}
+                        {new Date(r.created_at).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                        {r.payment_tx_id && (
+                          <>
+                            {" · "}
+                            <a
+                              href={`https://tronscan.org/#/transaction/${r.payment_tx_id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono text-xs font-bold text-fg underline"
+                            >
+                              TxID {truncateTxId(r.payment_tx_id)}
+                            </a>
+                          </>
+                        )}
+                      </div>
+                      {/* Round-5 P1: mark the request 'sent'
+                          once the USDT refund has actually been
+                          sent — without this the queue never
+                          drains. */}
+                      <MarkRefundSentButton
+                        refundId={r.id}
+                        campaignTitle={camp?.title ?? r.campaign_id.slice(0, 8)}
+                        amount={r.amount}
+                      />
                     </li>
                   );
                 })}
@@ -1099,7 +1142,7 @@ function AdminLoadError() {
       </p>
       <a
         href="/admin"
-        className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+        className="mt-5 inline-block rounded-full bg-red-500 px-6 py-3 text-sm font-black text-white transition hover:bg-red-600"
       >
         Try again
       </a>
