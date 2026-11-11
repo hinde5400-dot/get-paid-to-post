@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
+import { isValidTronTxId } from "@/lib/validate";
 
 /**
  * Owner-only withdrawal review. Mirrors the owner check in
@@ -58,15 +59,35 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { withdrawalId?: string; action?: "approve" | "paid" | "reject" };
+  let body: {
+    withdrawalId?: string;
+    action?: "approve" | "paid" | "reject";
+    payoutTxId?: string;
+  };
   try {
     body = (await request.json()) as {
       withdrawalId?: string;
       action?: "approve" | "paid" | "reject";
+      payoutTxId?: string;
     };
   } catch {
     return NextResponse.json(
       { error: "Request body must be valid JSON." },
+      { status: 400 }
+    );
+  }
+  // Round-4 P1-A3: the payout Transaction ID is optional on Mark
+  // paid — the owner may have sent the USDT before 0040, or may
+  // paste the hash later — but when one is given it must be a
+  // real TRON hash (exactly 64 hex chars, same rule as brand
+  // TxIDs), or "Paid" stays unverifiable.
+  const payoutTxId = String(body.payoutTxId ?? "").trim();
+  if (body.action === "paid" && payoutTxId && !isValidTronTxId(payoutTxId)) {
+    return NextResponse.json(
+      {
+        error:
+          "Invalid payout Transaction ID — it must be exactly 64 hexadecimal characters (the hash of the USDT transfer).",
+      },
       { status: 400 }
     );
   }
@@ -213,13 +234,32 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    // P1-A3: record the payout Transaction ID alongside the
+    // status flip, so a creator disputing a payout ("I never
+    // received it") can be answered from the site with a
+    // Tronscan link. Stored lowercase, like brand TxIDs.
+    const paidUpdate: Record<string, unknown> = { status: "paid" };
+    if (payoutTxId) paidUpdate.payout_tx_id = payoutTxId.toLowerCase();
     const { data: paid, error: paidError } = await supabase
       .from("withdrawals")
-      .update({ status: "paid" })
+      .update(paidUpdate)
       .eq("id", row.id as string)
       .eq("status", "approved")
       .select("id");
     if (paidError || !paid || paid.length === 0) {
+      // A missing payout_tx_id column (migration 0040 not run
+      // yet) fails the update even though the status flip itself
+      // is fine — say so loudly instead of silently dropping
+      // the TxID or reporting a false "already decided".
+      if (payoutTxId && /payout_tx_id/i.test(paidError?.message ?? "")) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not save the payout Transaction ID (run migration 0040 in Supabase first). The withdrawal was NOT marked paid — try again after the migration.",
+          },
+          { status: 500 }
+        );
+      }
       return NextResponse.json(
         {
           error:
@@ -235,7 +275,9 @@ export async function POST(request: Request) {
     // withdrawn_total here again would double-count it.
     return NextResponse.json({
       ok: true,
-      message: "Withdrawal marked as paid.",
+      message: payoutTxId
+        ? `Withdrawal marked as paid (TxID ${payoutTxId.toLowerCase()}).`
+        : "Withdrawal marked as paid.",
     });
   }
 

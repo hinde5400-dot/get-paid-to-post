@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { AdminSubmission } from "./AdminReviewList";
 import { REJECTION_REASONS } from "./AdminReviewList";
 import { PLATFORM_LABELS } from "@/lib/constants";
+import { formatUSD } from "@/lib/money";
 import { engagementRate, formatEngagementRate } from "@/lib/engagement";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
@@ -41,6 +42,17 @@ export default function AdminRecheckList({
     const note = (reasonNotes[s.id] ?? "").trim();
     const reason =
       picked === "other" && note ? `other: ${note}` : picked;
+    // Round-4 P2-A2: this is a reject-after-approve (full wallet
+    // reversal + budget restore), so it confirms first — same
+    // window.confirm pattern as the main review list — showing
+    // the reversal amount.
+    if (
+      !window.confirm(
+        `Reject this approved clip (${reason})? This reverses ${formatUSD(s.earnings)} already credited to the creator and restores the campaign budget.`
+      )
+    ) {
+      return;
+    }
     setBusy(s.id);
     try {
       const res = await fetch("/api/admin/review", {

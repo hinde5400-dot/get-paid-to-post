@@ -31,6 +31,15 @@
 // - DISCORD_ADMIN_MENTION — Turn's Discord user ID, used as the
 //   <@USER_ID> mention prefix. Optional; the message is sent
 //   without a mention when it is unset.
+//
+// Round-4 P2-A8: a dead webhook used to fail silently — one
+// server-side log line per event, no validation, no timeout, no
+// admin-visible state. The URL is now validated on first use
+// (must be a real Discord webhook URL), every POST has a 10s
+// timeout, failures are logged distinctly, and GET
+// /api/admin/notify-health probes the webhook (a GET returns the
+// webhook object — a connectivity check that sends nothing) so
+// the owner can test notifications from /admin Settings.
 
 import {
   MAX_PAYOUT_DEFAULT,
@@ -38,6 +47,43 @@ import {
   SITE_URL,
 } from "./constants";
 import { formatUSD } from "./money";
+
+/** True when the value looks like a Discord webhook URL:
+ *  https://discord.com/api/webhooks/<id>/<token> (or the older
+ *  discordapp.com host). Anything else can never deliver, so it
+ *  is rejected before any fetch is attempted. */
+export function isDiscordWebhookUrl(raw: string): boolean {
+  return /^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[\w-]+/.test(
+    raw.trim()
+  );
+}
+
+/** The configured webhook URL, or null when unset or not a valid
+ *  Discord webhook URL. The invalid-URL warning is logged once
+ *  per process, not on every notification, so a typo'd URL does
+ *  not flood the logs. */
+let invalidUrlWarned = false;
+
+export function discordWebhookUrl(): string | null {
+  const url = (process.env.DISCORD_WEBHOOK_URL ?? "").trim();
+  if (!url) return null;
+  if (!isDiscordWebhookUrl(url)) {
+    if (!invalidUrlWarned) {
+      invalidUrlWarned = true;
+      // The URL itself is never logged — it is a secret.
+      console.error(
+        "[notifyDiscord] DISCORD_WEBHOOK_URL is set but is not a valid Discord webhook URL — notifications are disabled until it is fixed."
+      );
+    }
+    return null;
+  }
+  return url;
+}
+
+/** Fetch timeout for Discord calls (P2-A8): a hung webhook used
+ *  to hang the notification forever. 10 seconds is generous for
+ *  a webhook POST/GET. */
+export const DISCORD_FETCH_TIMEOUT_MS = 10_000;
 
 /** "<@123…>" mention, or "" when no admin mention is configured. */
 export function adminMention(): string {
@@ -65,7 +111,7 @@ export async function notifyDiscord(
   content: string,
   threadName?: string
 ): Promise<boolean> {
-  const url = (process.env.DISCORD_WEBHOOK_URL ?? "").trim();
+  const url = discordWebhookUrl();
   if (!url) return false;
   // Discord forum post titles are capped at 100 characters.
   const thread = threadName?.trim().slice(0, 100) || undefined;
@@ -74,6 +120,8 @@ export async function notifyDiscord(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      // P2-A8: a hung webhook no longer hangs the notification.
+      signal: AbortSignal.timeout(DISCORD_FETCH_TIMEOUT_MS),
     });
   try {
     if (thread) {
@@ -93,8 +141,77 @@ export async function notifyDiscord(
     }
     return true;
   } catch (err) {
-    console.error("[notifyDiscord] Failed to send Discord notification:", err);
+    // Distinct log lines (P2-A8): a timeout is a different
+    // failure from a network error, and the owner reading the
+    // logs needs to tell them apart.
+    if (err instanceof Error && err.name === "TimeoutError") {
+      console.error(
+        `[notifyDiscord] Discord webhook timed out after ${DISCORD_FETCH_TIMEOUT_MS / 1000}s — notification NOT sent.`
+      );
+    } else {
+      console.error("[notifyDiscord] Failed to send Discord notification:", err);
+    }
     return false;
+  }
+}
+
+/**
+ * Connectivity check for GET /api/admin/notify-health (P2-A8):
+ * a GET on a webhook URL returns the webhook object — it proves
+ * the URL is live and reachable WITHOUT sending any message to
+ * Discord. Returns "ok" when Discord answers 2xx, "failing"
+ * otherwise, and "not_configured" when no (valid) webhook URL
+ * is set. Never throws, never logs the URL.
+ */
+export async function checkDiscordWebhook(): Promise<{
+  status: "ok" | "failing" | "not_configured";
+  detail: string;
+}> {
+  const url = discordWebhookUrl();
+  if (!url) {
+    const configured = Boolean(
+      (process.env.DISCORD_WEBHOOK_URL ?? "").trim()
+    );
+    return {
+      status: "not_configured",
+      detail: configured
+        ? "A webhook URL is set, but it is not a valid Discord webhook URL."
+        : "No Discord webhook URL is configured.",
+    };
+  }
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(DISCORD_FETCH_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      return {
+        status: "ok",
+        detail: "Discord answered — notifications are working.",
+      };
+    }
+    console.error(
+      `[notifyDiscord] Webhook health check failed: Discord returned ${res.status}.`
+    );
+    return {
+      status: "failing",
+      detail: `Discord returned ${res.status} — the webhook may be deleted or rotated.`,
+    };
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      console.error(
+        `[notifyDiscord] Webhook health check timed out after ${DISCORD_FETCH_TIMEOUT_MS / 1000}s.`
+      );
+      return {
+        status: "failing",
+        detail: "Discord did not answer within 10 seconds.",
+      };
+    }
+    console.error("[notifyDiscord] Webhook health check failed:", err);
+    return {
+      status: "failing",
+      detail: "Could not reach Discord.",
+    };
   }
 }
 

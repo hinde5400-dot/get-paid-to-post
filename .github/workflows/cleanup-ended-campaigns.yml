@@ -21,6 +21,11 @@
 # in migration 0023 (ended, no pending submissions, all holds
 # matured + 1 day, 7+ days since end). Wallets and withdrawals are
 # never deleted.
+#
+# Failure alerting (Round-4 P2-A7): a failed run opens a GitHub
+# issue (permissions: issues: write below) so the failure is
+# visible without watching the Actions tab. curl has --max-time 90
+# so a hung endpoint cannot hang the step forever.
 
 name: Cleanup ended campaigns
 
@@ -32,14 +37,25 @@ on:
     - cron: "0 3 * * *"
   workflow_dispatch: {}
 
+permissions:
+  issues: write
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
       - name: Cleanup ended campaigns (daily)
         run: |
-          code=$(curl -s -o /tmp/cleanup.json -w "%{http_code}" \
+          code=$(curl -s --max-time 90 -o /tmp/cleanup.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             https://get-paid-to-post.vercel.app/api/cron/cleanup-ended-campaigns)
           cat /tmp/cleanup.json
           test "$code" = "200"
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "${{ github.repository }}" \
+            --title "Cron failed: Cleanup ended campaigns (run ${{ github.run_id }})" \
+            --body "The daily cleanup failed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Ended campaigns are not being auto-deleted until this is fixed — check the run log, then the endpoint."

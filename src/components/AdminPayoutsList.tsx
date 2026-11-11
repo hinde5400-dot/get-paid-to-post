@@ -29,6 +29,9 @@ export interface PayoutRow {
   flagReason?: string;
   network?: string;
   address?: string;
+  /** Present on paid withdrawal rows — the on-chain payout hash
+   *  (migration 0040, Round-4 P1-A3). */
+  payoutTxId?: string | null;
 }
 
 const TONE_CLS: Record<PayoutTone, string> = {
@@ -53,6 +56,52 @@ export default function AdminPayoutsList({ rows }: { rows: PayoutRow[] }) {
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [flagReason, setFlagReason] = useState("");
   const [flagBusy, setFlagBusy] = useState<string | null>(null);
+  // Round-4 P2-A12: paginate — the list used to render every row,
+  // so the page got heavier as history grew. 50 rows per page
+  // with a Show more button; the counts above still cover all rows.
+  const PAGE_SIZE = 50;
+  const [visible, setVisible] = useState(PAGE_SIZE);
+  const visibleRows = rows.slice(0, visible);
+
+  function exportCsv() {
+    const esc = (v: string | number) =>
+      `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [
+      [
+        "kind",
+        "creator_email",
+        "campaign_title",
+        "platform",
+        "views",
+        "amount",
+        "status",
+        "wallet_address",
+        "payout_tx_id",
+        "created_at",
+      ],
+      ...rows.map((r) => [
+        r.kind,
+        r.creator_email,
+        r.campaign_title,
+        r.platform ?? "",
+        r.views,
+        r.amount,
+        r.status,
+        r.address ?? "",
+        r.payoutTxId ?? "",
+        r.created_at,
+      ]),
+    ]
+      .map((r) => r.map(esc).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payouts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function flagPayout(row: PayoutRow, action: "flag" | "unflag") {
     if (!row.submissionId) return;
@@ -113,7 +162,16 @@ export default function AdminPayoutsList({ rows }: { rows: PayoutRow[] }) {
         {count("Withdrawal requested")} withdrawal requested ·{" "}
         {count("Paid")} paid · {count("Rejected / Returned")} returned
       </p>
-      {rows.map((r) => (
+      <div>
+        <button
+          type="button"
+          onClick={exportCsv}
+          className="inline-flex items-center gap-1.5 rounded-full border border-fg/20 px-4 py-2 text-xs font-black text-fg transition hover:border-fg/40"
+        >
+          ⬇ Export payouts (CSV)
+        </button>
+      </div>
+      {visibleRows.map((r) => (
         <article
           key={r.key}
           className="rounded-2xl border border-fg/10 bg-card p-5"
@@ -140,6 +198,19 @@ export default function AdminPayoutsList({ rows }: { rows: PayoutRow[] }) {
               {r.kind === "withdrawal" && r.address && (
                 <p className="mt-1 break-all font-mono text-xs font-bold text-fg/60">
                   {r.network ?? "USDT"} → {r.address}
+                </p>
+              )}
+              {r.kind === "withdrawal" && r.payoutTxId && (
+                <p className="mt-1 break-all text-xs text-fg/50">
+                  Payout TxID:{" "}
+                  <a
+                    href={`https://tronscan.org/#/transaction/${r.payoutTxId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono font-bold text-fg underline"
+                  >
+                    {r.payoutTxId}
+                  </a>
                 </p>
               )}
               <p className="mt-1 text-xs text-fg/50">
@@ -253,6 +324,20 @@ export default function AdminPayoutsList({ rows }: { rows: PayoutRow[] }) {
           )}
         </article>
       ))}
+      {rows.length > visible && (
+        <button
+          type="button"
+          onClick={() => setVisible((v) => v + PAGE_SIZE)}
+          className="w-full rounded-2xl border border-fg/20 bg-card px-4 py-3 text-sm font-bold text-fg transition hover:border-fg/40"
+        >
+          Show more ({rows.length - visible} remaining)
+        </button>
+      )}
+      {rows.length > PAGE_SIZE && visible >= rows.length && (
+        <p className="text-center text-xs text-fg/50">
+          Showing all {rows.length} payouts.
+        </p>
+      )}
     </div>
   );
 }

@@ -13,6 +13,11 @@
 # The endpoint only refreshes still-pending submissions inside the
 # 14-day tracking window; approving and paying still need the owner
 # on /admin.
+#
+# Failure alerting (Round-4 P2-A7): a failed run opens a GitHub
+# issue (permissions: issues: write below) so the failure is
+# visible without watching the Actions tab. curl has --max-time 90
+# so a hung endpoint cannot hang the step forever.
 
 name: Refresh clip views
 
@@ -21,14 +26,25 @@ on:
     - cron: "0 */3 * * *"
   workflow_dispatch: {}
 
+permissions:
+  issues: write
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
       - name: Refresh views (every 3 hours)
         run: |
-          code=$(curl -s -o /tmp/refresh.json -w "%{http_code}" \
+          code=$(curl -s --max-time 90 -o /tmp/refresh.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             https://get-paid-to-post.vercel.app/api/cron/refresh-views)
           cat /tmp/refresh.json
           test "$code" = "200"
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "${{ github.repository }}" \
+            --title "Cron failed: Refresh clip views (run ${{ github.run_id }})" \
+            --body "The 3-hour view refresh failed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Pending submissions are not getting fresh view counts until this is fixed — check the run log, then the endpoint."

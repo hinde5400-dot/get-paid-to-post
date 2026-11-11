@@ -17,7 +17,13 @@ export async function GET() {
     .from("withdrawals")
     .select("*")
     .eq("user_id", auth.user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // Round-4 P2-A3: explicit 2,000-row cap, disclosed — past
+    // 2,000 requests the OLDEST rows drop out of the creator's
+    // withdrawal history (same truncation class as
+    // getAllWithdrawals). Withdrawals grow slowly (one row per
+    // request), so this only bites after years of use.
+    .limit(2000);
   return NextResponse.json({ withdrawals: data ?? [] });
 }
 

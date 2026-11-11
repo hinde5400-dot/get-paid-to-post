@@ -125,7 +125,39 @@ export async function POST(request: Request) {
     .from("campaign-images")
     .upload(key, file, { contentType: file.type, upsert: false });
   if (uploadError) {
-    if (/campaign-images|bucket/i.test(uploadError.message)) {
+    const message = uploadError.message ?? "";
+    // Round-4 P2-A9b: a quota / bucket-full error must NOT be
+    // mislabelled as "uploads are not set up yet (migration
+    // 0032)" — the old check matched any message mentioning
+    // "bucket", so a full 1 GB free tier was misdiagnosed as a
+    // missing migration. Quota errors are checked FIRST (their
+    // messages can mention the bucket too); only a genuinely
+    // missing-bucket error keeps the migration-0032 wording.
+    if (
+      /quota|storage (is )?full|exceeded|out of (storage|space)|size limit|too large|413/i.test(
+        message
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Image storage is full — uploads are temporarily unavailable. Please try again later.",
+        },
+        { status: 503 }
+      );
+    }
+    if (
+      /bucket not found|bucket does not exist|no such bucket/i.test(message)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Image uploads are not set up yet (migration 0032). Please try again later.",
+        },
+        { status: 400 }
+      );
+    }
+    if (/campaign-images|bucket/i.test(message)) {
       return NextResponse.json(
         {
           error:
