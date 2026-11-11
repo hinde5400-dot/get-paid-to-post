@@ -38,6 +38,49 @@ export default function ConnectPage() {
     if (youtube) setYoutubeStatus(youtube);
   }, []);
 
+  // P2-13: validate a NAMED connection's token on load. A stored
+  // name only proves the token worked at connect time — a token
+  // revoked or expired since then still shows "Connected" from
+  // the row alone. These helpers ask the profile endpoint for a
+  // LIVE check (?validate=1) and return the confirmed name, or
+  // null when the token could not be confirmed (dead token, no
+  // name returned, or the endpoint failed). The caller maps null
+  // to "saved-reconnect" instead of claiming "Connected".
+  // The server half honours ?validate=1 with a real provider call
+  // in both profile endpoints, so a revoked token now correctly
+  // shows "Saved — couldn't confirm, reconnect" here.
+  async function fetchConfirmedTikTokName(): Promise<string | null> {
+    try {
+      const res = await fetch("/api/auth/tiktok/profile?validate=1");
+      if (!res.ok) return null;
+      const p = (await res.json()) as {
+        connected?: boolean;
+        username?: string | null;
+        display_name?: string | null;
+      };
+      if (p.connected === false) return null;
+      return p.username ?? p.display_name ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function fetchConfirmedYouTubeName(): Promise<string | null> {
+    try {
+      const res = await fetch("/api/auth/youtube/profile?validate=1");
+      if (!res.ok) return null;
+      const p = (await res.json()) as {
+        connected?: boolean;
+        channel_title?: string | null;
+        channel_handle?: string | null;
+      };
+      if (p.connected === false) return null;
+      return p.channel_title ?? p.channel_handle ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   useEffect(() => {
     async function load() {
       const supabase = getBrowserClient();
@@ -65,7 +108,12 @@ export default function ConnectPage() {
         if (c) {
           const name = c.username ?? c.display_name;
           if (name) {
-            setTiktokConnected(name);
+            // Row has a name — validate the token before claiming
+            // "Connected" (P2-13). A null here means the login
+            // could not be confirmed: show "Saved — couldn't
+            // confirm, reconnect" instead of a stale "Connected".
+            const confirmed = await fetchConfirmedTikTokName();
+            setTiktokConnected(confirmed ?? "saved-reconnect");
           } else {
             // Row exists but TikTok never returned a name (the
             // profile call failed during the callback) — re-read it
@@ -113,7 +161,10 @@ export default function ConnectPage() {
         if (y) {
           const name = y.channel_title ?? y.channel_handle;
           if (name) {
-            setYoutubeConnected(name);
+            // Row has a name — validate the token before claiming
+            // "Connected" (P2-13), same as TikTok above.
+            const confirmed = await fetchConfirmedYouTubeName();
+            setYoutubeConnected(confirmed ?? "saved-reconnect");
           } else {
             // Row exists but Google never returned a channel title
             // (the channels call failed during the callback) —
@@ -274,7 +325,9 @@ export default function ConnectPage() {
           {tiktokConnected
             ? tiktokConnected === "saved-unverified"
               ? "Saved — we couldn't confirm the account name, so verify it at submit: only videos from your own connected TikTok account count. We use this only to verify your identity and read your own videos' view counts."
-              : `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
+              : tiktokConnected === "saved-reconnect"
+                ? "Saved — we couldn't confirm this login, so reconnect it: only videos from your own connected TikTok account count. We use this only to verify your identity and read your own videos' view counts."
+                : `Connected as @${tiktokConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with TikTok so we can verify your identity and read your own videos' view counts. We never post, edit or delete your videos."}
         </p>
         <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">
@@ -325,7 +378,9 @@ export default function ConnectPage() {
           {youtubeConnected
             ? youtubeConnected === "saved-unverified"
               ? "Saved — we couldn't confirm the channel name, so verify it at submit: only videos from your own connected YouTube channel count. We use this only to verify your identity and read your own videos' view counts."
-              : `Connected as ${youtubeConnected}. We use this only to verify your identity and read your own videos' view counts.`
+              : youtubeConnected === "saved-reconnect"
+                ? "Saved — we couldn't confirm this login, so reconnect it: only videos from your own connected YouTube channel count. We use this only to verify your identity and read your own videos' view counts."
+                : `Connected as ${youtubeConnected}. We use this only to verify your identity and read your own videos' view counts.`
             : "Log in with Google so we can verify your YouTube channel and read your own videos' view counts. Only videos from your connected channel count — we never post, edit or delete your videos."}
         </p>
         <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">

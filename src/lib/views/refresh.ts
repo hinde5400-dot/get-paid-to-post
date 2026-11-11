@@ -4,7 +4,9 @@
 //
 // Rules:
 // - Only PENDING submissions inside the 14-day tracking window are
-//   refreshed (the SQL function lists them, stalest first).
+//   refreshed (the SQL function lists them, stalest first), at most
+//   MAX_ROWS_PER_RUN per run — the rest wait for the next run and
+//   are reported as `remaining` in the summary (P2-25).
 // - A submission is skipped when it was refreshed < 3 hours ago —
 //   that is the cadence Turn asked for ("har 3 hours bad views
 //   refresh hon").
@@ -37,12 +39,29 @@ export interface RefreshSummary {
   updated: number;
   skipped: number;
   failed: number;
+  /**
+   * Rows left unprocessed this run (oldest-first chunking, P2-25):
+   * the next scheduled run picks them up first. 0 means this run
+   * covered everything the list returned.
+   */
+  remaining: number;
   byPlatform: Record<
     string,
     { updated: number; failed: number; skipped: number }
   >;
   errors: string[];
 }
+
+/**
+ * Max rows processed per run (P2-25). The route runs under Vercel
+ * Hobby's 60s cap (maxDuration = 60 — do NOT raise it), and rows
+ * are processed sequentially with a per-row TikTok/YouTube API
+ * call, so an unbounded run can be killed mid-run with no summary.
+ * 60 rows ≈ 1s per row worst case, safely inside the budget; the
+ * list is stalest-first, so the oldest rows are always the ones
+ * processed, and `remaining` tells the next run what is left.
+ */
+const MAX_ROWS_PER_RUN = 60;
 
 interface PendingRow {
   id: string;
@@ -81,6 +100,7 @@ export async function refreshPendingViews(
     updated: 0,
     skipped: 0,
     failed: 0,
+    remaining: 0,
     byPlatform: {},
     errors: [],
   };
@@ -122,6 +142,17 @@ export async function refreshPendingViews(
     );
   }
   const pending = (rows ?? []) as PendingRow[];
+
+  // P2-25: process only the oldest MAX_ROWS_PER_RUN rows this run.
+  // The list is stalest-first (see list_pending_submissions_for_
+  // refresh), so the oldest rows go first and the rest wait for
+  // the next 3-hour run — a run can no longer be killed mid-list
+  // with no summary. `remaining` counts the listed rows left
+  // unprocessed; the list itself is capped at 200 by the SQL
+  // function, so a backlog past 200 still reports remaining 140
+  // until the list drains below the cap.
+  const batch = pending.slice(0, MAX_ROWS_PER_RUN);
+  summary.remaining = pending.length - batch.length;
 
   // TikTok tokens, once per run, keyed by creator. A list error is
   // logged, not silently ignored (P2-8) — with no tokens every
@@ -190,7 +221,7 @@ export async function refreshPendingViews(
     youtubeChannelByUser.set(row.user_id, row.channel_id);
   }
 
-  for (const row of pending) {
+  for (const row of batch) {
     summary.checked += 1;
     const platform = row.platform;
     const last = row.views_refreshed_at

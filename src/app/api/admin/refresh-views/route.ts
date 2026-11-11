@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { refreshPendingViews } from "@/lib/views/refresh";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/admin/refresh-views — owner-only manual view refresh.
@@ -28,6 +29,20 @@ export async function POST() {
     return NextResponse.json(
       { error: "View refresh is owner-only." },
       { status: 403 }
+    );
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 manual
+  // refreshes per minute per admin, same pattern as the other
+  // admin POST routes — a refresh is a long job, so rapid-fire
+  // clicks are throttled.
+  const rl = rateLimit(`admin-refresh-views:${auth.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
     );
   }
   try {

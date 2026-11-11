@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/admin/unblock — owner-only. Lifts a block and resets
@@ -44,7 +45,27 @@ export async function POST(request: Request) {
       { status: 403 }
     );
   }
-  const body = (await request.json()) as { userId?: string };
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 unblocks per
+  // minute per admin, same pattern as the other admin POST routes.
+  const rl = rateLimit(`admin-unblock:${auth.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
+    );
+  }
+  let body: { userId?: string };
+  try {
+    body = (await request.json()) as { userId?: string };
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request — send a valid JSON body." },
+      { status: 400 }
+    );
+  }
   if (!body.userId) {
     return NextResponse.json({ error: "userId is required." }, { status: 400 });
   }

@@ -71,14 +71,17 @@ async function handle(request: Request) {
   }
   try {
     const summary = await refreshPendingViews(supabase);
-    // P1-11: the whole run failed — every row failed (or nothing
-    // could be checked) — so the workflow must see a non-200.
-    // Partial failure stays 200 with the failed counts in the body.
+    // P1-11 / P2-3: the whole run failed — every checkable row
+    // failed — so the workflow must see a non-200. Partial failure
+    // stays 200 with the failed counts in the body. Skips are
+    // neutral, not proof of success: every Instagram row counts as
+    // skipped, so a run where all TikTok/YouTube rows failed must
+    // still 503 even when skipped > 0.
     if (
       summary.checked > 0 &&
       summary.updated === 0 &&
-      summary.skipped === 0 &&
-      summary.failed >= summary.checked
+      summary.failed > 0 &&
+      summary.failed === summary.checked - summary.skipped
     ) {
       return NextResponse.json(
         { ok: false, error: "View refresh failed for every row.", ...summary },
