@@ -14,7 +14,7 @@ import {
 import { fetchPostedTime } from "@/lib/views/posted-time";
 import { countWords, validatePostUrl, validateProofUrl } from "@/lib/validate";
 import { rateLimit } from "@/lib/rate-limit";
-import { canonicalizePostUrl } from "@/lib/canonical-url";
+import { canonicalizePostUrl, resolveRedirectUrl } from "@/lib/canonical-url";
 import type { Platform } from "@/lib/types";
 import { platformsFromRow, platformNamesText } from "@/lib/types";
 import { fetchYouTubeVideoDetails } from "@/lib/views/youtube";
@@ -36,8 +36,12 @@ interface BundleBody {
 /**
  * Author handle from an Instagram Reel/post URL:
  * instagram.com/<handle>/reel/<id> or /p/<id>. A bare
- * instagram.com/reel/<id> link carries no handle (null) — the
- * gate cannot check it, so it is allowed but flagged unverified.
+ * instagram.com/reel/<id> link carries no handle (null) — and a
+ * null handle is now REJECTED at submit time (round-3 P1-5): a
+ * link with no author cannot be checked against the creator's
+ * linked profile, so it must not sail past the ownership gate
+ * flagged unverified. ig.me short links are resolved to the real
+ * Reel URL first (see below) before this runs.
  */
 function instagramHandleFromUrl(raw: string): string | null {
   try {
@@ -71,6 +75,68 @@ function instagramHandleFromProfileLink(
     return segs[0].toLowerCase();
   } catch {
     return null;
+  }
+}
+
+/** Proof-URL live check (round-3 P2-15): best-effort HEAD of a
+ *  proof link at submit time. A dead link (non-2xx) or a direct
+ *  image link that does not answer as an image is rejected — the
+ *  syntactic check alone let any `.png` URL on any host pass.
+ *  FAIL SOFT like short-link resolution: a host that does not
+ *  answer at all (network error / timeout) or refuses HEAD (405)
+ *  does NOT block the submit — the admin still opens the link at
+ *  review. Screenshot-host page links (Imgur, prnt.sc, …) are
+ *  HTML pages, not images, so only their status is checked, never
+ *  their content-type. */
+const PROOF_HEAD_TIMEOUT_MS = 5000;
+
+async function checkProofUrlLive(
+  raw: string
+): Promise<{ ok: boolean; error?: string }> {
+  const target = /^https?:\/\//i.test(raw.trim())
+    ? raw.trim()
+    : `https://${raw.trim()}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROOF_HEAD_TIMEOUT_MS);
+  try {
+    const res = await fetch(target, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; GetPaidToPost/1.0)" },
+    });
+    if (res.status === 405) return { ok: true };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `That proof link could not be opened (HTTP ${res.status}) — check the link and try again.`,
+      };
+    }
+    let path = "";
+    try {
+      path = new URL(target).pathname;
+    } catch {
+      path = "";
+    }
+    if (/\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(path)) {
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType && !contentType.toLowerCase().startsWith("image/")) {
+        return {
+          ok: false,
+          error:
+            "That proof link did not return an image — paste a direct image link (.png, .jpg, .webp or .gif) or a screenshot link from Imgur, Lightshot (prnt.sc), ibb.co or postimages.",
+        };
+      }
+    }
+    return { ok: true };
+  } catch (err) {
+    console.warn(
+      `Proof HEAD check failed for ${target}, allowing submit (fail soft):`,
+      err instanceof Error ? err.message : err
+    );
+    return { ok: true };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -203,15 +269,33 @@ export async function POST(request: Request) {
   // the same video pasted under a different spelling is caught as
   // a duplicate. Resolution never blocks a submit — on any failure
   // the submitted URL is kept (see canonicalizePostUrl).
-  // NOTE: the Instagram handle is read from the RAW submitted URL
-  // before this loop — canonicalization drops the author segment
-  // (see canonical-url.ts), so after it there is no handle left
-  // to compare against the stored profile link.
+  //
+  // The Instagram handle is read BEFORE canonicalization drops
+  // the author segment (see canonical-url.ts) — but AFTER
+  // resolving an ig.me short link, because ig.me carries no
+  // handle itself and the resolved Reel URL does (round-3 P1-5:
+  // the handle used to be read from the raw URL, so the resolved
+  // handle was discarded and ig.me links bypassed the gate).
   const instagramRawUrl =
     links.find((l) => l.platform === "instagram")?.url ?? null;
-  const instagramHandle = instagramRawUrl
-    ? instagramHandleFromUrl(instagramRawUrl)
-    : null;
+  let instagramHandle: string | null = null;
+  if (instagramRawUrl) {
+    let handleSource = instagramRawUrl;
+    try {
+      const rawHost = new URL(
+        /^https?:\/\//i.test(instagramRawUrl.trim())
+          ? instagramRawUrl.trim()
+          : `https://${instagramRawUrl.trim()}`
+      ).hostname.toLowerCase();
+      if (rawHost === "ig.me") {
+        handleSource = await resolveRedirectUrl(instagramRawUrl);
+      }
+    } catch {
+      // Unparseable / unresolvable short link: keep the raw URL —
+      // the gate below rejects it for having no handle.
+    }
+    instagramHandle = instagramHandleFromUrl(handleSource);
+  }
   for (const l of links) {
     l.url = await canonicalizePostUrl(l.url, l.platform);
   }
@@ -221,9 +305,13 @@ export async function POST(request: Request) {
   // with the Instagram profile link the creator saved in
   // onboarding (users.instagram_url). No stored link → the creator
   // must save one first. A mismatching handle → the Reel is not
-  // theirs. A URL with no extractable handle (instagram.com/reel/
-  // <id>) is allowed but flagged posted_time_unverified, as today
-  // — the admin hand-checks it.
+  // theirs. A URL with no extractable handle (bare
+  // instagram.com/reel/<id>, or an ig.me link that did not resolve
+  // to a handle-bearing URL) is REJECTED — it cannot be checked
+  // against the linked profile at all, so it must not slip past
+  // the gate flagged unverified. The admin hand-check remains as
+  // the second check, against the handle stored on the submission
+  // (migration 0039), not the creator's current profile link.
   const instagramLink = links.find((l) => l.platform === "instagram");
   if (instagramLink) {
     const storedInstagram = profile?.instagram_url ?? null;
@@ -237,7 +325,16 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (instagramHandle && instagramHandle !== storedHandle) {
+    if (!instagramHandle) {
+      return NextResponse.json(
+        {
+          error:
+            "Paste the full Reel link from the profile, not a share link — a bare instagram.com/reel/… link or an ig.me share link does not show whose Reel it is, so it cannot be checked against your linked Instagram profile. Open the Reel on the profile and copy that link instead.",
+        },
+        { status: 400 }
+      );
+    }
+    if (instagramHandle !== storedHandle) {
       return NextResponse.json(
         {
           error:
@@ -332,6 +429,11 @@ export async function POST(request: Request) {
   // captured here so the posted-time loop reuses the gate's
   // lookup instead of calling TikTok a second time.
   let tiktokPostedAt: string | null = null;
+  // Round-3 P2-18: TikTok fails OPEN on an API outage (unlike
+  // YouTube, which fails closed). The submit is still allowed,
+  // but the creator is told it went in unverified instead of
+  // seeing a silent success.
+  let tiktokUnverified = false;
   if (tiktokLink) {
     const { data: tkConn } = await supabase
       .from("tiktok_connections")
@@ -418,7 +520,10 @@ export async function POST(request: Request) {
       // "TikTok could not be reached right now" / unreadable
       // video ID: the API failed, not the creator — allow the
       // submit flagged unverified for the admin's hand-check
-      // (tiktokPostedAt stays null, so the clip is unverified).
+      // (tiktokPostedAt stays null, so the clip is unverified),
+      // and surface that to the creator in the response (P2-18)
+      // instead of a silent success.
+      tiktokUnverified = true;
     } else {
       if (result.tokens) {
         await supabase.rpc("save_tiktok_tokens", {
@@ -511,6 +616,15 @@ export async function POST(request: Request) {
         { error: proofCheck.error ?? "Proof must be a real link." },
         { status: 400 }
       );
+    }
+  }
+  // Live HEAD check (round-3 P2-15): a dead proof link is
+  // rejected here, not only when the admin opens it at review.
+  // A host that does not answer at all fails soft (allowed).
+  for (const p of proof) {
+    const live = await checkProofUrlLive(p);
+    if (!live.ok) {
+      return NextResponse.json({ error: live.error }, { status: 400 });
     }
   }
 
@@ -624,6 +738,13 @@ export async function POST(request: Request) {
       // supply a posted time.
       posted_at: postedInfo[i]?.postedAt ?? null,
       posted_time_unverified: postedInfo[i]?.unverified ?? true,
+      // Instagram handle that matched at submit time (migration
+      // 0039, round-3 P2-17): the admin hand-checks the Reel
+      // against THIS handle, not the creator's current profile
+      // link. Null on non-Instagram rows (and on rows written
+      // before the migration).
+      instagram_handle_matched:
+        l.platform === "instagram" ? instagramHandle : null,
     });
     if (insError) {
       // A concurrent submit slipped past the pre-check: roll back
@@ -644,6 +765,10 @@ export async function POST(request: Request) {
     codes,
     bundleId,
     duplicateWarning,
+    // Round-3 P2-18: TikTok could not be reached, so the TikTok
+    // clip(s) went in unverified — the UI shows this instead of
+    // a silent success. The submit itself still succeeded.
+    ...(tiktokUnverified ? { tiktokUnverified: true } : {}),
     message: duplicateWarning
       ? "Submitted, but a duplicate link was detected and rejected as a duplicate."
       : "Your bundle was submitted and is Under Review at $0 until approved.",

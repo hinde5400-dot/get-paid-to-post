@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { BrandMessage } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
@@ -9,8 +9,23 @@ function imageUrl(campaignId: string, messageId: string) {
   return `/api/campaigns/${campaignId}/messages/${messageId}/image`;
 }
 
-// Bubbles show only the time; the thread header already carries the
-// full date of the latest message.
+// Bubbles show only the time; a day-divider chip is inserted
+// whenever the date changes mid-thread, and the thread header
+// already carries the full date of the latest message.
+function dayKey(iso: string) {
+  return new Date(iso).toDateString();
+}
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  if (d.toDateString() === new Date().toDateString()) return "Today";
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function timeLabel(iso: string) {
   return new Date(iso).toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -222,11 +237,21 @@ export default function AdminMessagesList({
             </div>
 
             <div className="mt-4 max-h-96 space-y-3 overflow-y-auto rounded-2xl bg-ink/60 p-4">
-              {thread.map((m) => {
+              {thread.map((m, i) => {
                 const own = m.sender === "admin";
+                const showDay =
+                  i === 0 ||
+                  dayKey(m.created_at) !== dayKey(thread[i - 1].created_at);
                 return (
+                  <Fragment key={m.id}>
+                    {showDay && (
+                      <div className="flex justify-center">
+                        <span className="rounded-full bg-fg/10 px-3 py-1 text-[11px] font-bold text-fg/50">
+                          {dayLabel(m.created_at)}
+                        </span>
+                      </div>
+                    )}
                   <div
-                    key={m.id}
                     className={`flex ${own ? "justify-end" : "justify-start"}`}
                   >
                     <div
@@ -267,6 +292,7 @@ export default function AdminMessagesList({
                       </p>
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
             </div>

@@ -8,8 +8,10 @@ import {
   getCampaignRejectionReason,
   getUserSubmissions,
   getWallet,
+  isExpiredUnpaidPending,
   type BrandCampaignStats,
 } from "@/lib/data";
+import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import MyPostsList from "@/components/MyPostsList";
 import CopyButton from "@/components/CopyButton";
@@ -275,6 +277,64 @@ async function BrandDashboard({
     const reason = await getCampaignRejectionReason(c.id);
     if (reason) rejectionReasons.set(c.id, reason);
   }
+  // Unread admin replies (round-3 P1-8): the brand chat notifies
+  // nobody, so the dashboard card carries the badge instead.
+  // brand_messages.is_read is the ADMIN's read marker — the
+  // admin-only PATCH marks every message in a thread read, so it
+  // cannot say whether the BRAND saw a reply. The badge rule
+  // instead: an admin message newer than the brand's latest
+  // message in that thread (an admin reply the brand has not
+  // answered since — a brand with no messages yet counts any
+  // admin message as unread). The badge clears when the brand
+  // replies; merely opening the chat does not clear it yet — a
+  // brand-side mark-read needs a messages-route change (not in
+  // this batch). Best-effort: a failed chat read shows no badge
+  // rather than breaking the dashboard.
+  const unreadAdminReplyById = new Map<string, boolean>();
+  if (campaigns.length > 0) {
+    try {
+      const supabase = getServerClient();
+      if (supabase) {
+        const { data: chatRows } = await supabase
+          .from("brand_messages")
+          .select("campaign_id, sender, created_at")
+          .in(
+            "campaign_id",
+            campaigns.map((c) => c.id)
+          )
+          .order("created_at", { ascending: true });
+        const byCampaign = new Map<
+          string,
+          { sender: string; created_at: string }[]
+        >();
+        for (const row of (chatRows ?? []) as {
+          campaign_id: string;
+          sender: string;
+          created_at: string;
+        }[]) {
+          const list = byCampaign.get(row.campaign_id) ?? [];
+          list.push(row);
+          byCampaign.set(row.campaign_id, list);
+        }
+        for (const [campaignId, thread] of byCampaign) {
+          const lastBrandAt = Math.max(
+            0,
+            ...thread
+              .filter((m) => m.sender === "brand")
+              .map((m) => new Date(m.created_at).getTime())
+          );
+          const unread = thread.some(
+            (m) =>
+              m.sender === "admin" &&
+              new Date(m.created_at).getTime() > lastBrandAt
+          );
+          if (unread) unreadAdminReplyById.set(campaignId, true);
+        }
+      }
+    } catch {
+      // No badge — the dashboard still loads.
+    }
+  }
 
   const metaName = user.user_metadata?.full_name;
   const displayName =
@@ -343,6 +403,7 @@ async function BrandDashboard({
                 campaign={c}
                 stats={statsById.get(c.id) ?? null}
                 rejectionReason={rejectionReasons.get(c.id) ?? null}
+                hasUnreadAdminReply={unreadAdminReplyById.get(c.id) ?? false}
               />
             ))}
           </div>
@@ -367,10 +428,12 @@ function BrandCampaignCard({
   campaign: c,
   stats,
   rejectionReason,
+  hasUnreadAdminReply = false,
 }: {
   campaign: Campaign;
   stats: BrandCampaignStats | null;
   rejectionReason?: string | null;
+  hasUnreadAdminReply?: boolean;
 }) {
   const status = brandStatus(c);
   const usedPct = Math.round(budgetUsedPct(c.budget_total, c.budget_left));
@@ -385,7 +448,10 @@ function BrandCampaignCard({
   // non-empty TxID means the payment was submitted and the admin
   // is verifying it.
   const paymentSubmitted = Boolean(c.payment_tx_id?.trim());
-  const needsFunding = c.status === "pending" && !paymentSubmitted;
+  // Round-3 P1-6: an expired unpaid pending (7+ days, no TxID)
+  // no longer invites payment — no Fund button, expired state.
+  const expired = isExpiredUnpaidPending(c);
+  const needsFunding = c.status === "pending" && !paymentSubmitted && !expired;
 
   return (
     <div className="rounded-2xl border border-fg/10 bg-card p-5">
@@ -400,6 +466,11 @@ function BrandCampaignCard({
             >
               {status.label}
             </span>
+            {hasUnreadAdminReply && (
+              <span className="rounded-full bg-red-500 px-2.5 py-0.5 text-xs font-black text-white">
+                New reply from admin
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm text-fg/60">
             {formatUSD(rate)} per 1k views
@@ -414,6 +485,16 @@ function BrandCampaignCard({
               Fund this campaign
             </Link>
           )}
+          {/* Round-3 P2-11: the admin chat lives on the payment
+              page for every status — a live or rejected campaign
+              used to have no link to it at all. */}
+          <Link
+            href={`/brands/payment/${c.id}#brand-chat`}
+            className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
+          >
+            Chat with admin
+            {hasUnreadAdminReply ? " •" : ""}
+          </Link>
           <Link
             href={`/campaign/${c.id}`}
             className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
@@ -425,7 +506,15 @@ function BrandCampaignCard({
 
       {/* Status banner: the brand always sees clearly where its
           campaign stands and what happens next. */}
-      {c.status === "pending" && (
+      {c.status === "pending" && expired && (
+        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
+          <span className="font-black">Expired — create a new campaign.</span>{" "}
+          This campaign was never funded within 7 days, so it expired
+          and can no longer be paid for. Create a new campaign to
+          start again.
+        </div>
+      )}
+      {c.status === "pending" && !expired && (
         <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
           <span className="font-black">Pending — not live yet.</span>{" "}
           {needsFunding ? (

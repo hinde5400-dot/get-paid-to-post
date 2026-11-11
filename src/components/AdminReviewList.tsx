@@ -34,6 +34,17 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+/**
+ * Instagram handle that matched at submit time (migration 0039,
+ * round-3 P2-17) — the admin hand-check anchors on this handle,
+ * not the creator's current linked profile, which may have
+ * changed since the clip was submitted.
+ */
+function instagramHandleMatched(s: Submission): string | null {
+  const v = s.instagram_handle_matched;
+  return typeof v === "string" && v.trim() ? v.trim().toLowerCase() : null;
+}
+
 export default function AdminReviewList({
   submissions,
   /** Live bot-rejection count per creator (from /admin's Fraud
@@ -213,6 +224,42 @@ export default function AdminReviewList({
       // "other" with no note still stores the fixed "other" value —
       // that is what fraud tooling counts later.
       reason = picked === "other" && note ? `other: ${note}` : picked;
+    }
+    // Round-3 P2-5: approve / reject-after-approve used to be
+    // one-click — both move money, so both confirm first (same
+    // window.confirm pattern as the override / block confirms).
+    if (action === "approve") {
+      let est = 0;
+      if (s.rate_per_1k != null && v > 0) {
+        const calc = payoutForViews(
+          v,
+          s.rate_per_1k,
+          s.max_payout_per_post ?? MAX_PAYOUT_DEFAULT
+        );
+        est = calc.earnings;
+        if (
+          s.campaign_budget_left != null &&
+          est > s.campaign_budget_left
+        ) {
+          est = Math.max(0, s.campaign_budget_left);
+        }
+      }
+      if (
+        !window.confirm(
+          `Approve this clip and credit ${formatUSD(est)} to the creator?`
+        )
+      ) {
+        return;
+      }
+    }
+    if (action === "reject" && s.status === "approved") {
+      if (
+        !window.confirm(
+          `Reject this approved clip? This reverses ${formatUSD(s.earnings)} already credited to the creator.`
+        )
+      ) {
+        return;
+      }
     }
     const body: Record<string, unknown> = {
       submissionId: s.id,
@@ -612,7 +659,11 @@ export default function AdminReviewList({
               only "posted_time_unverified". Say so plainly, with
               the hand-check the admin must actually do and the
               creator's linked Instagram profile to check the
-              author against. */}
+              author against. Round-3 P2-17: the handle that matched
+              at submit time (migration 0039) is the anchor — check
+              the Reel author against THAT, not the creator's
+              current profile link, which may have changed since
+              the submit. */}
           {s.platform === "instagram" && s.status === "pending" && (
             <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
               <p className="font-bold">
@@ -624,6 +675,18 @@ export default function AdminReviewList({
                 matches the creator&apos;s linked Instagram profile
                 and the post time is within 30 minutes.
               </p>
+              {(() => {
+                const matched = instagramHandleMatched(s);
+                if (!matched) return null;
+                return (
+                  <p className="mt-1">
+                    Matched at submit time:{" "}
+                    <span className="font-bold">@{matched}</span> —
+                    check the Reel author against this handle, not
+                    the creator&apos;s current profile link below.
+                  </p>
+                );
+              })()}
               {instagramUrls[s.user_id] ? (
                 <p className="mt-1">
                   Linked Instagram profile:{" "}

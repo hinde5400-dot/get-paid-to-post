@@ -51,7 +51,13 @@ export default async function EarningsPage() {
 
   const available = wallet?.available_balance ?? 0;
   const pending = wallet?.pending_balance ?? 0;
-  const withdrawn = wallet?.withdrawn_total ?? 0;
+  // Round-3 P2-19: wallet.withdrawn_total is incremented at
+  // REQUEST time, so it counts money merely requested — a pending
+  // request already inflated "Total withdrawn so far". The honest
+  // total is the withdrawals the owner actually marked paid.
+  const withdrawn = withdrawals
+    .filter((w) => w.status === "paid")
+    .reduce((sum, w) => sum + Number(w.amount ?? 0), 0);
   const total = available + pending;
 
   return (
@@ -99,7 +105,8 @@ export default async function EarningsPage() {
       </div>
 
       <p className="text-sm text-fg/50">
-        Total withdrawn so far:{" "}
+        Total withdrawn so far (paid withdrawals only — pending
+        requests not included):{" "}
         <span className="font-bold text-fg">{formatUSD(withdrawn)}</span>
       </p>
 

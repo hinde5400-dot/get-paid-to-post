@@ -71,6 +71,10 @@ export default function SubmitBundleForm({
     /** One link in the bundle was a duplicate and was rejected,
      *  while the other clip(s) were submitted fine. */
     duplicateWarning?: boolean;
+    /** TikTok could not be reached at submit time, so the TikTok
+     *  clip(s) went in unverified (round-3 P2-18) — the creator
+     *  is told so instead of seeing a silent success. */
+    tiktokUnverified?: boolean;
   } | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -222,14 +226,19 @@ export default function SubmitBundleForm({
         codes: (data.codes as string[]) ?? [],
         message: data.message ?? "Your post was submitted!",
         duplicateWarning: Boolean(data.duplicateWarning),
+        tiktokUnverified: Boolean(data.tiktokUnverified),
       });
       // Clear the link/proof inputs so a resubmit after this
       // success cannot produce a confusing "already been
-      // submitted" error.
+      // submitted" error — and clear the how-made text and the
+      // rules checkbox too (round-3 P2-14), so a second submit
+      // never reuses the previous clip's description verbatim.
       setTiktok("");
       setInstagram("");
       setYoutube("");
       setProof([""]);
+      setHowMade("");
+      setAgreed(false);
     } catch (e) {
       showError(e instanceof Error ? e.message : "Submission failed.");
     } finally {
@@ -484,6 +493,14 @@ export default function SubmitBundleForm({
                 ⚠️ One link in this bundle was a duplicate and was
                 rejected — the clip(s) below are the ones that were
                 submitted and are now under review.
+              </p>
+            )}
+            {success.tiktokUnverified && (
+              <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-left text-sm font-semibold leading-relaxed text-amber-200">
+                ⚠️ TikTok couldn&apos;t be reached — submitted
+                unverified. Your TikTok clip is under review, but its
+                ownership and post time could not be checked
+                automatically — the admin will check it by hand.
               </p>
             )}
             {success.codes.length > 0 && (

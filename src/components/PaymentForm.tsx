@@ -22,6 +22,9 @@ export default function PaymentForm({
   const [txId, setTxId] = useState(existingTxId ?? "");
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // Round-3 P2-10: the API tells us when the TxID was a
+  // correction of an earlier one — the success copy says so.
+  const [wasCorrection, setWasCorrection] = useState(false);
 
   async function submit() {
     const hash = txId.trim();
@@ -42,8 +45,14 @@ export default function PaymentForm({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the payment.");
+      const corrected = Boolean(
+        (data as { corrected?: boolean }).corrected
+      );
+      setWasCorrection(corrected);
       showSuccess(
-        "Payment submitted. The admin will verify it and your campaign will go live once payment is verified."
+        corrected
+          ? "Transaction ID updated. The admin will verify the new one and your campaign will go live once payment is verified."
+          : "Payment submitted. The admin will verify it and your campaign will go live once payment is verified."
       );
       setSubmitted(true);
       // The chat opens below — scroll to it so the brand can attach
@@ -62,7 +71,9 @@ export default function PaymentForm({
     return (
       <div className="rounded-2xl border border-lime/40 bg-lime/10 p-5 text-center">
         <p className="text-3xl">🎉</p>
-        <p className="mt-2 text-lg font-black text-fg">Payment submitted</p>
+        <p className="mt-2 text-lg font-black text-fg">
+          {wasCorrection ? "Transaction ID updated" : "Payment submitted"}
+        </p>
         <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-fg/70">
           After the admin verifies your payment, your campaign will go
           live. Attach your payment screenshot in the chat below so the

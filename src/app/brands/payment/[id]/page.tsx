@@ -4,10 +4,12 @@ import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import {
   getCampaign,
   getAdminUsdtWallet,
+  getCampaignBudgetHistory,
   getCampaignMessages,
   getCampaignRejectionReason,
+  isExpiredUnpaidPending,
 } from "@/lib/data";
-import { formatUSD } from "@/lib/money";
+import { formatUSD, totalToSend } from "@/lib/money";
 import type { BrandMessage } from "@/lib/types";
 import PaymentForm from "@/components/PaymentForm";
 import BrandMessageForm from "@/components/BrandMessageForm";
@@ -46,6 +48,38 @@ export default async function BrandPaymentPage({
   } catch {
     messagesError = true;
   }
+
+  // Round-3 P1-9: budget-change banner (pending branch only).
+  // Y = the budget the brand's submitted payment covered: the
+  // earliest history row's old_budget_total (the budget before
+  // the first edit — the amount the TxID was sent against).
+  // X = current budget_total, Z = X − Y; the banner shows only
+  // when Z > 0 and a TxID is on file. The extra carries the same
+  // 15% fee on top as the payment page's own math. Best-effort:
+  // a failed history read hides the banner, never the page.
+  // (Migration 0039 lets a brand read its own campaign's history
+  // rows — the table was owner-only before that.)
+  let budgetHistory: Awaited<
+    ReturnType<typeof getCampaignBudgetHistory>
+  >[string] = [];
+  try {
+    budgetHistory =
+      (await getCampaignBudgetHistory([campaign.id]))[campaign.id] ?? [];
+  } catch {
+    budgetHistory = [];
+  }
+  const earliestBudgetChange =
+    budgetHistory.length > 0
+      ? budgetHistory[budgetHistory.length - 1]
+      : null;
+  const paidBudget =
+    earliestBudgetChange != null
+      ? Number(earliestBudgetChange.old_budget_total ?? 0)
+      : null;
+  const budgetIncrease =
+    paidBudget != null ? campaign.budget_total - paidBudget : 0;
+  const showBudgetChangeBanner =
+    Boolean(campaign.payment_tx_id?.trim()) && budgetIncrease > 0;
 
   if (campaign.status === "live") {
     return (
@@ -114,6 +148,39 @@ export default async function BrandPaymentPage({
     );
   }
 
+  // Round-3 P1-6: an expired unpaid pending (7+ days, no TxID)
+  // shows an expired state — the payment form is hidden, so the
+  // brand cannot pay for a campaign that can no longer go live.
+  if (campaign.status === "pending" && isExpiredUnpaidPending(campaign)) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="rounded-3xl border border-red-500/40 bg-card p-8 text-center">
+          <h1 className="text-xl font-black text-fg">
+            This campaign expired
+          </h1>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+            &ldquo;{campaign.title}&rdquo; was never funded within 7 days,
+            so it expired and can no longer be paid for. Create a new
+            campaign to start again.
+          </p>
+          <Link
+            href="/brands"
+            className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+          >
+            Create a new campaign
+          </Link>
+        </div>
+        <BrandChat
+          campaignId={campaign.id}
+          messages={messages}
+          messagesError={messagesError}
+          viewerIsAdmin={isOwner(profile)}
+          brandName={campaign.brand_name}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="mx-auto max-w-lg rounded-3xl border border-lime/40 bg-card p-6 md:p-8">
@@ -126,6 +193,20 @@ export default async function BrandPaymentPage({
           <span className="font-bold text-fg">{campaign.title}</span> —{" "}
           {campaign.brand_name}
         </p>
+
+        {/* Round-3 P1-9: the budget changed after the brand paid —
+            the old TxID covered a smaller amount. */}
+        {showBudgetChangeBanner && paidBudget != null && (
+          <div className="mt-5 rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
+            <span className="font-black">
+              Budget changed to {formatUSD(campaign.budget_total)}
+            </span>{" "}
+            — your submitted payment covered {formatUSD(paidBudget)};
+            send the extra {formatUSD(budgetIncrease)} + 15% fee (
+            {formatUSD(totalToSend(budgetIncrease))} total) so the
+            campaign can go live on the new budget.
+          </div>
+        )}
 
         <div className="mt-5 space-y-3">
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">

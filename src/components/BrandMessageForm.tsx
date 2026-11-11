@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { BrandMessage } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
@@ -17,8 +17,13 @@ function formatSize(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-// Short, professional timestamps: the thread shows the day once
-// (a divider chip) and each bubble shows only the time.
+// Short, professional timestamps: a day-divider chip is
+// inserted whenever the date changes mid-thread, and each bubble
+// shows only the time.
+function dayKey(iso: string) {
+  return new Date(iso).toDateString();
+}
+
 function dayLabel(iso: string) {
   const d = new Date(iso);
   if (d.toDateString() === new Date().toDateString()) return "Today";
@@ -150,16 +155,21 @@ export default function BrandMessageForm({
           </div>
         ) : (
           <>
-            <div className="flex justify-center">
-              <span className="rounded-full bg-fg/10 px-3 py-1 text-[11px] font-bold text-fg/50">
-                {dayLabel(messages[0].created_at)}
-              </span>
-            </div>
-            {messages.map((m) => {
+            {messages.map((m, i) => {
             const own = isOwn(m);
+            const showDay =
+              i === 0 ||
+              dayKey(m.created_at) !== dayKey(messages[i - 1].created_at);
             return (
+              <Fragment key={m.id}>
+                {showDay && (
+                  <div className="flex justify-center">
+                    <span className="rounded-full bg-fg/10 px-3 py-1 text-[11px] font-bold text-fg/50">
+                      {dayLabel(m.created_at)}
+                    </span>
+                  </div>
+                )}
               <div
-                key={m.id}
                 className={`flex ${own ? "justify-end" : "justify-start"}`}
               >
                 <div
@@ -212,6 +222,7 @@ export default function BrandMessageForm({
                   </p>
                 </div>
               </div>
+              </Fragment>
             );
             })}
           </>
