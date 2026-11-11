@@ -29,11 +29,19 @@ interface ChannelResponse {
   }[];
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }
+  // P2-13: ?validate=1 is a LIVE token check (used by /connect for
+  // named rows). It skips the stored-title short-circuit below and
+  // calls Google for real; a dead token answers 401 connected:false
+  // instead of the graceful stored-title fallback.
+  const validate =
+    new URL(request.url).searchParams.get("validate") === "1";
+  const invalid = () =>
+    NextResponse.json({ connected: false }, { status: 401 });
   const supabase = getServerClient();
   if (!supabase) {
     return NextResponse.json({ error: "Not configured." }, { status: 500 });
@@ -59,7 +67,7 @@ export async function GET() {
     refresh_token: string;
     token_expires_at?: string | null;
   };
-  if (row.channel_title) {
+  if (!validate && row.channel_title) {
     return NextResponse.json({
       connected: true,
       channel_id: row.channel_id,
@@ -67,10 +75,12 @@ export async function GET() {
       channel_handle: row.channel_handle ?? null,
     });
   }
-  // No title stored — ask Google again with the saved access token
-  // (decrypted; tokens are stored encrypted since migration 0019).
+  // No title stored (or ?validate=1) — ask Google again with the
+  // saved access token (decrypted; tokens are stored encrypted
+  // since migration 0019).
   let accessToken = decryptToken(row.access_token);
   if (!accessToken) {
+    if (validate) return invalid();
     return NextResponse.json({
       connected: true,
       channel_id: row.channel_id,
@@ -107,12 +117,16 @@ export async function GET() {
       }
     }
     if (!channel) {
+      if (validate) return invalid();
       return NextResponse.json({
         connected: true,
         channel_id: row.channel_id,
         channel_title: null,
         channel_handle: row.channel_handle ?? null,
       });
+    }
+    if (validate && !channel.snippet?.title && !channel.snippet?.customUrl) {
+      return invalid();
     }
     await supabase
       .from("youtube_connections")
@@ -129,6 +143,7 @@ export async function GET() {
       channel_handle: channel.snippet?.customUrl ?? null,
     });
   } catch {
+    if (validate) return invalid();
     return NextResponse.json({
       connected: true,
       channel_id: row.channel_id,

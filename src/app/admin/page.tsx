@@ -20,7 +20,7 @@ import AdminSettingsForm from "@/components/AdminSettingsForm";
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams?: { reviewPage?: string; inboxPage?: string };
+  searchParams?: { reviewPage?: string; inboxPage?: string; fraudPage?: string };
 }) {
   if (!isSupabaseConfigured) {
     return (
@@ -54,11 +54,13 @@ export default async function AdminPage({
   // (?reviewPage= / ?inboxPage=).
   const REVIEW_PAGE_SIZE = 100;
   const INBOX_PAGE_SIZE = 100;
+  const FRAUD_PAGE_SIZE = 100;
   const reviewPage = Math.max(
     1,
     Number(searchParams?.reviewPage ?? 1) || 1
   );
   const inboxPage = Math.max(1, Number(searchParams?.inboxPage ?? 1) || 1);
+  const fraudPage = Math.max(1, Number(searchParams?.fraudPage ?? 1) || 1);
 
   // Forms #26: a failed load renders an honest error state, never
   // an empty admin view. The list getters THROW on DB error.
@@ -418,6 +420,16 @@ export default async function AdminPage({
     });
   }
 
+  // Fraud paging (round-3 P2-21): the loader returns every fraud
+  // creator (it must see all rows to count them), so the page
+  // slices to the current creator page here — 100 per page, like
+  // review/inbox. The total is the full creator count, including
+  // manually blocked creators with no bot rejections.
+  const fraudPageCreators = fraudCreators.slice(
+    (fraudPage - 1) * FRAUD_PAGE_SIZE,
+    fraudPage * FRAUD_PAGE_SIZE
+  );
+
   // P1-c post-end re-check queue: APPROVED submissions on campaigns
   // in their settlement window (ended, not yet auto-deleted).
   const settlingIds = new Set(
@@ -668,7 +680,6 @@ export default async function AdminPage({
             {fraudCreators.length} creator
             {fraudCreators.length === 1 ? "" : "s"} in fraud watch ·{" "}
             {botRowTotal} bot rejection{botRowTotal === 1 ? "" : "s"} counted
-            {botRowTotal > 2000 ? " (showing first 2,000 rows)" : ""}
           </span>
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
@@ -680,7 +691,14 @@ export default async function AdminPage({
           wrong, appeal through Discord support (Terms §8).
         </p>
         <div className="mt-4">
-          <AdminFraudList creators={fraudCreators} />
+          <AdminFraudList
+            creators={fraudPageCreators}
+            total={fraudCreators.length}
+            page={fraudPage}
+            pageSize={FRAUD_PAGE_SIZE}
+            reviewPage={reviewPage}
+            inboxPage={inboxPage}
+          />
         </div>
       </section>
 

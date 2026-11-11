@@ -19,7 +19,7 @@ export default async function BrandsPage() {
   // A logged-in creator cannot launch campaigns from a creator
   // account; the owner can always test the form.
   // public.users.role is the single source of truth (migration
-  // 0034 claims it there at Google signup through a guarded RPC).
+  // 0034 claims it there at OAuth signup through a guarded RPC).
   // Auth metadata is user-writable and must never decide a role.
   const role = profile?.role ?? "creator";
   const canLaunch = !user ? false : owner || role !== "creator";

@@ -145,6 +145,10 @@ export interface Campaign {
   user_id?: string | null;
   /** Transaction ID / hash the brand pasted after paying (migration 0013). */
   payment_tx_id?: string | null;
+  /** When the TxID was submitted (migration 0038, round-3 P1-7) —
+   *  stamped by the payment route on first submit and on every
+   *  correction; an unverified TxID expires 7 days after this. */
+  payment_tx_submitted_at?: string | null;
   logo_url: string | null;
   title: string;
   rate_per_1m: number;
@@ -235,6 +239,12 @@ export interface Submission {
    *  has no API access yet) — the admin checks the post time by
    *  hand before approving (migration 0031). */
   posted_time_unverified?: boolean;
+  /** Instagram handle that matched the creator's linked profile
+   *  at submit time (migration 0039, round-3 P2-17) — the admin
+   *  hand-check anchors on this, not the creator's current
+   *  profile link, which may have changed since. Null on
+   *  non-Instagram rows and pre-0039 rows. */
+  instagram_handle_matched?: string | null;
   bundle_id: string;
   post_url: string;
   platform: Platform;

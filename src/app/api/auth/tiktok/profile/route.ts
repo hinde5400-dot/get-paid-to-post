@@ -27,11 +27,19 @@ interface TikTokUser {
   username?: string;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }
+  // P2-13: ?validate=1 is a LIVE token check (used by /connect for
+  // named rows). It skips the stored-name short-circuit below and
+  // calls TikTok for real; a dead token answers 401 connected:false
+  // instead of the graceful stored-name fallback.
+  const validate =
+    new URL(request.url).searchParams.get("validate") === "1";
+  const invalid = () =>
+    NextResponse.json({ connected: false }, { status: 401 });
   const supabase = getServerClient();
   if (!supabase) {
     return NextResponse.json({ error: "Not configured." }, { status: 500 });
@@ -53,7 +61,7 @@ export async function GET() {
     avatar_url?: string | null;
     access_token: string;
   };
-  if (row.username || row.display_name) {
+  if (!validate && (row.username || row.display_name)) {
     return NextResponse.json({
       connected: true,
       username: row.username ?? null,
@@ -61,10 +69,12 @@ export async function GET() {
       avatar_url: row.avatar_url ?? null,
     });
   }
-  // No name stored — ask TikTok again with the saved access token
-  // (decrypted; tokens are stored encrypted since migration 0018).
+  // No name stored (or ?validate=1) — ask TikTok again with the
+  // saved access token (decrypted; tokens are stored encrypted
+  // since migration 0018).
   const accessToken = decryptToken(row.access_token);
   if (!accessToken) {
+    if (validate) return invalid();
     return NextResponse.json({
       connected: true,
       username: null,
@@ -77,6 +87,7 @@ export async function GET() {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
+      if (validate) return invalid();
       return NextResponse.json({
         connected: true,
         username: null,
@@ -86,7 +97,8 @@ export async function GET() {
     }
     const info = (await res.json()) as { data?: { user?: TikTokUser } };
     const profile = info.data?.user;
-    if (!profile) {
+    if (!profile || (!profile.username && !profile.display_name)) {
+      if (validate) return invalid();
       return NextResponse.json({
         connected: true,
         username: null,
@@ -110,6 +122,7 @@ export async function GET() {
       avatar_url: profile.avatar_url ?? null,
     });
   } catch {
+    if (validate) return invalid();
     return NextResponse.json({
       connected: true,
       username: null,
