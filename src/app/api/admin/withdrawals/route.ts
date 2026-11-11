@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Owner-only withdrawal review. Mirrors the owner check in
@@ -41,6 +42,19 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Admin Review is owner-only." },
       { status: 403 }
+    );
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 withdrawal
+  // decisions per minute per admin — approve/paid/reject move
+  // money, so rapid-fire clicks are throttled.
+  const rl = rateLimit(`admin-withdrawals:${auth.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
     );
   }
 
@@ -116,46 +130,45 @@ export async function POST(request: Request) {
     // withdrawn_total -= amount (floored at 0: a legacy row
     // created before the fix never moved withdrawn_total, so
     // there is nothing to take back).
+    //
+    // P1-4: atomic refund (migration 0038). The old code read
+    // the wallet once and wrote absolute values with no guard,
+    // so a creator's own withdrawal debit landing between the
+    // read and the write was overwritten and the debit vanished
+    // while its withdrawal row still existed. The RPC moves both
+    // fields inside the database.
     let refunded = false;
-    const { data: wallet } = await supabase
-      .from("wallets")
-      .select("*")
-      .eq("user_id", row.user_id as string)
-      .single();
-    if (wallet) {
-      const wRow = wallet as Record<string, unknown>;
-      const { error: refundError } = await supabase
-        .from("wallets")
-        .update({
-          available_balance:
-            Number(wRow.available_balance ?? 0) + amount,
-          withdrawn_total: Math.max(
-            0,
-            Math.round(
-              (Number(wRow.withdrawn_total ?? 0) - amount) * 100
-            ) / 100
-          ),
-        })
-        .eq("user_id", row.user_id as string);
-      if (refundError) {
-        // The status already flipped to rejected above, so put it
-        // back to what it was — otherwise the row would sit
-        // rejected with the money never refunded, and no retry
-        // would be possible (reject is blocked from "rejected").
-        await supabase
-          .from("withdrawals")
-          .update({ status: previousStatus })
-          .eq("id", row.id as string)
-          .eq("status", "rejected");
-        return NextResponse.json(
-          {
-            error: `Could not refund the amount (${refundError.message}). The withdrawal was NOT rejected — try again.`,
-          },
-          { status: 500 }
-        );
-      }
-      refunded = true;
+    const {
+      data: refundRows,
+      error: refundError,
+    } = await supabase.rpc("refund_wallet_withdrawal", {
+      p_user_id: row.user_id as string,
+      p_amount: amount,
+    });
+    if (refundError) {
+      // The status already flipped to rejected above, so put it
+      // back to what it was — otherwise the row would sit
+      // rejected with the money never refunded, and no retry
+      // would be possible (reject is blocked from "rejected").
+      await supabase
+        .from("withdrawals")
+        .update({ status: previousStatus })
+        .eq("id", row.id as string)
+        .eq("status", "rejected");
+      return NextResponse.json(
+        {
+          error: `Could not refund the amount (${refundError.message}). The withdrawal was NOT rejected — try again (run migration 0038 in Supabase first if the function is missing).`,
+        },
+        { status: 500 }
+      );
     }
+    const refundResult = (refundRows as
+      | { ok: boolean }[]
+      | null)?.[0];
+    // ok = false means no wallet row exists for this creator:
+    // nothing was debited for this request, so there is nothing
+    // to refund — the rejection still stands.
+    refunded = Boolean(refundResult?.ok);
     return NextResponse.json({
       ok: true,
       message: refunded

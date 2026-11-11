@@ -45,7 +45,7 @@ export async function POST(
   const { data: campaign, error: campError } = await supabase
     .from("campaigns")
     .select(
-      "id, user_id, status, title, budget_total, brand_name, platform_fee, rates, view_bonus_per_1k, min_views, max_payout_per_post, payment_tx_id, created_at"
+      "id, user_id, status, title, budget_total, brand_name, platform_fee, rates, view_bonus_per_1k, min_views, max_payout_per_post, payment_tx_id, payment_tx_submitted_at, created_at"
     )
     .eq("id", params.id)
     .single();
@@ -86,6 +86,7 @@ export async function POST(
       campaign as {
         status?: string | null;
         payment_tx_id?: string | null;
+        payment_tx_submitted_at?: string | null;
         created_at?: string | null;
       }
     )
@@ -153,10 +154,12 @@ export async function POST(
   // one canonical spelling.
   const txIdLower = txId.toLowerCase();
   // One real payment cannot "fund" two campaigns: the same TxID
-  // on any OTHER campaign is rejected. (No unique DB constraint
-  // exists on payment_tx_id, so this is enforced here and at
-  // approve time.) The check is case-insensitive — ilike, because
-  // hex has no LIKE wildcards in it.
+  // on any OTHER campaign is rejected. Enforced here, at approve
+  // time, and by the unique partial index on lower(payment_tx_id)
+  // (migration 0038) — the index is the backstop for a race
+  // between the check below and the update. The check is
+  // case-insensitive — ilike, because hex has no LIKE wildcards
+  // in it.
   const { data: txClash } = await supabase
     .from("campaigns")
     .select("id")
@@ -178,14 +181,30 @@ export async function POST(
   ).trim();
   const isCorrection = Boolean(previousTxId) && previousTxId.toLowerCase() !== txIdLower;
 
+  // P1-7 (migration 0038): stamp the server time of this TxID
+  // submission — first submit and every correction. The 7-day
+  // expiry for a TxID-on-file campaign runs from this stamp, so
+  // a correction restarts the window; without it a pasted hash
+  // would defeat expiry forever.
   const { error } = await supabase
     .from("campaigns")
-    .update({ payment_tx_id: txIdLower })
+    .update({
+      payment_tx_id: txIdLower,
+      payment_tx_submitted_at: new Date().toISOString(),
+    })
     .eq("id", params.id);
   if (error) {
-    const msg = /payment_tx_id/i.test(error.message)
-      ? "Payment system is not set up yet (migration 0013). Please try again later."
-      : error.message;
+    // A unique-violation on the 0038 partial index means the TxID
+    // landed on another campaign between the clash check and the
+    // update — report it as "already used", not a setup error.
+    const isUniqueViolation =
+      (error as { code?: string }).code === "23505" ||
+      /duplicate key|payment_tx_id/i.test(error.message);
+    const msg = isUniqueViolation
+      ? "This Transaction ID was already used on another campaign — one payment cannot fund two campaigns."
+      : /payment_tx_id/i.test(error.message)
+        ? "Payment system is not set up yet (migration 0013). Please try again later."
+        : error.message;
     return NextResponse.json({ error: msg }, { status: 400 });
   }
   // Notify the owner on Discord (Item 11b) — full campaign details

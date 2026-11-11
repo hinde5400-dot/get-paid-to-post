@@ -146,14 +146,55 @@ function AdminCampaignCard({
 
   const status = campaignStatus(c);
   const isPending = c.status === "pending";
+  // TxID submission time (migration 0038) — the Campaign type in
+  // lib/types.ts does not declare it yet (another file's change),
+  // so it is read off the mapped row here; mapCampaign in
+  // lib/data.ts attaches it.
+  const paymentTxSubmittedAt = (
+    c as unknown as { payment_tx_submitted_at?: string | null }
+  ).payment_tx_submitted_at ?? null;
   // Budget edited while a payment was on file: the TxID may
   // verify a SMALLER amount than the current budget. Exact
-  // ordering cannot be proven from the stored data (no TxID
-  // timestamp), so ANY budget edit on file while a TxID is
-  // recorded raises the flag — the admin must confirm the extra
-  // budget + 15% fee arrived before approving.
+  // ordering still cannot be proven — the TxID submission time
+  // (migration 0038) now exists, but the AMOUNT behind the TxID
+  // is still unknown — so ANY budget edit on file while a TxID
+  // is recorded raises the flag: the admin must confirm the
+  // extra budget + 15% fee arrived before approving.
   const underfundedFlag =
     isPending && history.length > 0 && Boolean(c.payment_tx_id);
+  // P2-9: the same flag on LIVE cards. A live campaign's budget
+  // raise has no payment check at all (the budget-edit route
+  // never asks for a TxID), so creators earn from an unfunded
+  // pool until the owner verifies the top-up. Flag any budget
+  // INCREASE recorded after the campaign went live — an increase
+  // is a raise the brand must have paid for, and no verification
+  // exists for it. Flag only, never a block on the edit itself.
+  // (An increase from before go-live was already gated by the
+  // approve-time confirm checkbox, so it is not flagged again.)
+  const liveUnderfundedFlag =
+    c.status === "live" &&
+    Boolean(c.started_at) &&
+    history.some(
+      (h) =>
+        h.new_budget_total > h.old_budget_total &&
+        new Date(h.created_at).getTime() >
+          new Date(String(c.started_at)).getTime()
+    );
+  // P1-7: a TxID on a still-pending campaign is UNVERIFIED by
+  // definition (verification happens at approve time). Show how
+  // long it has sat unverified — 7+ days means it has expired
+  // and can no longer be approved. The clock runs from the TxID
+  // submission (migration 0038); a legacy TxID row with no
+  // timestamp falls back to the campaign's creation date.
+  const txSubmittedMs = paymentTxSubmittedAt
+    ? new Date(paymentTxSubmittedAt).getTime()
+    : c.created_at
+      ? new Date(c.created_at).getTime()
+      : NaN;
+  const txUnverifiedDays =
+    isPending && c.payment_tx_id && Number.isFinite(txSubmittedMs)
+      ? Math.max(0, Math.floor((Date.now() - txSubmittedMs) / 86400000))
+      : null;
   const usedPct = budgetUsedPct(c.budget_total, c.budget_left);
   // Spent = total − left (same definition as the budget edit
   // API). A negative left (over-spent) counts as fully spent.
@@ -552,12 +593,35 @@ function AdminCampaignCard({
               >
                 Verify on Tronscan ↗
               </a>
+              {txUnverifiedDays !== null && (
+                <p
+                  className={`mt-2 text-xs font-bold leading-relaxed ${
+                    txUnverifiedDays >= 7
+                      ? "text-red-300"
+                      : "text-amber-300"
+                  }`}
+                >
+                  ⚠ Payment unverified for {txUnverifiedDays}{" "}
+                  day{txUnverifiedDays === 1 ? "" : "s"}
+                  {txUnverifiedDays >= 7
+                    ? " — this campaign has expired (payment unverified for 7+ days) and cannot be approved. Ask the brand to create a new campaign."
+                    : " — verify it on Tronscan before approving."}
+                </p>
+              )}
               {underfundedFlag && (
                 <p className="mt-2 text-xs font-bold leading-relaxed text-amber-300">
                   ⚠ This campaign&apos;s budget was edited while a
                   payment was on file — the TxID may predate the
                   edit. Verify the extra budget + 15% fee was
                   received before approving.
+                </p>
+              )}
+              {liveUnderfundedFlag && (
+                <p className="mt-2 text-xs font-bold leading-relaxed text-amber-300">
+                  ⚠ This campaign&apos;s budget was raised while it
+                  was live — the extra budget + 15% fee was never
+                  verified. Creators are earning from the increased
+                  budget; verify the top-up reached you.
                 </p>
               )}
             </>

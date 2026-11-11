@@ -9,7 +9,7 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
   // field keeps the old convention — 'all' when all three are chosen,
   // otherwise the first chosen platform — so old code paths keep working.
   const platforms = platformsFromRow(row);
-  return {
+  const mapped: Campaign = {
     id: String(row.id),
     brand_name: String(row.brand_name ?? ""),
     // Campaign owner (migration 0013) and payment Transaction ID.
@@ -71,6 +71,14 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     started_at: (row.started_at as string | null) ?? null,
     ends_at: (row.ends_at as string | null) ?? null,
   };
+  // TxID submission time (migration 0038) — the Campaign type in
+  // lib/types.ts does not declare it yet (another file's change),
+  // so it is attached here without a type edit: the admin card
+  // reads it to show "payment unverified for X days", and
+  // isExpiredUnpaidPending below reads it off the raw row.
+  (mapped as unknown as Record<string, unknown>).payment_tx_submitted_at =
+    (row.payment_tx_submitted_at as string | null) ?? null;
+  return mapped;
 }
 
 function mapSubmission(row: Record<string, unknown>): Submission {
@@ -95,6 +103,10 @@ function mapSubmission(row: Record<string, unknown>): Submission {
     // on rows written before the migration.
     posted_at: (row.posted_at as string | null) ?? null,
     posted_time_unverified: Boolean(row.posted_time_unverified ?? false),
+    // Instagram handle that matched at submit time (migration
+    // 0039, round-3 P2-17).
+    instagram_handle_matched:
+      (row.instagram_handle_matched as string | null) ?? null,
     how_made: String(row.how_made ?? ""),
     proof_screenshots: Array.isArray(row.proof_screenshots)
       ? (row.proof_screenshots as string[])
@@ -113,29 +125,45 @@ import { isCampaignLive } from "./campaigns";
 
 /**
  * 7-day expiry for unpaid pending campaigns — the SAME rule as
- * migration 0030's campaign_expired_unpaid_pending() predicate,
- * so the API routes and the daily cron can never drift apart:
- * status = 'pending' AND no payment_tx_id (null or empty — chat
- * messages and screenshots do NOT count as payment) AND
- * created_at is 7 or more days old. "Unpaid" means NO TxID, not
- * "not is_funded": is_funded only becomes true at approve time,
- * so a campaign with a submitted TxID is paid for expiry
- * purposes even while it is still pending approval.
+ * migration 0038's campaign_expired_unpaid_pending() predicate,
+ * so the API routes and the daily cron can never drift apart.
+ *
+ * A TxID on file is NOT payment any more (round-3 P1-7): a TxID
+ * only counts once it is verified, and verification happens at
+ * approve time, which flips the status — so any row still pending
+ * with a TxID is by definition unverified. The rule:
+ *   - no TxID (null or empty — chat messages and screenshots do
+ *     NOT count as payment): created_at is 7 or more days old;
+ *   - TxID on file: payment_tx_submitted_at (migration 0038,
+ *     stamped by the payment route on first submit and on every
+ *     correction) is 7 or more days old. A correction restarts
+ *     the 7-day window — it is a new submission of payment proof.
+ *   - TxID on file but no timestamp (a pre-0038 legacy row):
+ *     falls back to created_at, so an old TxID can no longer
+ *     defeat expiry forever.
+ * "Unpaid" means "no verified payment", not "not is_funded":
+ * is_funded only becomes true at approve time.
  */
 export const UNPAID_PENDING_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function isExpiredUnpaidPending(campaign: {
   status?: string | null;
   payment_tx_id?: string | null;
+  payment_tx_submitted_at?: string | null;
   created_at?: string | null;
 }): boolean {
   if (campaign.status !== "pending") return false;
-  if (String(campaign.payment_tx_id ?? "").trim()) return false;
-  const created = campaign.created_at
-    ? new Date(campaign.created_at).getTime()
-    : NaN;
-  if (!Number.isFinite(created)) return false;
-  return Date.now() - created >= UNPAID_PENDING_EXPIRY_MS;
+  // The clock starts at the TxID submission when one is on file,
+  // at creation when there is none (or when a legacy TxID row has
+  // no timestamp to start from).
+  const hasTxId = Boolean(String(campaign.payment_tx_id ?? "").trim());
+  const sinceRaw =
+    hasTxId && campaign.payment_tx_submitted_at
+      ? campaign.payment_tx_submitted_at
+      : campaign.created_at;
+  const since = sinceRaw ? new Date(sinceRaw).getTime() : NaN;
+  if (!Number.isFinite(since)) return false;
+  return Date.now() - since >= UNPAID_PENDING_EXPIRY_MS;
 }
 
 /**
@@ -928,9 +956,9 @@ export interface CreatorBotRejections {
   } | null;
 }
 
-export async function getCreatorBotRejections(): Promise<
-  CreatorBotRejections[]
-> {
+export async function getCreatorBotRejections(
+  opts: { limit?: number; offset?: number } = {}
+): Promise<CreatorBotRejections[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
   // Unblock timestamps (migration 0027), best-effort and in its
@@ -952,53 +980,71 @@ export async function getCreatorBotRejections(): Promise<
     // Migration 0027 not run yet — no ladder reset to apply.
   }
 
+  // Paged like the review list / inbox (page size 100): the
+  // paging applies to the CREATORS below, not to the raw rows —
+  // a creator's rows must all be seen to count them, so slicing
+  // the raw query would undercount anyone straddling the page
+  // boundary. The raw rows are therefore fetched in 1,000-row
+  // chunks until exhausted (no .limit(2000) cap any more: the
+  // old cap silently dropped the oldest bot-rejection rows past
+  // 2,000, and with them whole creators), aggregated, sorted,
+  // and only then sliced to the requested creator page. Counts
+  // stay exact: getBotRejectionRowCount() is the row total.
+  const allRows: Record<string, unknown>[] = [];
+  const CHUNK = 1000;
+  for (let offset = 0; ; offset += CHUNK) {
     const { data, error } = await supabase
       .from("submissions")
       .select("user_id, campaign_id, post_url, created_at, campaigns(title)")
       .eq("status", "rejected")
       .eq("rejection_reason", "bot views")
       .order("created_at", { ascending: false })
-      // P2-12: the old .limit(500) silently dropped creators past
-      // 500 bot-rejection rows. Raised to 2,000 and paired with
-      // getBotRejectionRowCount() — the fraud view shows the total
-      // and says when rows were left out instead of truncating
-      // silently.
-      .limit(2000);
+      .range(offset, offset + CHUNK - 1);
     // Forms #26 contract: throw on DB error, never [] (see
     // getCampaigns).
     if (error) throw new Error(error.message);
     if (!data) throw new Error("Could not load bot rejections.");
-    const byUser = new Map<string, CreatorBotRejections>();
-    for (const row of data as Record<string, unknown>[]) {
-      const userId = String(row.user_id ?? "");
-      if (!userId) continue;
-      const createdAt = String(row.created_at ?? "");
-      // Counts toward the ladder only when it happened after the
-      // creator's last unblock (no unblock → everything counts).
-      const unblockedAt = unblockedAtById.get(userId);
-      const countsTowardLadder =
-        !unblockedAt ||
-        new Date(createdAt).getTime() > new Date(unblockedAt).getTime();
-      const camp = row.campaigns as { title?: string } | null;
-      const entry = byUser.get(userId);
-      if (entry) {
-        if (countsTowardLadder) entry.bot_rejections += 1;
-      } else {
-        byUser.set(userId, {
-          user_id: userId,
-          bot_rejections: countsTowardLadder ? 1 : 0,
-          latest: {
-            campaign_id: String(row.campaign_id ?? ""),
-            campaign_title: camp?.title ?? null,
-            post_url: String(row.post_url ?? ""),
-            created_at: createdAt,
-          },
-        });
-      }
+    allRows.push(...(data as Record<string, unknown>[]));
+    if (data.length < CHUNK) break;
+  }
+  const byUser = new Map<string, CreatorBotRejections>();
+  for (const row of allRows) {
+    const userId = String(row.user_id ?? "");
+    if (!userId) continue;
+    const createdAt = String(row.created_at ?? "");
+    // Counts toward the ladder only when it happened after the
+    // creator's last unblock (no unblock → everything counts).
+    const unblockedAt = unblockedAtById.get(userId);
+    const countsTowardLadder =
+      !unblockedAt ||
+      new Date(createdAt).getTime() > new Date(unblockedAt).getTime();
+    const camp = row.campaigns as { title?: string } | null;
+    const entry = byUser.get(userId);
+    if (entry) {
+      if (countsTowardLadder) entry.bot_rejections += 1;
+    } else {
+      byUser.set(userId, {
+        user_id: userId,
+        bot_rejections: countsTowardLadder ? 1 : 0,
+        latest: {
+          campaign_id: String(row.campaign_id ?? ""),
+          campaign_title: camp?.title ?? null,
+          post_url: String(row.post_url ?? ""),
+          created_at: createdAt,
+        },
+      });
     }
-    return [...byUser.values()].sort(
-      (a, b) => b.bot_rejections - a.bot_rejections
-    );
+  }
+  const creators = [...byUser.values()].sort(
+    (a, b) => b.bot_rejections - a.bot_rejections
+  );
+  // No limit passed (the admin page before it wires fraudPage):
+  // return every creator, as before. With a limit, slice to the
+  // requested creator page — page size 100, like review/inbox.
+  if (opts.limit === undefined) return creators;
+  const limit = Math.max(1, Math.min(500, opts.limit));
+  const start = Math.max(0, opts.offset ?? 0);
+  return creators.slice(start, start + limit);
 }
 
 /**
@@ -1167,21 +1213,23 @@ export interface TopClipperEntry {
  * not just the owner. The old is_admin gate (which made the board
  * show $0.00 / "nobody has earned anything" to every non-admin
  * forever) is gone. Until 0036 is applied the RPC does not exist
- * and this returns [] — the board then shows "unavailable", never
- * a fake zero (see WinBoard).
+ * and this returns null — the board then shows "unavailable",
+ * never a fake zero (see WinBoard). An RPC error is also null,
+ * never []: [] means "no winners", and a failed load must not
+ * render as the genuine zero state.
  */
 async function topClippersFromRows(
   campaignId: string | null,
   limit: number
-): Promise<TopClipperEntry[]> {
+): Promise<TopClipperEntry[] | null> {
   try {
     const supabase = getServerClient();
-    if (!supabase) return [];
+    if (!supabase) return null;
     const { data: rows, error } = await supabase.rpc(
       "get_public_leaderboard",
       { p_campaign_id: campaignId }
     );
-    if (error || !rows) return [];
+    if (error || !rows) return null;
     return (rows as Record<string, unknown>[])
       .map((r) => ({
         name: String(r.display_name ?? "").trim() || "Creator",
@@ -1192,22 +1240,25 @@ async function topClippersFromRows(
       .sort((a, b) => b.earned - a.earned || b.views - a.views)
       .slice(0, Math.max(1, limit));
   } catch {
-    return [];
+    return null;
   }
 }
 
-/** Top earners across all campaigns (Discover board). */
+/** Top earners across all campaigns (Discover board). Null when
+ *  the leaderboard could not be loaded — callers must show
+ *  "unavailable", never a fake zero. */
 export async function getTopClippers(
   limit = 5
-): Promise<TopClipperEntry[]> {
+): Promise<TopClipperEntry[] | null> {
   return topClippersFromRows(null, limit);
 }
 
-/** Top earners on one campaign (campaign detail board). */
+/** Top earners on one campaign (campaign detail board). Null
+ *  when the leaderboard could not be loaded. */
 export async function getCampaignTopClippers(
   campaignId: string,
   limit = 5
-): Promise<TopClipperEntry[]> {
+): Promise<TopClipperEntry[] | null> {
   return topClippersFromRows(campaignId, limit);
 }
 

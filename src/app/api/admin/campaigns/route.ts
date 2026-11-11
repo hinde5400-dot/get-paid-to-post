@@ -107,32 +107,34 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    // 7-day expiry (migration 0030): an unpaid pending campaign
-    // cannot be approved once it is 7+ days old. In practice this
-    // fires only when no TxID is on file — a campaign WITH a TxID
-    // counts as paid for expiry purposes — but the check runs
-    // before the TxID-required check so an expired campaign gets
-    // the expiry message, not the missing-payment message.
+    // 7-day expiry (migration 0030, tightened in 0038): an unpaid
+    // pending campaign cannot be approved once it is 7+ days old.
+    // A TxID on file no longer counts as paid — a campaign whose
+    // TxID was submitted 7+ days ago and never verified has
+    // expired too, and the message says so instead of claiming
+    // it expired "after creation".
+    const paymentTxId = String(
+      (campaign as { payment_tx_id?: string | null }).payment_tx_id ?? ""
+    ).trim();
     if (
       isExpiredUnpaidPending(
         campaign as {
           status?: string | null;
           payment_tx_id?: string | null;
+          payment_tx_submitted_at?: string | null;
           created_at?: string | null;
         }
       )
     ) {
       return NextResponse.json(
         {
-          error:
-            "This campaign expired unpaid and cannot be approved — unpaid pending campaigns expire 7 days after they are created.",
+          error: paymentTxId
+            ? "This campaign expired with its payment still unverified — the Transaction ID was submitted more than 7 days ago and was never verified. It cannot be approved; ask the brand to create a new campaign and pay again."
+            : "This campaign expired unpaid and cannot be approved — unpaid pending campaigns expire 7 days after they are created.",
         },
         { status: 400 }
       );
     }
-    const paymentTxId = String(
-      (campaign as { payment_tx_id?: string | null }).payment_tx_id ?? ""
-    ).trim();
     if (!paymentTxId) {
       return NextResponse.json(
         {
@@ -164,19 +166,16 @@ export async function POST(request: Request) {
     }
     // Budget edited after payment: the TxID may verify a SMALLER
     // amount than the current budget, and approving would put the
-    // campaign live underfunded. A HARD block on exact ordering
-    // is not possible with the stored data — campaigns has no
-    // updated_at and no timestamp is recorded when the TxID is
-    // submitted, so no query can prove whether an edit came
-    // before or after the payment. The check is therefore
-    // conservative: ANY budget edit on file for this campaign
+    // campaign live underfunded. Exact ordering still cannot be
+    // proven from the stored data — the TxID submission time
+    // (migration 0038) now exists, but the AMOUNT behind the TxID
+    // is still unknown, so an edit made before the brand paid
+    // trips the same flag. The check is therefore conservative:
+    // ANY budget edit on file for this campaign
     // (campaign_budget_history, migration 0033) while a TxID is
     // recorded blocks approval until the admin explicitly
     // confirms the extra budget + 15% fee arrived
-    // ({ confirmUnderfunded: true }). An edit made BEFORE the
-    // brand paid trips the same flag — one extra checkbox, and
-    // the admin confirms the full amount arrived, which is the
-    // safe answer either way.
+    // ({ confirmUnderfunded: true }).
     const { data: budgetEdits } = await supabase
       .from("campaign_budget_history")
       .select("created_at")
@@ -214,10 +213,17 @@ export async function POST(request: Request) {
       started_at: startedAt.toISOString(),
     };
     if (endsAt) patch.ends_at = endsAt.toISOString();
-    let { error } = await supabase
+    // P2-8: status-guarded flip — two concurrent approves both
+    // pass the in-memory check above, but only one update matches
+    // a still-pending row. Zero rows = the campaign was already
+    // decided; the loser gets 409 instead of restarting the
+    // started_at/ends_at clock (or resurrecting a rejection).
+    const { data: approved, error } = await supabase
       .from("campaigns")
       .update(patch)
-      .eq("id", campaign.id);
+      .eq("id", campaign.id)
+      .eq("status", "pending")
+      .select("id");
     if (error && /started_at|ends_at/i.test(error.message)) {
       // started_at / ends_at come from migration 0009. The old
       // code retried WITHOUT them and reported success — the
@@ -237,6 +243,15 @@ export async function POST(request: Request) {
     }
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!approved || approved.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This campaign was already decided — reload /admin to see its current status.",
+        },
+        { status: 409 }
+      );
     }
     return NextResponse.json({
       ok: true,
@@ -276,12 +291,27 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { error } = await supabase
+    // P2-8: status-guarded flip, like the approve branch above —
+    // a concurrent approve/reject race resolves to exactly one
+    // winner; the loser gets 409 instead of the last write
+    // winning silently.
+    const { data: rejected, error } = await supabase
       .from("campaigns")
       .update({ status: "rejected" })
-      .eq("id", campaign.id);
+      .eq("id", campaign.id)
+      .eq("status", "pending")
+      .select("id");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!rejected || rejected.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This campaign was already decided — reload /admin to see its current status.",
+        },
+        { status: 409 }
+      );
     }
     // Record the reason where the brand will see it: an admin
     // message in the campaign's brand chat thread (migration

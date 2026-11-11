@@ -20,19 +20,24 @@ import { getTotalPaidOut, type TopClipperEntry } from "@/lib/data";
  *   show the real total — never "nobody has earned anything".
  * - Total paid unknown (RPC unavailable, e.g. migration 0036 not
  *   applied yet): show "unavailable", never a fake $0.00.
+ * - Entries unknown (entries === null — the leaderboard RPC
+ *   failed, e.g. migration 0036 not applied yet): show
+ *   "unavailable" too, never the genuine "No winners yet" zero
+ *   state. [] means "no winners" and is the only zero state.
  */
 export default async function WinBoard({
   entries,
   title = "Top Clippers",
   subtitle = "Creators who earned the most from approved clips.",
 }: {
-  entries: TopClipperEntry[];
+  entries: TopClipperEntry[] | null;
   title?: string;
   subtitle?: string;
 }) {
   const medals = ["🥇", "🥈", "🥉", "4", "5"];
   const totalPaid = await getTotalPaidOut();
-  const hasWinners = entries.length > 0;
+  const entriesUnavailable = entries === null;
+  const hasWinners = entries !== null && entries.length > 0;
   return (
     <section className="rounded-3xl border border-fg/10 bg-card p-6">
       <h2 className="font-display text-2xl font-black uppercase tracking-tight text-fg">
@@ -42,7 +47,7 @@ export default async function WinBoard({
       {hasWinners ? (
         <>
           <ol className="mt-5 space-y-2">
-            {entries.map((e, i) => (
+            {(entries ?? []).map((e, i) => (
               <li
                 key={`${e.name}-${i}`}
                 className="flex flex-wrap items-center gap-3 rounded-2xl bg-fg/5 px-4 py-3"
@@ -72,6 +77,19 @@ export default async function WinBoard({
             </p>
           )}
         </>
+      ) : entriesUnavailable || totalPaid === null ? (
+        <div className="mt-5 rounded-2xl border border-fg/10 bg-ink p-8 text-center">
+          <p className="text-4xl" aria-hidden>
+            🏆
+          </p>
+          <p className="mt-3 text-lg font-black text-fg">
+            Leaderboard unavailable right now
+          </p>
+          <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-fg/60">
+            The winners board could not be loaded. Please check back
+            shortly.
+          </p>
+        </div>
       ) : totalPaid === 0 ? (
         <div className="mt-5 rounded-2xl border border-fg/10 bg-ink p-8 text-center">
           <p className="text-4xl" aria-hidden>
@@ -88,19 +106,6 @@ export default async function WinBoard({
           <p className="mt-4 text-sm font-bold text-fg/50">
             Total paid out so far:{" "}
             <span className="text-lime">{formatUSD(0)}</span>
-          </p>
-        </div>
-      ) : totalPaid === null ? (
-        <div className="mt-5 rounded-2xl border border-fg/10 bg-ink p-8 text-center">
-          <p className="text-4xl" aria-hidden>
-            🏆
-          </p>
-          <p className="mt-3 text-lg font-black text-fg">
-            Leaderboard unavailable right now
-          </p>
-          <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-fg/60">
-            The winners board could not be loaded. Please check back
-            shortly.
           </p>
         </div>
       ) : (

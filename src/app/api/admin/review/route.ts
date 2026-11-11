@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { holdUntil, payoutForViews } from "@/lib/money";
+import { rateLimit } from "@/lib/rate-limit";
 import { HOLD_HOURS, MAX_APPROVED_CLIPS_PER_PLATFORM } from "@/lib/constants";
 import {
   BOT_REJECTION_REASON,
@@ -110,6 +111,19 @@ export async function POST(request: Request) {
       { status: 403 }
     );
   }
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 review
+  // decisions per minute per admin — approve/reject move money,
+  // so rapid-fire clicks are throttled.
+  const rl = rateLimit(`admin-review:${auth.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
+    );
+  }
 
   let body: ReviewBody;
   try {
@@ -168,67 +182,91 @@ export async function POST(request: Request) {
       // withdrawn, or no wallet row). It goes into the response
       // message — the owner must never see a plain "reversed"
       // when part of it provably was not.
+      //
+      // P1-3: the status flip goes FIRST, with a status guard —
+      // two concurrent rejects of the same approved submission
+      // both pass the in-memory check above, but only one update
+      // matches a still-approved row. Zero rows = the loser gets
+      // 409 before touching any wallet or budget (the same
+      // pattern dd300c4 applied to withdrawal rejects). The
+      // winner then reverses the wallet and restores the budget
+      // with the atomic RPCs from migration 0038. The flip has
+      // already happened by then, so a reversal failure is
+      // reported honestly as "rejected, but the money move
+      // failed — fix it by hand", never as "NOT rejected".
+      const { data: flipped, error: flipError } = await supabase
+        .from("submissions")
+        .update({
+          status: "rejected",
+          earnings: 0,
+          rejection_reason: reason,
+        })
+        .eq("id", submission.id)
+        .eq("status", "approved")
+        .select("id");
+      if (flipError || !flipped || flipped.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "This submission was already decided by another review — reload /admin to see its current status.",
+          },
+          { status: 409 }
+        );
+      }
       let shortfall = 0;
       if (prevEarnings > 0) {
-        // Release any matured 72h holds first, so the balances we
-        // read are current (earnings may already have moved from
-        // pending to available).
+        // Release any matured 72h holds first, so the balances
+        // the reversal RPC reads are current (earnings may
+        // already have moved from pending to available).
         try {
           await supabase.rpc("release_matured_holds");
         } catch {
           // Migration 0011 not run yet — balances are as stored.
         }
-        const { data: wallet } = await supabase
-          .from("wallets")
-          .select("*")
-          .eq("user_id", submission.user_id)
-          .single();
-        if (wallet) {
-          const pending = Number(wallet.pending_balance ?? 0);
-          const available = Number(wallet.available_balance ?? 0);
-          // Take from the pending (held) balance first, then from
-          // the available balance if the hold already matured.
-          const fromPending = Math.min(pending, prevEarnings);
-          const remaining = prevEarnings - fromPending;
-          const fromAvailable = Math.min(available, remaining);
-          shortfall = Math.round((remaining - fromAvailable) * 100) / 100;
-          const { error: walletError } = await supabase
-            .from("wallets")
-            .update({
-              pending_balance: Math.max(
-                0,
-                Math.round((pending - fromPending) * 100) / 100
-              ),
-              available_balance: Math.max(
-                0,
-                Math.round((available - fromAvailable) * 100) / 100
-              ),
-            })
-            .eq("user_id", submission.user_id);
-          if (walletError) {
-            // The reversal did not happen — say so instead of
-            // claiming success below.
-            return NextResponse.json(
-              {
-                error: `Could not reverse the earnings from the creator's wallet (${walletError.message}). The clip was NOT rejected — try again or fix it in /admin.`,
-              },
-              { status: 500 }
-            );
-          }
-          if (shortfall > 0) {
-            // Part of the earnings was already withdrawn — it cannot
-            // be clawed back. Reject anyway and restore what is
-            // possible; the shortfall is logged and reported.
-            console.error(
-              `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be fully reversed — $${shortfall.toFixed(2)} already withdrawn/unrecoverable.`
-            );
-          }
-        } else {
+        // Atomic reversal (migration 0038): takes from the
+        // pending (held) balance first, then from the available
+        // balance, and reports the shortfall. The old code read
+        // both balances once and wrote absolute values, so two
+        // concurrent rejects both reversed the same money.
+        const {
+          data: reverseRows,
+          error: reverseError,
+        } = await supabase.rpc("reverse_wallet_earnings", {
+          p_user_id: submission.user_id,
+          p_amount: prevEarnings,
+        });
+        if (reverseError) {
+          console.error(
+            "[admin/review] reverse_wallet_earnings RPC failed:",
+            reverseError.message
+          );
+          return NextResponse.json(
+            {
+              error: `Submission rejected, but the $${prevEarnings.toFixed(2)} earnings could NOT be reversed from the creator's wallet (${reverseError.message}). The clip shows as rejected in /admin — reverse the earnings by hand in Supabase (run migration 0038 first if the function is missing).`,
+            },
+            { status: 500 }
+          );
+        }
+        const reverseResult = (reverseRows as
+          | { ok: boolean; reversed: number; shortfall: number }[]
+          | null)?.[0];
+        if (!reverseResult?.ok) {
           // No wallet row at all — nothing could be clawed back.
           shortfall = prevEarnings;
           console.error(
             `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be reversed — no wallet found for user ${submission.user_id}.`
           );
+        } else {
+          shortfall = Math.round(Number(reverseResult.shortfall ?? 0) * 100) / 100;
+          if (shortfall > 0) {
+            // Part of the earnings was already withdrawn — it
+            // cannot be clawed back. The rejection stands and
+            // only what is still in the system is restored
+            // below; the shortfall is logged and reported.
+            console.error(
+              `[admin/review] reject-after-approve shortfall: submission ${submission.id} earnings $${prevEarnings.toFixed(2)} could not be fully reversed — $${shortfall.toFixed(2)} already withdrawn/unrecoverable.`
+            );
+          }
         }
         // Restore the campaign budget — but ONLY what is actually
         // still in the system (P1-8). If the creator already
@@ -238,52 +276,38 @@ export async function POST(request: Request) {
         // minus the shortfall; paid_out comes down by the same.
         const restorable =
           Math.round((prevEarnings - shortfall) * 100) / 100;
-        const { data: campaign } = await supabase
-          .from("campaigns")
-          .select("budget_left, paid_out")
-          .eq("id", submission.campaign_id)
-          .single();
-        if (campaign && restorable > 0) {
-          const { error: budgetError } = await supabase
-            .from("campaigns")
-            .update({
-              budget_left:
-                Math.round(
-                  (Number(campaign.budget_left ?? 0) + restorable) * 100
-                ) / 100,
-              paid_out: Math.max(
-                0,
-                Math.round(
-                  (Number(campaign.paid_out ?? 0) - restorable) * 100
-                ) / 100
-              ),
-            })
-            .eq("id", submission.campaign_id);
-          if (budgetError) {
+        if (restorable > 0) {
+          const {
+            data: restoreRows,
+            error: restoreError,
+          } = await supabase.rpc("restore_campaign_budget", {
+            p_campaign_id: submission.campaign_id,
+            p_amount: restorable,
+          });
+          if (restoreError) {
+            console.error(
+              "[admin/review] restore_campaign_budget RPC failed:",
+              restoreError.message
+            );
             return NextResponse.json(
               {
-                error: `Could not restore the campaign budget (${budgetError.message}). The clip was NOT rejected — try again.`,
+                error: `Submission rejected and its earnings were reversed${shortfall > 0 ? ` except $${shortfall.toFixed(2)} already withdrawn` : ""}, but the campaign budget could NOT be restored by $${restorable.toFixed(2)} (${restoreError.message}). The clip shows as rejected in /admin — restore the budget by hand in Supabase.`,
+              },
+              { status: 500 }
+            );
+          }
+          const restoreResult = (restoreRows as
+            | { ok: boolean }[]
+            | null)?.[0];
+          if (!restoreResult?.ok) {
+            return NextResponse.json(
+              {
+                error: `Submission rejected and its earnings were reversed${shortfall > 0 ? ` except $${shortfall.toFixed(2)} already withdrawn` : ""}, but the campaign budget could NOT be restored by $${restorable.toFixed(2)} (campaign not found). The clip shows as rejected in /admin — restore the budget by hand in Supabase.`,
               },
               { status: 500 }
             );
           }
         }
-      }
-      const { error: rejectError } = await supabase
-        .from("submissions")
-        .update({
-          status: "rejected",
-          earnings: 0,
-          rejection_reason: reason,
-        })
-        .eq("id", submission.id);
-      if (rejectError) {
-        return NextResponse.json(
-          {
-            error: `Could not reject the clip (${rejectError.message}). Nothing was changed — try again.`,
-          },
-          { status: 500 }
-        );
       }
       // P1-c: a 'bot views' rejection feeds the fraud ladder
       // (6 = concern, 10 = flag, 11 = auto-ban + owner alert).
@@ -307,16 +331,30 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { error: pendingRejectError } = await supabase
+    // Status-guarded flip (same pattern as the approved-reject
+    // above): a concurrent second reject loses with 409 instead
+    // of flipping an already-decided row.
+    const { data: pendingFlipped, error: pendingRejectError } = await supabase
       .from("submissions")
       .update({ status: "rejected", rejection_reason: reason })
-      .eq("id", submission.id);
+      .eq("id", submission.id)
+      .eq("status", "pending")
+      .select("id");
     if (pendingRejectError) {
       return NextResponse.json(
         {
           error: `Could not reject the clip (${pendingRejectError.message}). Nothing was changed — try again.`,
         },
         { status: 500 }
+      );
+    }
+    if (!pendingFlipped || pendingFlipped.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This submission was already decided by another review — reload /admin to see its current status.",
+        },
+        { status: 409 }
       );
     }
     // P1-c: a 'bot views' rejection feeds the fraud ladder
@@ -450,8 +488,14 @@ export async function POST(request: Request) {
     // fallback rate. There is no per-platform rate any more.
     const legacyRatePer1k = Number(campaign.rate_per_1m ?? 0) / 1000;
     let ratePer1k = Number(campaign.view_bonus_per_1k ?? 0);
+    // P2-22: surfaced in the approve response as
+    // legacyRateFallback so the admin UI can show that this clip
+    // paid a rate the creator never saw — the payout math itself
+    // is unchanged.
+    let legacyRateFallback = false;
     if (!Number.isFinite(ratePer1k) || ratePer1k <= 0) {
       ratePer1k = legacyRatePer1k;
+      legacyRateFallback = true;
       console.warn(
         `[admin/review] campaign ${campaign.id} has no view_bonus_per_1k — fell back to rate_per_1m/1000 ($${ratePer1k.toFixed(2)}/1k) for submission ${submission.id}.`
       );
@@ -590,6 +634,26 @@ export async function POST(request: Request) {
     // RPC decrements inside the database and refuses (ok: false)
     // when the remaining budget is too small or changed. Never
     // fall back to the absolute write — that IS the double-spend.
+    // P2-26: the revert below sets the row back to pending only
+    // while it is still approved. If the revert itself fails (or
+    // the row was decided by someone else in the meantime), the
+    // row and the message must not disagree: the error then says
+    // plainly that the submission may still show as approved and
+    // needs a manual check — the old message claimed "nothing
+    // was credited" while the row stayed "approved".
+    async function revertClaim(): Promise<boolean> {
+      // Narrowed locally: TS does not carry the top-of-function
+      // null check into a closure.
+      const client = supabase;
+      if (!client) return false;
+      const { data: reverted, error: revertError } = await client
+        .from("submissions")
+        .update({ status: "pending", earnings: 0, hold_until: null })
+        .eq("id", submission.id)
+        .eq("status", "approved")
+        .select("id");
+      return !revertError && Boolean(reverted && reverted.length > 0);
+    }
     const {
       data: budgetRows,
       error: budgetRpcError,
@@ -605,15 +669,14 @@ export async function POST(request: Request) {
         "[admin/review] decrement_campaign_budget RPC failed:",
         budgetRpcError.message
       );
-      await supabase
-        .from("submissions")
-        .update({ status: "pending", earnings: 0, hold_until: null })
-        .eq("id", submission.id)
-        .eq("status", "approved");
+      const reverted = await revertClaim();
       return NextResponse.json(
         {
           error:
-            "Campaign budget could not be updated atomically — run migration 0036 in Supabase first, then retry. The approval was aborted and nothing was credited.",
+            "Campaign budget could not be updated atomically — run migration 0036 in Supabase first, then retry. The approval was aborted and nothing was credited." +
+            (reverted
+              ? ""
+              : " The submission could not be returned to pending — check /admin for its current status before retrying."),
         },
         { status: 500 }
       );
@@ -624,51 +687,55 @@ export async function POST(request: Request) {
     if (!budgetResult?.ok) {
       // Budget too small or changed since the read above — abort
       // the approval (revert the claim) and credit nothing.
-      await supabase
-        .from("submissions")
-        .update({ status: "pending", earnings: 0, hold_until: null })
-        .eq("id", submission.id)
-        .eq("status", "approved");
+      const reverted = await revertClaim();
       return NextResponse.json(
         {
           error:
-            "This campaign's budget is too small or changed while this review was open — nothing was credited. Reload /admin and try again.",
+            "This campaign's budget is too small or changed while this review was open — nothing was credited. Reload /admin and try again." +
+            (reverted
+              ? ""
+              : " The submission could not be returned to pending — check /admin for its current status before retrying."),
         },
         { status: 409 }
       );
     }
     const newBudgetLeft = Number(budgetResult.new_budget_left ?? 0);
-    const { data: wallet } = await supabase
-      .from("wallets")
-      .select("*")
-      .eq("user_id", submission.user_id)
-      .single();
-    if (wallet) {
-      const { error: walletError } = await supabase
-        .from("wallets")
-        .update({
-          pending_balance: Number(wallet.pending_balance ?? 0) + earnings,
-        })
-        .eq("user_id", submission.user_id);
-      if (walletError) {
-        // The clip is approved but the credit failed — the owner
-        // must know, because the toast below would otherwise claim
-        // money was credited. The approved row stays visible in
-        // /admin for a manual fix.
-        return NextResponse.json(
-          {
-            error: `Clip approved, but the $${earnings.toFixed(2)} credit to the creator's wallet FAILED (${walletError.message}). The clip shows as approved in /admin — credit the wallet by hand.`,
-          },
-          { status: 500 }
-        );
-      }
-    } else {
-      // P2-5: no wallet row. The old code tried to INSERT one
-      // here, but there is no wallets INSERT RLS policy anywhere,
-      // so that insert could never succeed — dead code. It is
+    // P1-2: atomic wallet credit (migration 0038). The old code
+    // read pending_balance once and wrote an absolute value, so
+    // two concurrent approves for the same creator both read the
+    // same balance and the second write overwrote the first
+    // credit. The RPC increments inside the database, so a
+    // concurrent credit can no longer lose one. Never fall back
+    // to the absolute write — that IS the lost credit.
+    const {
+      data: creditRows,
+      error: creditRpcError,
+    } = await supabase.rpc("credit_wallet_pending", {
+      p_user_id: submission.user_id,
+      p_amount: earnings,
+    });
+    if (creditRpcError) {
+      console.error(
+        "[admin/review] credit_wallet_pending RPC failed:",
+        creditRpcError.message
+      );
+      return NextResponse.json(
+        {
+          error: `Clip approved, but the $${earnings.toFixed(2)} credit to the creator's wallet FAILED (${creditRpcError.message}). The clip shows as approved in /admin — credit the wallet by hand (run migration 0038 in Supabase first if the function is missing).`,
+        },
+        { status: 500 }
+      );
+    }
+    const creditResult = (creditRows as
+      | { ok: boolean; new_pending_balance: number }[]
+      | null)?.[0];
+    if (!creditResult?.ok) {
+      // No wallet row. The old code tried to INSERT one here,
+      // but there is no wallets INSERT RLS policy anywhere, so
+      // that insert could never succeed — dead code. It is
       // removed; wallets are created by the signup trigger, so a
       // missing row means the trigger missed this user. The clip
-      // is approved and the budget already decremented below, so
+      // is approved and the budget already decremented above, so
       // the message tells the owner exactly what to do by hand.
       return NextResponse.json(
         {
@@ -711,6 +778,7 @@ export async function POST(request: Request) {
       uncappedEarnings: uncapped,
       cap,
       capped,
+      legacyRateFallback,
     });
   }
 

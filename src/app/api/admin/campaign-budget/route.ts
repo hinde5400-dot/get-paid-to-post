@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { platformFeeFor } from "@/lib/money";
+import { rateLimit } from "@/lib/rate-limit";
 
 interface BudgetEditBody {
   campaignId?: string;
@@ -50,6 +51,19 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Admin Review is owner-only." },
       { status: 403 }
+    );
+  }
+  // Best-effort rate limit (see lib/rate-limit.ts): 10 budget
+  // edits per minute per admin — an edit moves money's
+  // accounting, so rapid-fire clicks are throttled.
+  const rl = rateLimit(`admin-campaign-budget:${auth.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
     );
   }
 
@@ -221,29 +235,48 @@ export async function POST(request: Request) {
   const finalLeft = Number(budgetResult.new_budget_left ?? newLeft);
   const finalTotal = Number(budgetResult.new_budget_total ?? newTotal);
 
-  // platform_fee is not owned by the RPC: recompute it from the
-  // new total (15% of it — never the stale fee from the old
-  // budget). If this fails, the budget already changed, so the
-  // history row is removed (as before) and the owner is told the
-  // fee may be stale.
+  // P2-6: the history row was inserted with new_budget_left from
+  // the PRE-RPC read — correct it to the RPC's returned values.
+  // A concurrent approve may have moved `spent` between the read
+  // and the RPC, so the pre-RPC figure can be wrong. Best-effort:
+  // the budget itself already changed correctly; a stale history
+  // figure must not fail the edit.
+  const { error: historyFixError } = await supabase
+    .from("campaign_budget_history")
+    .update({
+      new_budget_total: finalTotal,
+      new_budget_left: finalLeft,
+    })
+    .eq("id", (historyRow as { id: string } | null)?.id ?? "");
+  if (historyFixError) {
+    console.error(
+      "[admin/campaign-budget] could not correct history row to RPC values:",
+      historyFixError.message
+    );
+  }
+
+  // platform_fee is recomputed from the new total (15% of it —
+  // never the stale fee from the old budget). Since migration
+  // 0038 the RPC above already sets it atomically with the
+  // budget, so this write is a reconciliation of the same value
+  // (and the only fee write on a database that has 0036 but not
+  // 0038 yet). If it fails, the budget already changed — the
+  // history row is KEPT (it accurately records an edit that
+  // happened) and the owner is told honestly what to do: there
+  // is no fee-only UI, so re-saving the same budget total
+  // retries the fee update.
   const { error: feeError } = await supabase
     .from("campaigns")
     .update({ platform_fee: platformFeeFor(finalTotal) })
     .eq("id", row.id);
   if (feeError) {
-    const { error: rollbackError } = await supabase
-      .from("campaign_budget_history")
-      .delete()
-      .eq("id", (historyRow as { id: string } | null)?.id ?? "");
-    if (rollbackError) {
-      console.error(
-        "[admin/campaign-budget] could not roll back history row after platform-fee update failure:",
-        rollbackError.message
-      );
-    }
+    console.error(
+      "[admin/campaign-budget] platform-fee update failed after budget edit:",
+      feeError.message
+    );
     return NextResponse.json(
       {
-        error: `Budget total was updated, but the 15% platform fee could not be recomputed (${feeError.message}). Fix the fee in /admin — the budget is now $${finalTotal.toFixed(2)}.`,
+        error: `Budget total was updated to $${finalTotal.toFixed(2)} ($${finalLeft.toFixed(2)} left), but the 15% platform fee could not be recomputed (${feeError.message}). The edit is recorded in the budget history — re-save the same budget total to retry the fee update. The fee shown on the campaign card may be stale until then.`,
       },
       { status: 500 }
     );

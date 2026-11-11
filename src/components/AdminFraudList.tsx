@@ -54,12 +54,42 @@ const STATUS_STYLES: Record<FraudStatus, string> = {
 
 export default function AdminFraudList({
   creators,
+  /** Total creators in fraud watch across ALL pages (the loader
+   *  counts them from the whole table, not the current page).
+   *  Null = the admin page has not wired fraud paging yet — the
+   *  list then shows every creator and no Prev/Next links. */
+  total = null,
+  page = 1,
+  pageSize = 100,
+  /** The review list's and inbox's current pages, so Prev/Next
+   *  links keep them instead of resetting those lists to page 1. */
+  reviewPage = 1,
+  inboxPage = 1,
 }: {
   creators: FraudCreator[];
+  total?: number | null;
+  page?: number;
+  pageSize?: number;
+  reviewPage?: number;
+  inboxPage?: number;
 }) {
   const router = useRouter();
   const { showError, showSuccess } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+
+  // Pagination footer: "Showing X–Y of Z" so the admin always
+  // knows when creators sit past this page. Same shape as the
+  // review list / inbox (page size 100). The loader pages the
+  // CREATORS (getCreatorBotRejections limit/offset), so these
+  // counts are creators, while the bot-rejection row total lives
+  // in the section header on the admin page.
+  const totalCount = total ?? creators.length;
+  const showingFrom = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showingTo = Math.min(page * pageSize, totalCount);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const keepParams =
+    `${reviewPage > 1 ? `&reviewPage=${reviewPage}` : ""}` +
+    `${inboxPage > 1 ? `&inboxPage=${inboxPage}` : ""}`;
 
   async function blockCreator(c: FraudCreator) {
     if (
@@ -131,7 +161,11 @@ export default function AdminFraudList({
     }
   }
 
-  if (creators.length === 0) {
+  // Empty only when there really is nothing to show: a page
+  // past the last one (total > 0, this page empty) falls through
+  // to the sections + footer below instead of claiming "no
+  // bot-view rejections yet".
+  if (creators.length === 0 && (total ?? 0) === 0) {
     return (
       <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
         <p className="font-bold text-fg">No bot-view rejections yet</p>
@@ -293,6 +327,46 @@ export default function AdminFraudList({
           <div className="mt-4 space-y-4">{others.map(renderCreator)}</div>
         </section>
       )}
+      {/* Pagination: Prev / Next + "showing X of Y". Plain links —
+          the admin page reads fraudPage from the URL. The links
+          only render once the admin page passes a total (i.e.
+          once it wires fraud paging); until then every creator
+          is on this one page. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fg/10 bg-card px-5 py-3">
+        <p className="text-sm text-fg/60">
+          Showing {showingFrom}–{showingTo} of {totalCount} creator
+          {totalCount === 1 ? "" : "s"}
+          {totalPages > 1 ? ` (page ${page} of ${totalPages})` : ""}
+        </p>
+        {total !== null && (
+          <div className="flex gap-2">
+            {page > 1 ? (
+              <a
+                href={`?fraudPage=${page - 1}${keepParams}`}
+                className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
+              >
+                ← Prev
+              </a>
+            ) : (
+              <span className="cursor-not-allowed rounded-full border border-fg/10 px-4 py-2 text-sm font-bold text-fg/30">
+                ← Prev
+              </span>
+            )}
+            {page < totalPages ? (
+              <a
+                href={`?fraudPage=${page + 1}${keepParams}`}
+                className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
+              >
+                Next →
+              </a>
+            ) : (
+              <span className="cursor-not-allowed rounded-full border border-fg/10 px-4 py-2 text-sm font-bold text-fg/30">
+                Next →
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
