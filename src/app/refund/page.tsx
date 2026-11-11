@@ -1,3 +1,11 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Refund Policy",
+  description:
+    "How refunds work on Get Paid To Post: unspent brand budget stays yours, rejected campaigns are refunded on request, and budget spent on verified views is not refundable.",
+};
+
 export default function RefundPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">

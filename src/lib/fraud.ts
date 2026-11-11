@@ -29,6 +29,7 @@
 // cleared by this function — the upsert below preserves it.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { SITE_URL } from "./constants";
 import { adminMention, notifyDiscord } from "./notify";
 
 /** The exact stored rejection_reason value that counts. */
@@ -62,7 +63,7 @@ export const FRAUD_STATUS_LABELS: Record<FraudStatus, string> = {
   banned: "Banned",
 };
 
-const ADMIN_URL = "https://get-paid-to-post.vercel.app/admin";
+const ADMIN_URL = `${SITE_URL}/admin`;
 
 function alertPrefix(): string {
   const mention = adminMention();

@@ -18,8 +18,8 @@ export function DiscordLogo({ className = "h-5 w-5" }: { className?: string }) {
  * The one Discord button used everywhere support lives: the header
  * (compact), the side menu, and the Support page. Premium look —
  * Discord purple #5865F2 with the Discord logo — not plain text.
- * The invite link is a placeholder for now: the server is not live
- * yet, so the "Coming Soon" badge is shown honestly next to it.
+ * The invite link is the real server invite (DISCORD_URL); there
+ * is no "Coming Soon" badge — the server is live.
  */
 export default function DiscordButton({
   compact = false,

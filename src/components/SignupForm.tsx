@@ -200,8 +200,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
       )}
       {signedInEmail && (
         <p className="mt-4 rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-200">
-          You are signed in as {signedInEmail}. To create a second
-          account, use a different email — or{" "}
+          You are signed in as {signedInEmail}. To sign up as a brand,{" "}
           <button
             type="button"
             onClick={() => void signOutFirst()}
@@ -209,7 +208,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
           >
             sign out
           </button>{" "}
-          first.
+          first — one account per person.
         </p>
       )}
       <form

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import {
@@ -18,6 +19,12 @@ import {
   sortCampaigns,
   type CampaignSort,
 } from "@/lib/campaigns";
+
+export const metadata: Metadata = {
+  title: "Campaigns",
+  description:
+    "Browse live brand-funded campaigns on Get Paid To Post. Pick one, post a clip on TikTok, Instagram or YouTube, and get paid per verified view.",
+};
 
 function hrefWith(
   searchParams: Record<string, string | string[] | undefined>,

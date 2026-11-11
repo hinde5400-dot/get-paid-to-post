@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { BRAND_NAME } from "@/lib/constants";
+
+export const metadata: Metadata = {
+  title: "Terms of Service",
+  description:
+    "The terms for using Get Paid To Post: how brand-funded campaigns work, how creators earn per verified view, and the rules both sides agree to.",
+};
 
 export default function TermsPage() {
   return (

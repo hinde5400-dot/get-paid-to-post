@@ -35,7 +35,6 @@ export default async function Footer() {
           <p className="text-sm font-bold text-fg">Brands</p>
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             <li><Link href="/brands" className="hover:text-lime">For Brands</Link></li>
-            <li><Link href="/brands" className="hover:text-lime">Launch a campaign</Link></li>
             <li><Link href="/pricing" className="hover:text-lime">Pricing</Link></li>
             <li><Link href="/support" className="hover:text-lime">Contact Support</Link></li>
           </ul>
@@ -47,7 +46,6 @@ export default async function Footer() {
             <li><Link href="/rules" className="hover:text-lime">Rules</Link></li>
             <li><Link href="/privacy" className="hover:text-lime">Privacy Policy</Link></li>
             <li><Link href="/refund" className="hover:text-lime">Refund Policy</Link></li>
-            <li><Link href="/contact" className="hover:text-lime">Contact</Link></li>
           </ul>
         </div>
       </div>

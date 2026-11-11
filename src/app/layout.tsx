@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -26,17 +26,35 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: `${BRAND_NAME} — Get Paid to Post on TikTok, Instagram & YouTube`,
+  title: {
+    default: "Get Paid to Post on TikTok, Instagram & YouTube",
+    template: "%s | Get Paid To Post",
+  },
   description:
     "Post short clips on TikTok, Instagram and YouTube and get paid per verified view. No follower minimum — earnings are per view only, up to the campaign's per-post cap.",
   metadataBase: new URL(SITE_URL),
-  icons: { icon: "/favicon.svg" },
+  manifest: "/manifest.webmanifest",
+  icons: { icon: "/favicon.svg", apple: "/apple-touch-icon.png" },
   openGraph: {
-    title: `${BRAND_NAME} — Post Clips. Get Paid Per View.`,
+    title: "Get Paid To Post — Post Clips. Get Paid Per View.",
     description:
       "Creators post short clips for brands and get paid per view. No follower minimum.",
+    url: SITE_URL,
+    siteName: BRAND_NAME,
     type: "website",
+    images: [{ url: "/og-image.png", width: 1024, height: 1024, alt: "Get Paid To Post logo" }],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Get Paid To Post — Post Clips. Get Paid Per View.",
+    description:
+      "Creators post short clips for brands and get paid per view. No follower minimum.",
+    images: ["/og-image.png"],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#C6FF00",
 };
 
 // Runs before first paint so the saved theme applies without a flash:

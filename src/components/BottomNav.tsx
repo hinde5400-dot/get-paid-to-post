@@ -20,9 +20,7 @@ export default function BottomNav() {
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-fg/10 bg-ink/95 backdrop-blur md:hidden">
       <div className="grid grid-cols-3">
         {ITEMS.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href === "/campaigns" && pathname === "/");
+          const active = pathname === item.href;
           return (
             <Link
               key={item.href}

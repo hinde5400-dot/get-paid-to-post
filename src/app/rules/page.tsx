@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { BRAND_NAME } from "@/lib/constants";
 import { CAMPAIGN_CATEGORIES as CATEGORIES } from "@/lib/types";
+
+export const metadata: Metadata = {
+  title: "Rules",
+  description:
+    "The rules of Get Paid To Post: who can join, video and submission rules, how earnings and fees work, and the anti-fraud policy.",
+};
 
 // NOTE: this page only restates rules that are already implemented
 // in the code or written in the Terms — it invents no rule, number

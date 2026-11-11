@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { BRAND_NAME } from "@/lib/constants";
+
+export const metadata: Metadata = {
+  title: "Pricing",
+  description:
+    "No subscription, no hidden charges. Brands pay a flat 15% platform fee on top of their campaign budget; creators join, post and earn for free.",
+};
 
 /**
  * Pricing — the full fee picture, real numbers only.
