@@ -16,12 +16,14 @@ import { useToast } from "@/components/Toast";
 /**
  * Onboarding — the step every new user lands on right after signup
  * (login is unchanged: existing users go to /dashboard).
- * Three big cards: Connect TikTok, Connect Instagram, Connect YouTube.
- * Each Connect button saves that profile URL to the user's profile
- * (users.tiktok_url / instagram_url / youtube_url — the same fields
- * the /connect page uses). At least 1 connection is required to
- * continue; Skip is also offered. Then: "Welcome! Now Browse
- * Campaigns" → Discover.
+ * One paste card: Instagram — the only pasted link that is ever
+ * used (the submit-time handle gate reads users.instagram_url).
+ * TikTok and YouTube have NO paste card here: pasted TikTok/YouTube
+ * links were dead data (nothing ever read tiktok_url / youtube_url),
+ * and matching on those platforms needs the OAuth login on
+ * /connect instead — so those two cards send creators to /connect.
+ * At least 1 connection is required to continue; Skip is also
+ * offered. Then: "Welcome! Now Browse Campaigns" → Discover.
  */
 
 type PlatformKey = "tiktok" | "instagram" | "youtube";
@@ -34,26 +36,24 @@ const PLATFORMS: {
   Icon: (props: { className?: string }) => JSX.Element;
 }[] = [
   {
-    key: "tiktok",
-    name: "TikTok",
-    domain: "tiktok.com",
-    placeholder: "https://www.tiktok.com/@you",
-    Icon: TikTokIcon,
-  },
-  {
     key: "instagram",
     name: "Instagram",
     domain: "instagram.com",
     placeholder: "https://www.instagram.com/you",
     Icon: InstagramIcon,
   },
-  {
-    key: "youtube",
-    name: "YouTube",
-    domain: "youtube.com",
-    placeholder: "https://www.youtube.com/@you",
-    Icon: YouTubeIcon,
-  },
+];
+
+// TikTok / YouTube are NOT paste cards: pasted links for them were
+// never read anywhere, and matching needs the OAuth login on
+// /connect. These cards send creators there instead.
+const OAUTH_PLATFORMS: {
+  key: "tiktok" | "youtube";
+  name: string;
+  Icon: (props: { className?: string }) => JSX.Element;
+}[] = [
+  { key: "tiktok", name: "TikTok", Icon: TikTokIcon },
+  { key: "youtube", name: "YouTube", Icon: YouTubeIcon },
 ];
 
 const FIELD: Record<PlatformKey, "tiktok_url" | "instagram_url" | "youtube_url"> = {
@@ -227,19 +227,22 @@ export default function OnboardingPage() {
         Connect your profiles
       </h1>
       <p className="mx-auto mt-3 max-w-md text-center text-sm leading-relaxed text-fg/60">
-        Add at least 1 account link so your submitted clips can be
-        matched to you. You can add the others later from My accounts.
+        Add your Instagram profile link so your submitted Instagram
+        clips can be matched to you. TikTok and YouTube are connected
+        with login instead — see below.
       </p>
       <p className="mx-auto mt-3 max-w-md rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-amber-200">
         Pasting a link only saves it — it does not verify your
-        account. Verify for real with TikTok / YouTube login on the{" "}
+        account. TikTok and YouTube need a real login on the{" "}
         <Link href="/connect" className="font-bold text-lime underline">
           My accounts page
         </Link>
         .
       </p>
       <p className="mt-4 text-center text-sm font-bold text-fg">
-        <span className="text-lime">{connectedCount} of 3 links added</span>
+        <span className="text-lime">
+          {connected.instagram ? "Instagram link added" : "No link added yet"}
+        </span>
       </p>
 
       <div className="mt-6 space-y-4">
@@ -302,6 +305,33 @@ export default function OnboardingPage() {
             </button>
           </div>
         ))}
+        {OAUTH_PLATFORMS.map(({ key, name, Icon }) => (
+          <div
+            key={key}
+            className="rounded-3xl border border-fg/10 bg-card p-5 md:p-6"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-fg/5 text-fg">
+                <Icon className="h-6 w-6" />
+              </span>
+              <span>
+                <span className="block font-display text-lg font-black tracking-tight text-fg">
+                  Connect {name}
+                </span>
+                <span className="block text-xs text-fg/50">
+                  Log in with {name} to verify your account — pasting a
+                  link does not match your clips to you.
+                </span>
+              </span>
+            </div>
+            <Link
+              href="/connect"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-3 text-sm font-black text-black transition hover:bg-limedark"
+            >
+              Connect {name} with login →
+            </Link>
+          </div>
+        ))}
       </div>
 
       {error && (
@@ -346,7 +376,7 @@ export default function OnboardingPage() {
       </button>
       {connectedCount < 1 && (
         <p className="mt-3 text-center text-xs text-fg/40">
-          Connect at least 1 account to continue — or skip and connect later.
+          Add your Instagram link to continue — or skip and connect later.
         </p>
       )}
     </div>
