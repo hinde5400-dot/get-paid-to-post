@@ -282,14 +282,6 @@ export interface Submission {
    *  approval time, used as the approval date in the post-end
    *  re-check view (P1-c). */
   updated_at?: string | null;
-  /** Approval-time facts (migration 0043, Round-5 P1): whether
-   *  the approval was truncated by the campaign's remaining
-   *  budget, and the view count earnings were locked on. My
-   *  Posts renders this stored fact — never an inference from
-   *  post-approval view growth. False / null on rows approved
-   *  before 0043, or when 0043 has not been applied yet. */
-  budget_capped?: boolean;
-  approval_views?: number | null;
   /** Active payout-pause flag (migration 0031): the reason the
    *  admin flagged this clip, plus when. Only set while a flag is
    *  open — the creator sees it on My Posts, so a paused payout

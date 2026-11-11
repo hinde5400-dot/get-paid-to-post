@@ -20,15 +20,15 @@ verified views.
 
 | Rule | Value |
 |---|---|
-| Brand minimum to launch | $500 — and the budget must be funded before the campaign goes live |
-| Base pay | $10 per approved post |
-| View bonus | $0.75 per 1,000 views, views tracked 14 days |
-| Earnings | views / 1,000,000 × rate per 1M views, capped at the per-video max and the remaining budget |
+| Brand minimum to launch | None — any budget above $0; the budget must be funded (USDT) before the campaign goes live |
+| Platform fee | 15% flat, charged ON TOP of the budget ($500 budget → $575 total to send); the fee is not refundable |
+| Base pay | None — views only. No pay per post and no pay for proof |
+| Earnings | views / 1,000 × the campaign's single rate per 1,000 views, capped at the per-post max ($10–$200, $100 default) and the remaining budget; min 1,000 views to earn; views tracked 14 days after submit |
 | Approval hold | Approved earnings sit in a 72-hour hold, then become available |
-| Minimum withdrawal | $10 |
-| Withdrawal fee | 7% — you receive amount × 0.93 |
-| Payout methods | USDT (Ethereum), Pakistani bank (bank name + IBAN), Wise (USD / GBP / EUR) |
-| Submit limits | Max 7 posts per campaign; one clip per platform every 2 hours |
+| Minimum withdrawal | $15 |
+| Withdrawal fee | 5% — you receive amount × 0.95 |
+| Payout methods | USDT (TRC20) only — manual payout by the owner, usually within 24 hours, never pending more than 3 days |
+| Submit limits | Max 15 APPROVED clips per platform per campaign per creator (rejected clips don't count, no resubmit); one clip per platform every 2 hours; submit within 30 minutes of posting |
 
 ## Run locally
 
@@ -38,8 +38,9 @@ cp .env.local.example .env.local   # then fill in your own Supabase values
 npm run dev                        # http://localhost:3000
 ```
 
-Without Supabase keys the site still runs and shows sample campaigns, but
-signup, login, submissions and withdrawals need Supabase configured.
+Without Supabase keys the site still runs and shows honest empty states
+(no live campaigns, no fake numbers), but signup, login, submissions and
+withdrawals need Supabase configured.
 
 ## Set up Supabase (free)
 
@@ -93,16 +94,16 @@ signup, login, submissions and withdrawals need Supabase configured.
 6. Approve the test submission in `/admin` (owner only) with verified
    views → amount shows in Pending first, then in Available after the
    72-hour hold.
-7. Click Withdraw with balance under $10, then at $10+ → under $10 is
-   blocked; at $10+ the modal shows the 7% fee and final amount for USDT,
-   Pakistani bank and Wise.
-8. Submit a brand campaign on `/brands` with a $400 budget, then $500 →
-   $400 is rejected; $500 saves as an unfunded draft, not live.
+7. Click Withdraw with balance under $15, then at $15+ → under $15 is
+   blocked; at $15+ the modal shows the 5% fee and final amount for USDT
+   (TRC20) only.
+8. Submit a brand campaign on `/brands` with a $40 budget → any amount
+   above $0 saves as an unfunded (pending) draft, not live, until the
+   brand pays and the owner approves it.
 9. Log out and try to open `/dashboard` directly → redirected to `/login`.
 
 Never test payouts with real creator money. Run the first withdrawal
-end-to-end with a tiny amount to your own USDT wallet and your own
-Pakistani bank account first.
+end-to-end with a tiny amount to your own USDT (TRC20) wallet first.
 
 ## Pages
 
@@ -110,16 +111,16 @@ Pakistani bank account first.
 |---|---|
 | `/` | Hero, stats, Featured Campaign, campaign list, How It Works, Why, Top Earners, FAQ |
 | `/campaigns` | Search + platform/category filters, sort by Highest Pay |
-| `/campaign/[id]` | Budget bar, Earn up to, Base pay, view bonus, 14-day tracking, max 7 posts, Brief, submit bundle form |
+| `/campaign/[id]` | Budget % used (never $), Earn up to $X per post, views-only pay, 14-day tracking, max 15 approved clips per platform, Brief, submit bundle form |
 | `/login`, `/signup` | Supabase Auth, email + password only, then social connect step |
-| `/connect` | Connect TikTok / Instagram / YouTube profile links |
-| `/dashboard`, `/my-posts` | Earnings, wallet, submissions with All / Approved / Under Review / Rejected / Revoked filters, Submission ID + Copy ID |
+| `/connect` | Connect TikTok / Instagram / YouTube (OAuth + profile links) |
+| `/dashboard`, `/my-posts` | Earnings, wallet, submissions with All / Approved / Under Review / Rejected filters, Submission ID + Copy ID |
 | `/submit/[id]` | Submit-a-post bundle page |
 | `/earnings` | Available balance, 72-hour hold, withdrawn total, history, payout info |
-| `/brands` | "I am a Brand" / "I am a Creator" split, 7-step How Funding Works, brand form ($500 min) |
-| `/how-it-works`, `/terms`, `/privacy` | Explainer and legal pages |
-| `/more`, `/support`, `/inbox`, `/news` | More page + mobile bottom nav; Discord support (placeholder, no fake invite); honest empty states |
-| `/admin` | Owner-only Admin Review: approve / reject / revoke, block creators |
+| `/brands` | "I am a Brand" / "I am a Creator" split, 7-step How Funding Works, brand form (any budget above $0) |
+| `/how-it-works`, `/terms`, `/privacy`, `/refund`, `/rules` | Explainer and legal pages |
+| `/more`, `/support` | More page + mobile bottom nav; Discord support; honest empty states |
+| `/admin` | Owner-only Admin Review: approve / reject, block/unblock creators, payouts, refund queue |
 
 ## Admin Review (owner-only)
 
@@ -129,24 +130,25 @@ stay **Pending at $0** until the owner enters verified views and approves
 fake/bot views — blocked accounts cannot log in, re-register with the same
 email, submit, or withdraw.
 
-## APIs — publish first, then APIs
+## APIs — current state (Nov 2026)
 
-Real TikTok / Instagram / YouTube view APIs are **not** connected yet.
-They are a later integration and need the owner's own free developer
-accounts and approvals:
+- **YouTube** — OAuth Connect is live (creator links their own
+  channel) and the 3-hour view refresh reads views via the YouTube
+  Data API v3. The Google app is published but unverified (100-user
+  cap + warning screens until verification completes).
+- **TikTok** — Login Kit app submitted for review (in review since
+  9 Nov 2026); the site runs on Sandbox credentials until approval,
+  so only the sandbox test user can connect. View refresh via
+  video/query once connected.
+- **Instagram** — no Meta app / API access yet (developer phone
+  verification keeps failing); Instagram checks stay manual — the
+  owner checks the live Reel link + proof screenshot by hand, and
+  post time is always "unverified" for Instagram submits.
 
-- **YouTube Data API v3** — instant, ~5–10 min, free quota.
-- **TikTok** — Login Kit + Display API need a registered app and app
-  review (2–3 business days; Content Posting API 1–4 weeks). Review
-  needs a real live website plus Privacy Policy and Terms.
-- **Instagram** — Basic Display ended 4 Dec 2024; only Business/Creator
-  accounts via the Graph API. Serving other creators needs Advanced
-  Access, Meta App Review and Business Verification.
-
-Until approval, views are counted through the owner's Admin Review.
-AdSense placeholder slots on Home and Campaigns earn $0 until real
-AdSense approval, which needs a custom domain — a later decision, not
-launch-day earnings.
+Until TikTok approval, views are counted through the owner's Admin
+Review for TikTok/Instagram. Google AdSense is a later step, not
+launch-day earnings (approval on a free vercel.app subdomain is very
+unlikely; a custom domain costs ~$10–12/year).
 
 ## Project structure
 
@@ -160,15 +162,16 @@ get-paid-to-post/
       layout.tsx  globals.css  page.tsx
       campaigns/  campaign/[id]/  login/  signup/  connect/
       dashboard/  my-posts/  submit/[id]/  earnings/  brands/
-      how-it-works/  terms/  privacy/  more/  support/
-      inbox/  news/  admin/  auth/callback/
+      how-it-works/  terms/  privacy/  refund/  rules/  more/
+      support/  onboarding/  pricing/  admin/  auth/callback/
       api/submissions/  api/admin/review/  api/admin/block/
-      api/withdrawals/  api/campaigns/
-    components/     # Navbar, Footer, BottomNav, CampaignCard, AdSlot,
+      api/admin/unblock/  api/admin/refunds/
+      api/withdrawals/  api/campaigns/  api/cron/
+    components/     # Navbar, Footer, BottomNav, CampaignCard,
                     # Faq, WithdrawModal, SubmitBundleForm, MyPostsList,
                     # AdminReviewList, BrandForm, StatusBadge
     lib/            # supabase clients, types, constants, validate,
-                    # money maths, seed campaigns, data layer, sounds
+                    # money maths, data layer, sounds, views/
   src/middleware.ts # Supabase session refresh
   supabase/
     schema.sql              # consolidated SQL for the SQL Editor

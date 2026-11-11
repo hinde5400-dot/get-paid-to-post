@@ -658,10 +658,11 @@ export async function POST(request: Request) {
     // still go through, and the row just reads as a pre-0043
     // approval (plain breakdown, never the capped claim).
     // NOTE: if a later step fails and revertClaim() returns this
-    // row to pending, these two fields stay set — revertClaim is
-    // owned by another workstream and does not clear them. That
-    // is invisible: My Posts shows the capped line only on
-    // approved rows, and a later re-approve overwrites both.
+    // row to pending, revertClaim clears these two fields again
+    // (Round-5 integration) so a re-approve starts from a clean
+    // slate. (My Posts shows the capped line only on approved
+    // rows, so stale values would be invisible anyway — clearing
+    // them keeps the row honest.)
     try {
       const { error: factsError } = await supabase
         .from("submissions")
@@ -719,6 +720,19 @@ export async function POST(request: Request) {
           views: priorViews,
           likes: priorLikes,
           comments: priorComments,
+          // Round-5 integration: clear the approval-time facts
+          // too — the claim above set budget_capped /
+          // approval_views, and a reverted row must not keep
+          // them. Best-effort: unknown columns pre-0043 are
+          // swallowed by PostgREST as an error on this update,
+          // which would fail the whole revert — so only include
+          // them when the row already carries them.
+          ...(typeof (submission as { budget_capped?: unknown }).budget_capped !== "undefined"
+            ? { budget_capped: false }
+            : {}),
+          ...(typeof (submission as { approval_views?: unknown }).approval_views !== "undefined"
+            ? { approval_views: null }
+            : {}),
         })
         .eq("id", submission.id)
         .eq("status", "approved")

@@ -111,18 +111,21 @@ export default async function BrandPaymentPage({
     hasTxId && paidBudget != null && budgetDelta > 0;
   const showOverpaymentBanner =
     hasTxId && paidBudget != null && budgetDelta < 0;
-  // Overpaid = what the brand sent (budget + 15% fee on the
-  // amount the TxID covered) minus what it now owes on the
-  // lowered budget. Fee split is recomputed (P2-B3), never read
-  // from the stored platform_fee column.
+  // Overpaid, BUDGET-ONLY (Round-5 integration): what the brand
+  // sent covered paidBudget of budget, and the campaign now runs
+  // on a lower budget_total — the refundable difference is the
+  // budget difference only. The 15% platform fee is
+  // non-refundable (Round-4 Y2), so the fee-inclusive cash
+  // difference (totalToSend(paidBudget) −
+  // totalToSend(budget_total)) is NOT the refund amount — the
+  // refund route computes the same budget-only number
+  // server-side. The banner and the refund must agree, or the
+  // brand is promised money it will never receive.
   const overpaidAmount =
     paidBudget != null
       ? Math.max(
           0,
-          Math.round(
-            (totalToSend(paidBudget) - totalToSend(campaign.budget_total)) *
-              100
-          ) / 100
+          Math.round((paidBudget - campaign.budget_total) * 100) / 100
         )
       : 0;
   // Fee split, recomputed from the live budget (P2-B3): the
@@ -367,17 +370,22 @@ export default async function BrandPaymentPage({
         {/* Round-4 P2-B1: the budget was LOWERED after the brand
             paid — the brand overpaid, and the difference is
             refunded on request (the admin approves without an
-            "extra received" confirmation: a decrease is safe). */}
+            "extra received" confirmation: a decrease is safe).
+            Round-5: the shown amount is the BUDGET difference
+            only — the 15% fee is not refundable, so the
+            fee-inclusive cash difference is never shown as the
+            refundable amount. */}
         {showOverpaymentBanner && paidBudget != null && (
           <div className="mt-5 rounded-2xl border border-sky-400/60 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed text-sky-200">
             <span className="font-black">
               Budget lowered to {formatUSD(campaign.budget_total)}
             </span>{" "}
             — your submitted payment covered {formatUSD(paidBudget)},
-            so you overpaid {formatUSD(overpaidAmount)}. Ask the
-            admin for a refund of the difference (in the chat below
-            or on Discord) — approving the campaign is not held up
-            by this.
+            so you overpaid {formatUSD(overpaidAmount)} of budget
+            (the 15% platform fee is not refundable). File a refund
+            request from your dashboard, or ask the admin in the
+            chat below or on Discord — approving the campaign is
+            not held up by this.
           </div>
         )}
 

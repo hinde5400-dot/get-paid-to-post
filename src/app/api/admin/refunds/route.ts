@@ -6,17 +6,23 @@ import { rateLimit } from "@/lib/rate-limit";
 /**
  * POST /api/admin/refunds — owner-only (Round-5 P1). Marks an
  * open refund request 'sent' after the owner has actually sent
- * the USDT refund by hand. Without this route a refund request
- * could never be closed: the queue never drained and the badge
- * never cleared.
+ * the USDT refund by hand, or 'cancelled' when the request is
+ * superseded (e.g. an open overpayment request on a campaign
+ * that was later rejected and is being refunded in full — the
+ * money goes out once, via the rejected refund, so the
+ * overpayment row must close honestly instead of being marked
+ * 'sent' when no money was sent for it). Without this route a
+ * refund request could never be closed: the queue never drained
+ * and the badge never cleared.
  *
- * Auth mirrors the other admin POST routes: 401 when not logged
- * in, 403 when not the owner, 400 when the id is missing or the
- * request is not open, 404 when no such request exists, 503
- * when the refund_requests table is missing (migration 0041).
- * The row is only flipped when it is still 'requested' — a
- * second tap (or a request already marked 'sent' /
- * 'cancelled') reports 400 instead of silently re-marking it.
+ * Body: { refundId, action?: 'sent' | 'cancelled' } — default
+ * 'sent'. Auth mirrors the other admin POST routes: 401 when
+ * not logged in, 403 when not the owner, 400 when the id is
+ * missing or the request is not open, 404 when no such request
+ * exists, 503 when the refund_requests table is missing
+ * (migration 0041). The row is only flipped when it is still
+ * 'requested' — a second tap (or a request already marked 'sent'
+ * / 'cancelled') reports 400 instead of silently re-marking it.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -50,9 +56,13 @@ export async function POST(request: Request) {
       { status: 429 }
     );
   }
-  let body: { refundId?: string; id?: string };
+  let body: { refundId?: string; id?: string; action?: string };
   try {
-    body = (await request.json()) as { refundId?: string; id?: string };
+    body = (await request.json()) as {
+      refundId?: string;
+      id?: string;
+      action?: string;
+    };
   } catch {
     return NextResponse.json(
       { error: "Invalid request — send a valid JSON body." },
@@ -66,6 +76,19 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // 'sent' = the USDT went out by hand. 'cancelled' = the request
+  // is superseded (e.g. an overpayment row on a campaign that is
+  // now being refunded in full) — the money goes out once.
+  // An unknown action fails loudly instead of silently marking
+  // a request sent.
+  const rawAction = body.action ?? "sent";
+  if (rawAction !== "sent" && rawAction !== "cancelled") {
+    return NextResponse.json(
+      { error: "action must be 'sent' or 'cancelled'." },
+      { status: 400 }
+    );
+  }
+  const action: "sent" | "cancelled" = rawAction;
   // A Supabase update matching zero rows returns NO error, so
   // verify the request exists and is still open first —
   // otherwise a typo'd id (or an already-closed request) reports
@@ -100,14 +123,14 @@ export async function POST(request: Request) {
   if ((row as { status?: string }).status !== "requested") {
     return NextResponse.json(
       {
-        error: `This refund request is already ${(row as { status?: string }).status ?? "closed"} — it cannot be marked sent again.`,
+        error: `This refund request is already ${(row as { status?: string }).status ?? "closed"} — it cannot be marked ${action} again.`,
       },
       { status: 400 }
     );
   }
   const { data: updated, error: updateError } = await supabase
     .from("refund_requests")
-    .update({ status: "sent", updated_at: new Date().toISOString() })
+    .update({ status: action, updated_at: new Date().toISOString() })
     .eq("id", refundId)
     .eq("status", "requested")
     .select("id");
@@ -128,6 +151,9 @@ export async function POST(request: Request) {
   }
   return NextResponse.json({
     ok: true,
-    message: "Refund marked as sent.",
+    message:
+      action === "cancelled"
+        ? "Refund request cancelled."
+        : "Refund marked as sent.",
   });
 }
