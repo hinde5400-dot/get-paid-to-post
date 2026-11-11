@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
@@ -20,6 +21,12 @@ import RefundRequestButton from "@/components/RefundRequestButton";
 import PaymentPageAutoRefresh from "@/components/PaymentPageAutoRefresh";
 import CopyButton, { CopyableText } from "@/components/CopyButton";
 import DiscordButton from "@/components/DiscordButton";
+
+export const metadata: Metadata = {
+  title: "Campaign payment",
+  description:
+    "Fund your Get Paid To Post campaign — send your budget in USDT (TRC20) and share your transaction ID to take your campaign live.",
+};
 
 /**
  * Brand payment page — shown after the brand submits a campaign.

@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Discover",
+  description:
+    "Discover live brand-funded campaigns on Get Paid To Post. Pick one, post a clip on TikTok, Instagram or YouTube, and get paid per verified view.",
+};
 
 /**
  * /discover is the alias the owner types and the auth pages redirect

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
@@ -28,6 +29,58 @@ import { VIDEO_RULES } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
 import { campaignPlatforms, platformNamesText } from "@/lib/types";
 import { getBrandCampaignClips, type BrandCampaignClip } from "@/lib/brand-clips";
+
+/**
+ * Per-campaign metadata (Round 5 P2-15): the campaign detail page is
+ * the main shared link, so it gets its own og:title, og:description
+ * and og:image. Only LIVE campaigns expose their data here — a
+ * missing, pending, rejected, ended or settling campaign returns the
+ * generic "not found" metadata, so pending brand data never leaks
+ * into a link preview. No numbers are invented: the description is
+ * the campaign's own brief text, truncated, and the image is the
+ * campaign's own thumbnail/logo, falling back to the site default.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  const notFoundMeta: Metadata = {
+    title: "Campaign not found",
+    description: "This campaign is not available on Get Paid To Post.",
+  };
+  let campaign: Awaited<ReturnType<typeof getCampaign>>;
+  try {
+    campaign = await getCampaign(params.id);
+  } catch {
+    return notFoundMeta;
+  }
+  if (!campaign || !isCampaignLive(campaign)) return notFoundMeta;
+  const image =
+    campaign.thumbnail_url || campaign.logo_url || "/og-image.png";
+  const brief = (campaign.description ?? "").trim();
+  const description =
+    brief.length > 150
+      ? `${brief.slice(0, 147).trimEnd()}…`
+      : brief ||
+        "Post clips for this campaign on TikTok, Instagram and YouTube and get paid per verified view.";
+  const ogTitle = `${campaign.title} | Get Paid To Post`;
+  return {
+    title: campaign.title,
+    description,
+    openGraph: {
+      title: ogTitle,
+      description,
+      images: [{ url: image, alt: campaign.title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: ogTitle,
+      description,
+      images: [image],
+    },
+  };
+}
 
 /**
  * Campaign detail: brand profile header (logo tile, brand name,

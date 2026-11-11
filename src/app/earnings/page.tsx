@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
@@ -5,6 +6,12 @@ import { getWallet, getWithdrawals, getUserSubmissions } from "@/lib/data";
 import WithdrawButton from "@/components/WithdrawButton";
 import { formatUSD } from "@/lib/money";
 import { HOLD_HOURS, WITHDRAW_MIN, WITHDRAW_METHOD_LABELS } from "@/lib/constants";
+
+export const metadata: Metadata = {
+  title: "Earnings",
+  description:
+    "Your Get Paid To Post earnings — pending balance, withdrawable balance and withdrawal history. Withdrawals in USDT (TRC20), from $15.",
+};
 
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-300",

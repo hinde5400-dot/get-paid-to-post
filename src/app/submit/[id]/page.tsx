@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getCampaign, getUserSubmissions, isCampaignLive } from "@/lib/data";
@@ -5,6 +6,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { getServerClient } from "@/lib/supabase/server";
 import SubmitBundleForm, { type LastSubmission } from "@/components/SubmitBundleForm";
 import type { Platform } from "@/lib/types";
+
+export const metadata: Metadata = {
+  title: "Submit your clip",
+  description:
+    "Submit your posted clip for a campaign on Get Paid To Post — paste your TikTok, Instagram or YouTube link within 30 minutes of posting.",
+};
 
 export default async function SubmitPage({
   params,

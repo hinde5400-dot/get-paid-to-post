@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getCurrentUser, getProfile } from "@/lib/auth";
 import { getWallet } from "@/lib/data";
 import { formatUSD } from "@/lib/money";
 import SignOutButton from "@/components/SignOutButton";
+
+export const metadata: Metadata = {
+  title: "More",
+  description:
+    "Your account, earnings and settings on Get Paid To Post — campaigns, connected accounts, stats and support in one place.",
+};
 
 const LINKS = [
   { href: "/campaigns", label: "Campaigns", icon: "◎", desc: "Browse funded campaigns" },

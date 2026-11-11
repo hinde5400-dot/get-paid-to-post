@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserSubmissions } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import MyPostsList, { type CampaignHistoryRow } from "@/components/MyPostsList";
+
+export const metadata: Metadata = {
+  title: "My Posts",
+  description:
+    "Your submitted clips on Get Paid To Post — track review status, views and earnings for every post.",
+};
 
 /**
  * Participant history (migration 0027): the logged-in creator's own
