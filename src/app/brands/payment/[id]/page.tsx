@@ -406,7 +406,7 @@ export default async function BrandPaymentPage({
               never read from the stored platform_fee column. */}
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
             <span className="text-sm font-bold text-fg/60">
-              Platform fee (15%)
+              Platform fee (15%, minimum fee $0.01)
             </span>
             <span className="text-sm font-black text-fg">
               {formatUSD(platformFee)} USDT

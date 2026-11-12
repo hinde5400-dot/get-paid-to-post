@@ -8,7 +8,7 @@ import {
 } from "@/lib/data";
 
 /**
- * Refund requests for a campaign (migrations 0041 + 0043).
+ * Refund requests for a campaign (migrations 0041 + 0043 + 0044).
  *
  * kind = 'rejected' (Round-4 P2-B5): the campaign was rejected
  * AFTER the brand paid. The reject itself records nothing about
@@ -35,9 +35,15 @@ import {
  * 0041): a second tap returns the existing request instead of
  * recording a duplicate refund, scoped to the same kind. When a
  * 'rejected' refund is filed on a campaign that already has an
- * open 'overpayment' request, the overpayment row is closed as
- * 'cancelled' first — the full-budget refund supersedes it — so
- * the insert does not trip the one-open-request index.
+ * open 'overpayment' request, the overpayment row is cancelled
+ * first — the full-budget refund supersedes it — so the insert
+ * does not trip the one-open-request index. The brand cancels
+ * its own open row through the "refund_requests brand cancel own
+ * open" policy (migration 0044), the same status-guarded cancel
+ * the owner action uses; the cancel is verified by re-reading,
+ * and only if it did not take (0044 not applied yet) does the
+ * route return the honest 409 telling the brand to ask the admin
+ * on Discord to close it first.
  *
  * POST — brand owner (or the admin) requests the refund. Body:
  * { kind?: 'rejected' | 'overpayment' } (default 'rejected').
@@ -459,14 +465,17 @@ export async function POST(
   // A 'rejected' refund supersedes an open 'overpayment' one on
   // the same campaign: close the overpayment row as 'cancelled'
   // FIRST, or the one-open-request-per-campaign index blocks the
-  // insert below. The cancel is verified by re-reading — a brand
-  // has no UPDATE policy on refund_requests (migration 0041),
-  // so for a brand-filed request the update silently matches
-  // zero rows and the overpayment stays open; the owner filing
-  // the same request cancels it fine. When the cancel did not
-  // take, say so honestly instead of failing on the unique
-  // index: the admin closes the overpayment request, then the
-  // full refund can be filed.
+  // insert below. The brand cancels its OWN open row through the
+  // "refund_requests brand cancel own open" policy (migration
+  // 0044, Round-6 A8) — the update is status-guarded, so it only
+  // ever flips a still-'requested' row to 'cancelled'. The cancel
+  // is verified by re-reading: before 0044 is applied the brand
+  // has no UPDATE policy, the update silently matches zero rows
+  // and the overpayment stays open (the owner filing the same
+  // request cancels it fine). When the cancel did not take, say
+  // so honestly instead of failing on the unique index: the admin
+  // closes the overpayment request, then the full refund can be
+  // filed.
   const openOverpayment = open.filter((r) => r.kind === "overpayment");
   if (openOverpayment.length > 0) {
     await supabase
@@ -475,7 +484,8 @@ export async function POST(
       .in(
         "id",
         openOverpayment.map((r) => r.id)
-      );
+      )
+      .eq("status", "requested");
     let stillOpen: RefundRow[] = [];
     try {
       stillOpen = await loadOpenRequests(supabase, params.id);

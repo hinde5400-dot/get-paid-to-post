@@ -611,9 +611,11 @@ export default async function HomePage() {
 
       {/* FAQ */}
       <section>
-        <h2 className="mb-4 font-display text-2xl font-black uppercase tracking-tight text-fg">
-          Frequently asked questions
-        </h2>
+        <Link href="/faq">
+          <h2 className="mb-4 font-display text-2xl font-black uppercase tracking-tight text-fg hover:underline">
+            Frequently asked questions
+          </h2>
+        </Link>
         <Faq items={FAQS} />
       </section>
     </div>

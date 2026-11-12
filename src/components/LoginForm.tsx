@@ -96,18 +96,14 @@ function LoginForm() {
   }
 
   // Shown when middleware redirects a guest away from a protected page,
-  // or when the auth callback bounces a blocked / cancelled sign-in.
+  // or when the auth callback bounces a blocked account.
   const noticeMessage = searchParams.get("message");
   const notice =
     noticeMessage === "login-required"
       ? "Please login to continue."
       : noticeMessage === "account-blocked"
         ? "This account is blocked. Please contact support."
-        : noticeMessage === "google-cancelled"
-          ? "Sign-in was cancelled. Please log in with your email and password."
-          : noticeMessage === "google-error"
-            ? "Sign-in failed. Please log in with your email and password."
-            : "";
+        : "";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

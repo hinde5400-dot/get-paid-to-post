@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Withdrawal } from "@/lib/types";
 import { WITHDRAW_METHOD_LABELS } from "@/lib/constants";
 import { formatUSD } from "@/lib/money";
+import { truncateTxId } from "@/lib/validate";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
 
@@ -235,7 +236,7 @@ export default function AdminWithdrawalList({
                     rel="noreferrer"
                     className="font-mono font-bold text-fg underline"
                   >
-                    {w.payout_tx_id}
+                    {truncateTxId(w.payout_tx_id)}
                   </a>
                 </p>
               )}

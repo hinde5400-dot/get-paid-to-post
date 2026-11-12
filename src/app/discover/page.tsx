@@ -1,16 +1,10 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-
-export const metadata: Metadata = {
-  title: "Discover",
-  description:
-    "Discover live brand-funded campaigns on Get Paid To Post. Pick one, post a clip on TikTok, Instagram or YouTube, and get paid per verified view.",
-};
+import { permanentRedirect } from "next/navigation";
 
 /**
  * /discover is the alias the owner types and the auth pages redirect
  * to — it simply forwards to the canonical /campaigns route,
  * preserving every query param (filters, tab, message, ...).
+ * The alias is permanent, so the redirect is a 308.
  */
 export default function DiscoverPage({
   searchParams,
@@ -25,5 +19,5 @@ export default function DiscoverPage({
     }
   }
   const suffix = qs.toString();
-  redirect(`/campaigns${suffix ? `?${suffix}` : ""}`);
+  permanentRedirect(`/campaigns${suffix ? `?${suffix}` : ""}`);
 }

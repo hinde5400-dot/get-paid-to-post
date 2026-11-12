@@ -20,6 +20,17 @@ import { PlatformChips } from "./PlatformIcons";
  * auth.uid() = user_id) — never shown on Discover, never to
  * non-joiners.
  */
+/** Approval-time rate/cap (migration 0044, Round-6 P2-C4):
+ *  stored on the submission at approve time by the review route
+ *  and mapped by the loader. Optional here so this file still
+ *  compiles/renders on rows read before 0044, where the fields
+ *  are absent and the campaign's current rate/cap are the
+ *  fallback (see the earnings breakdown below). */
+type ApprovalRateFields = {
+  approval_rate?: number | null;
+  approval_max_payout?: number | null;
+};
+
 export interface CampaignHistoryRow {
   id: string;
   campaign_id: string | null;
@@ -320,17 +331,44 @@ export default function MyPostsList({
                   view growth, which falsely flagged every approved
                   clip whose views grew. Rows approved before 0043
                   carry budget_capped=false and render the plain
-                  breakdown, never the capped claim. */}
+                  breakdown, never the capped claim. The RATE and
+                  per-post CAP are likewise approval-time values
+                  (migration 0044: approval_rate +
+                  approval_max_payout, stored at approve time) —
+                  NOT the campaign's current rate/cap, which the
+                  loader puts on rate_per_1k / max_payout_per_post
+                  and which a later rate edit would silently
+                  rewrite history from. Pre-0044 rows carry no
+                  approval values, so they fall back gracefully to
+                  the campaign's current rate/cap. */}
               {s.status === "approved" &&
-                s.rate_per_1k !== undefined &&
+                ((s as Submission & ApprovalRateFields).approval_rate !=
+                  null ||
+                  s.rate_per_1k !== undefined) &&
                 (() => {
-                  const rate = s.rate_per_1k as number;
-                  const cap =
-                    s.max_payout_per_post ?? MAX_PAYOUT_DEFAULT;
+                  const approvalRate = (
+                    s as Submission & ApprovalRateFields
+                  ).approval_rate;
+                  const approvalCap = (
+                    s as Submission & ApprovalRateFields
+                  ).approval_max_payout;
+                  // Approval-time values win; campaign current
+                  // values are only the pre-0044 fallback.
+                  const rate =
+                    typeof approvalRate === "number" &&
+                    Number.isFinite(approvalRate)
+                      ? approvalRate
+                      : (s.rate_per_1k as number);
+                  const effectiveCap =
+                    typeof approvalCap === "number" &&
+                    Number.isFinite(approvalCap)
+                      ? approvalCap
+                      : s.max_payout_per_post;
+                  const cap = effectiveCap ?? MAX_PAYOUT_DEFAULT;
                   const capApplied =
-                    s.max_payout_per_post !== undefined &&
-                    s.max_payout_per_post !== null &&
-                    s.earnings >= s.max_payout_per_post;
+                    effectiveCap !== undefined &&
+                    effectiveCap !== null &&
+                    s.earnings >= effectiveCap;
                   // Stored fact only: the approval was truncated
                   // by the campaign's remaining budget.
                   const budgetCapped = s.budget_capped === true;
@@ -352,7 +390,7 @@ export default function MyPostsList({
                       Your video earned {formatUSD(s.earnings)} at{" "}
                       {formatUSD(rate)}/1k.
                       {capApplied
-                        ? ` The per-post cap of ${formatUSD(s.max_payout_per_post as number)} applied.`
+                        ? ` The per-post cap of ${formatUSD(effectiveCap as number)} applied.`
                         : ""}
                       {budgetCapped
                         ? approvalCalc

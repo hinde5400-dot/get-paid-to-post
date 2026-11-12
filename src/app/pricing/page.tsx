@@ -6,6 +6,11 @@ export const metadata: Metadata = {
   title: "Pricing",
   description:
     "No subscription, no hidden charges. Brands pay a flat 15% platform fee on top of their campaign budget; creators join, post and earn for free.",
+  openGraph: {
+    title: "Pricing | Get Paid To Post",
+    description:
+      "No subscription, no hidden charges. Brands pay a flat 15% platform fee on top of their campaign budget; creators join, post and earn for free.",
+  },
 };
 
 /**

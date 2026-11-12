@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   title: "How It Works",
   description:
     "Seven steps from signup to payout: sign up, connect your profiles, pick a funded campaign, post your clip, submit it, get approved, and withdraw in USDT.",
+  openGraph: {
+    title: "How It Works | Get Paid To Post",
+    description:
+      "Seven steps from signup to payout: sign up, connect your profiles, pick a funded campaign, post your clip, submit it, get approved, and withdraw in USDT.",
+  },
 };
 
 const STEPS = [

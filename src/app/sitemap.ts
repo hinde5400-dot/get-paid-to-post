@@ -11,6 +11,7 @@ const PAGES = [
   "/campaigns",
   "/pricing",
   "/how-it-works",
+  "/faq",
   "/rules",
   "/terms",
   "/privacy",

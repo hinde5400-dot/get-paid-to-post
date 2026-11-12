@@ -253,6 +253,16 @@ export interface Submission {
    */
   budget_capped?: boolean;
   approval_views?: number | null;
+  /**
+   * Approval-time rate/cap FACTS (migration 0044, round-6 C4):
+   * the rate per 1k and per-post cap in force when this clip was
+   * approved. My Posts renders the earnings breakdown from these,
+   * never from the campaign's current rate/cap (which a later edit
+   * could rewrite). Optional with a null fallback: rows approved
+   * before 0043/0044 render from the campaign rate/cap as before.
+   */
+  approval_rate?: number | null;
+  approval_max_payout?: number | null;
   /** Instagram handle that matched the creator's linked profile
    *  at submit time (migration 0039, round-3 P2-17) — the admin
    *  hand-check anchors on this, not the creator's current

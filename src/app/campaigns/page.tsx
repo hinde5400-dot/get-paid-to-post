@@ -24,6 +24,11 @@ export const metadata: Metadata = {
   title: "Campaigns",
   description:
     "Browse live brand-funded campaigns on Get Paid To Post. Pick one, post a clip on TikTok, Instagram or YouTube, and get paid per verified view.",
+  openGraph: {
+    title: "Campaigns | Get Paid To Post",
+    description:
+      "Browse live brand-funded campaigns on Get Paid To Post. Pick one, post a clip on TikTok, Instagram or YouTube, and get paid per verified view.",
+  },
 };
 
 function hrefWith(

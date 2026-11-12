@@ -549,6 +549,13 @@ export async function POST(request: Request) {
   // Checked BEFORE any insert, so a too-old link rejects the
   // whole bundle instead of half-creating it.
   const postedInfo: { postedAt: string | null; unverified: boolean }[] = [];
+  // Round-6 P2-C2: Instagram has no Meta app / API access yet,
+  // so an Instagram clip's post time can never be verified
+  // automatically — it always goes in unverified, like a TikTok
+  // clip on an API outage (tiktokUnverified above). The UI shows
+  // this instead of a silent success. Derived from the same
+  // postedInfo flag that is stored as posted_time_unverified.
+  let instagramUnverified = false;
   for (const l of links) {
     let postedAt: string | null = null;
     try {
@@ -583,6 +590,9 @@ export async function POST(request: Request) {
       }
     }
     postedInfo.push({ postedAt, unverified: postedAt === null });
+    if (l.platform === "instagram" && postedAt === null) {
+      instagramUnverified = true;
+    }
   }
 
   const howMade = (body.howMade ?? "").trim();
@@ -769,6 +779,10 @@ export async function POST(request: Request) {
     // clip(s) went in unverified — the UI shows this instead of
     // a silent success. The submit itself still succeeded.
     ...(tiktokUnverified ? { tiktokUnverified: true } : {}),
+    // Round-6 P2-C2: Instagram equivalent of tiktokUnverified
+    // (see above) — Instagram is always unverified today (no
+    // Meta app), so this is present on every Instagram submit.
+    ...(instagramUnverified ? { instagramUnverified: true } : {}),
     message: duplicateWarning
       ? "Submitted, but a duplicate link was detected and rejected as a duplicate."
       : "Your bundle was submitted and is Under Review at $0 until approved.",

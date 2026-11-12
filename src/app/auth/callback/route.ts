@@ -8,31 +8,22 @@ function safeNext(raw: string | null): string {
 }
 
 /**
- * Supabase Auth callback — email confirmation AND Google OAuth.
+ * Supabase Auth callback — email confirmation.
  *
- * Google OAuth: signInWithOAuth cannot carry user metadata, so the
- * role picked on the signup page travels in the callback URL
- * (?role=brand). It is claimed on public.users through the
- * SECURITY DEFINER RPC claim_oauth_role (migration 0034): only a
- * fresh account (created within the last 10 minutes) with no
- * campaigns and no submissions may claim creator -> brand, and
- * only on its own row. Auth metadata is NEVER the role store —
- * any user can write their own metadata from the browser console,
- * so a metadata fallback would let anyone self-promote to 'brand'
- * and bypass the migration 0010 privilege guard.
- * brand_name is NOT privilege-guarded, so it is written to the
- * profile row directly as well.
+ * Exchanges the ?code= from the confirmation link for a session,
+ * then redirects to ?next= (default /dashboard). Blocked accounts
+ * cannot log in here either — same as email login.
  *
- * The brand role is only applied to FRESH accounts (created within
- * the last 10 minutes): an existing user who links Google to their
- * account must keep the role they already have. The 10-minute
- * window is the same signup that just started the OAuth flow.
- *
- * Blocked accounts cannot log in here either — same as email login.
- * An OAuth sign-in with the same verified email as an existing
- * account lands on that existing account (GoTrue links the identity
- * instead of creating a duplicate, the default while "Allow
- * duplicate emails" stays off in the Supabase dashboard).
+ * A fresh account (created within the last 10 minutes) that picked
+ * "brand" at signup claims the brand role on public.users through
+ * the SECURITY DEFINER RPC claim_oauth_role (migration 0034): only
+ * a fresh account with no campaigns and no submissions may claim
+ * creator -> brand, and only on its own row. Auth metadata is NEVER
+ * the role store — any user can write their own metadata from the
+ * browser console, so a metadata fallback would let anyone
+ * self-promote to 'brand' and bypass the migration 0010 privilege
+ * guard. brand_name is NOT privilege-guarded, so it is written to
+ * the profile row directly as well.
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);

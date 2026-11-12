@@ -180,7 +180,7 @@ export async function POST(request: Request) {
     if (submission.status === "rejected") {
       return NextResponse.json(
         { error: "This submission has already been rejected." },
-        { status: 400 }
+        { status: 409 }
       );
     }
 
@@ -392,7 +392,7 @@ export async function POST(request: Request) {
               ? "This submission has already been approved."
               : `This submission has already been ${submission.status} and cannot be approved.`,
         },
-        { status: 400 }
+        { status: 409 }
       );
     }
     const viewsRaw = Number(body.views ?? 0);
@@ -684,6 +684,37 @@ export async function POST(request: Request) {
       );
     }
 
+    // Round-6 C4: store the approval-time rate/cap facts
+    // (migration 0044) — the rate per 1k and max payout/post in
+    // force at approve time, so My Posts renders history from
+    // approval-time values, never the campaign's current rate
+    // or cap. Its OWN best-effort update, separate from the
+    // 0043 facts above: before 0044 is applied these columns
+    // do not exist, and one combined update would fail the
+    // whole facts write (losing budget_capped/approval_views
+    // too). A failed write here is swallowed (logged) — the
+    // approval, budget decrement and wallet credit below still
+    // go through, and the row just reads as a pre-0044 approval
+    // (current campaign values, as before).
+    try {
+      const { error: rateFactsError } = await supabase
+        .from("submissions")
+        .update({ approval_rate: ratePer1k, approval_max_payout: cap })
+        .eq("id", submission.id)
+        .eq("status", "approved");
+      if (rateFactsError) {
+        console.error(
+          "[admin/review] could not store approval_rate/approval_max_payout (migration 0044 not applied yet?):",
+          rateFactsError.message
+        );
+      }
+    } catch (err) {
+      console.error(
+        "[admin/review] could not store approval_rate/approval_max_payout (migration 0044 not applied yet?):",
+        err instanceof Error ? err.message : err
+      );
+    }
+
     // P0-2: atomic budget decrement (migration 0036). The old
     // code read budget_left once and wrote an absolute value, so
     // two concurrent approves both read $100, each earned $80,
@@ -733,11 +764,43 @@ export async function POST(request: Request) {
           ...(typeof (submission as { approval_views?: unknown }).approval_views !== "undefined"
             ? { approval_views: null }
             : {}),
+          // Round-6 C4: clear the approval-time rate/cap facts
+          // too, when the row already carries them (same
+          // conditional pattern as the 0043 facts above).
+          ...(typeof (submission as { approval_rate?: unknown }).approval_rate !== "undefined"
+            ? { approval_rate: null }
+            : {}),
+          ...(typeof (submission as { approval_max_payout?: unknown }).approval_max_payout !== "undefined"
+            ? { approval_max_payout: null }
+            : {}),
         })
         .eq("id", submission.id)
         .eq("status", "approved")
         .select("id");
-      return !revertError && Boolean(reverted && reverted.length > 0);
+      if (revertError || !reverted || reverted.length === 0) return false;
+      // Best-effort: the facts updates above ran before the
+      // claim was reverted, so on a 0043/0044 database the row
+      // may still carry budget_capped / approval_views /
+      // approval_rate / approval_max_payout even though it is
+      // pending again. Clear all four; on a pre-0043/0044
+      // database the unknown columns error and are swallowed —
+      // the revert itself already succeeded, and My Posts only
+      // renders these facts on approved rows anyway.
+      try {
+        await client
+          .from("submissions")
+          .update({
+            budget_capped: false,
+            approval_views: null,
+            approval_rate: null,
+            approval_max_payout: null,
+          })
+          .eq("id", submission.id)
+          .eq("status", "pending");
+      } catch {
+        // Pre-migration columns — nothing to clear.
+      }
+      return true;
     }
     const {
       data: budgetRows,
@@ -792,6 +855,48 @@ export async function POST(request: Request) {
     // credit. The RPC increments inside the database, so a
     // concurrent credit can no longer lose one. Never fall back
     // to the absolute write — that IS the lost credit.
+    // Round-6 A5: reverting a failed credit. By this point the
+    // claim has flipped the row to approved AND the budget RPC
+    // has decremented the campaign budget — so unlike the
+    // budget-RPC failures above, revertClaim() alone is not
+    // enough: the budget must be restored too, or the campaign
+    // would show money spent for a clip that was never paid.
+    // Returns true only when BOTH the claim is back to pending
+    // and the budget is restored; anything less is reported
+    // honestly as a distinct manual-repair state, never as a
+    // clean abort. (spots_left was not touched yet — the spots
+    // update runs after the credit — so there is nothing to
+    // restore there.)
+    async function revertAfterCreditFailure(): Promise<boolean> {
+      const reverted = await revertClaim();
+      if (!reverted) return false;
+      // Narrowed locally: TS does not carry the top-of-function
+      // null check into a closure (same pattern as revertClaim).
+      const client = supabase;
+      if (!client) return false;
+      const { data: restoreRows, error: restoreError } =
+        await client.rpc("restore_campaign_budget", {
+          p_campaign_id: campaign.id,
+          p_amount: earnings,
+        });
+      if (restoreError) {
+        console.error(
+          "[admin/review] restore_campaign_budget RPC failed during credit-failure revert:",
+          restoreError.message
+        );
+        return false;
+      }
+      const restoreResult = (restoreRows as
+        | { ok: boolean }[]
+        | null)?.[0];
+      if (!restoreResult?.ok) {
+        console.error(
+          "[admin/review] restore_campaign_budget returned ok:false during credit-failure revert."
+        );
+        return false;
+      }
+      return true;
+    }
     const {
       data: creditRows,
       error: creditRpcError,
@@ -804,9 +909,14 @@ export async function POST(request: Request) {
         "[admin/review] credit_wallet_pending RPC failed:",
         creditRpcError.message
       );
+      const reverted = await revertAfterCreditFailure();
       return NextResponse.json(
         {
-          error: `Clip approved, but the $${earnings.toFixed(2)} credit to the creator's wallet FAILED (${creditRpcError.message}). The clip shows as approved in /admin — credit the wallet by hand (run migration 0038 in Supabase first if the function is missing).`,
+          error:
+            `The $${earnings.toFixed(2)} credit to the creator's wallet FAILED (${creditRpcError.message}). ` +
+            (reverted
+              ? "The approval was aborted: the clip is back to pending and the campaign budget was restored — nothing was credited. Run migration 0038 in Supabase first if the function is missing, then retry."
+              : "MANUAL REPAIR NEEDED: the clip may still show as approved and the campaign budget may still be decremented — check /admin for its current status, restore the budget and credit the wallet by hand (run migration 0038 in Supabase first if the function is missing)."),
         },
         { status: 500 }
       );
@@ -819,12 +929,21 @@ export async function POST(request: Request) {
       // but there is no wallets INSERT RLS policy anywhere, so
       // that insert could never succeed — dead code. It is
       // removed; wallets are created by the signup trigger, so a
-      // missing row means the trigger missed this user. The clip
-      // is approved and the budget already decremented above, so
-      // the message tells the owner exactly what to do by hand.
+      // missing row means the trigger missed this user. The
+      // approval is now REVERTED (Round-6 A5) instead of left
+      // approved-but-unpaid: the claim goes back to pending and
+      // the decremented budget is restored, so Turn can fix the
+      // missing wallet and retry the approval cleanly.
+      const reverted = await revertAfterCreditFailure();
       return NextResponse.json(
         {
-          error: `Clip approved and the campaign budget was decremented, but no wallet exists for this creator and the site cannot create one (wallets are created by the signup trigger — this user missed it). Create the wallet row in Supabase (wallets table, user_id ${submission.user_id}, pending_balance $${earnings.toFixed(2)}, available_balance 0, withdrawn_total 0) to credit the $${earnings.toFixed(2)}.`,
+          error:
+            `No wallet exists for this creator, so the $${earnings.toFixed(2)} could not be credited (wallets are created by the signup trigger — this user missed it). ` +
+            (reverted
+              ? "The approval was aborted: the clip is back to pending and the campaign budget was restored — nothing was credited. Create the wallet row in Supabase (wallets table, user_id " +
+                `${submission.user_id}, pending_balance $0, available_balance 0, withdrawn_total 0), then retry the approval.`
+              : "MANUAL REPAIR NEEDED: the clip may still show as approved and the campaign budget may still be decremented — check /admin for its current status, restore the budget, create the wallet row in Supabase (wallets table, user_id " +
+                `${submission.user_id}, pending_balance $${earnings.toFixed(2)}, available_balance 0, withdrawn_total 0), and credit the $${earnings.toFixed(2)} by hand.`),
         },
         { status: 500 }
       );

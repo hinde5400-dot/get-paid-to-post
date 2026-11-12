@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import type { BrandMessage } from "@/lib/types";
+import { truncateTxId } from "@/lib/validate";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
 
@@ -227,7 +228,7 @@ export default function AdminMessagesList({
               </p>
               {first?.payment_tx_id ? (
                 <p className="mt-1 break-all font-mono text-xs font-bold text-red-300">
-                  {first.payment_tx_id}
+                  {truncateTxId(first.payment_tx_id)}
                 </p>
               ) : (
                 <p className="mt-1 text-xs font-semibold text-fg/50">

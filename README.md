@@ -26,7 +26,7 @@ verified views.
 | Earnings | views / 1,000 × the campaign's single rate per 1,000 views, capped at the per-post max ($10–$200, $100 default) and the remaining budget; min 1,000 views to earn; views tracked 14 days after submit |
 | Approval hold | Approved earnings sit in a 72-hour hold, then become available |
 | Minimum withdrawal | $15 |
-| Withdrawal fee | 5% — you receive amount × 0.95 |
+| Withdrawal fee | 5% — you receive the amount minus the fee, rounded to the nearest cent |
 | Payout methods | USDT (TRC20) only — manual payout by the owner, usually within 24 hours, never pending more than 3 days |
 | Submit limits | Max 15 APPROVED clips per platform per campaign per creator (rejected clips don't count, no resubmit); one clip per platform every 2 hours; submit within 30 minutes of posting |
 

@@ -62,6 +62,10 @@ export default function RefundPage() {
           If your campaign was rejected after you paid, you can also
           request the refund from your dashboard or the payment page —
           the button there records the request for the owner.
+          Overpaid budget — your budget was lowered after you paid —
+          is likewise requestable from your dashboard or the payment
+          page, and the 15% platform fee is not refundable on it
+          either.
         </p>
       </section>
     </div>

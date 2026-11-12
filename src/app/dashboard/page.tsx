@@ -234,15 +234,24 @@ async function getUserCampaignHistory(
 ): Promise<CampaignHistoryRow[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("campaign_history")
-    .select(
-      "id, campaign_id, campaign_title, brand_name, platforms, joined_at, clips_submitted, clips_approved, total_views, total_earned, status"
-    )
-    .eq("user_id", userId)
-    .order("joined_at", { ascending: false });
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map((row) => ({
+  // Round-6 C5: page in 1,000-row chunks — an unpaged select
+  // silently caps at 1,000 rows (PostgREST default), so past 1,000
+  // history rows the oldest ones vanished from the dashboard.
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await supabase
+      .from("campaign_history")
+      .select(
+        "id, campaign_id, campaign_title, brand_name, platforms, joined_at, clips_submitted, clips_approved, total_views, total_earned, status"
+      )
+      .eq("user_id", userId)
+      .order("joined_at", { ascending: false })
+      .range(offset, offset + 999);
+    if (error || !data) return [];
+    rows.push(...(data as Record<string, unknown>[]));
+    if (data.length < 1000) break;
+  }
+  return rows.map((row) => ({
     id: String(row.id ?? ""),
     campaign_id: (row.campaign_id as string | null) ?? null,
     campaign_title: (row.campaign_title as string | null) ?? null,

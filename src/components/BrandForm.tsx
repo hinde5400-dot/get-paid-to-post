@@ -317,6 +317,12 @@ export default function BrandForm({
     if (!Number.isFinite(budgetNum) || budgetNum <= 0) {
       return fail("budget", "Budget must be more than $0");
     }
+    // Budget cap (round-6 B2): the server rejects anything over
+    // $1,000,000 — check it here so the brand learns it on the
+    // form, not at the review panel.
+    if (budgetNum > 1_000_000) {
+      return fail("budget", "Budget must be $1,000,000 or less");
+    }
     // Single rate (item 2): ONE rate for all platforms — it must
     // be more than $0 per 1k views.
     const rateNum = Number(rate);
@@ -335,6 +341,17 @@ export default function BrandForm({
       return fail(
         "rate",
         "Rate per 1,000 views must be $1,000 or less per 1k views"
+      );
+    }
+    // Rounds-to-$0 (round-6 B1): the server rounds the rate to
+    // cents and rejects anything that rounds to $0.00 — a tiny
+    // rate like $0.001 passes the "> $0" check above but would
+    // fail at save. Check it here, with the server's message,
+    // before the review step.
+    if (Math.round(rateNum * 100) / 100 <= 0) {
+      return fail(
+        "rate",
+        "Rate is too small — after rounding it is $0.00 per 1k views."
       );
     }
     // Minimum views per clip: floor 1,000. Blank = 1,000 (the
@@ -943,8 +960,8 @@ export default function BrandForm({
             </span>
             <input
               type="number"
-              min={1}
-              step="1"
+              min={0}
+              step="0.01"
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
               placeholder="200"
@@ -958,7 +975,7 @@ export default function BrandForm({
           </span>
           {liveFeeSplit && (
             <span className="mt-1 block text-xs font-semibold text-lime">
-              Budget {fmtChoice(budgetNum)} + Platform fee (15%):{" "}
+              Budget {fmtChoice(budgetNum)} + Platform fee (15%, minimum fee $0.01):{" "}
               {fmtChoice(liveFeeSplit.fee)} = Total to send{" "}
               {fmtChoice(liveFeeSplit.total)} · Creators pool (full
               budget): {fmtChoice(budgetNum)}.

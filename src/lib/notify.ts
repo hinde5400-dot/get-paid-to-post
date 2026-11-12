@@ -46,7 +46,7 @@ import {
   PLATFORM_LABELS,
   SITE_URL,
 } from "./constants";
-import { formatUSD } from "./money";
+import { formatUSD, platformFeeFor } from "./money";
 
 /** True when the value looks like a Discord webhook URL:
  *  https://discord.com/api/webhooks/<id>/<token> (or the older
@@ -288,7 +288,11 @@ function rateLine(campaign: NotifyCampaign): string {
  */
 export function formatCampaignDetails(campaign: NotifyCampaign): string {
   const budget = Number(campaign.budget_total ?? 0);
-  const fee = Number(campaign.platform_fee ?? 0);
+  // Round-6 B6: recompute the fee from the live budget instead of
+  // trusting the stored platform_fee column — that column is a
+  // cache, and a budget edit can leave it stale (or 0), which
+  // would show Turn a wrong split or no fee/total at all.
+  const fee = platformFeeFor(budget);
   const budgetLine =
     fee > 0
       ? `Budget: ${formatUSD(budget)} (+ ${formatUSD(fee)} platform fee = ${formatUSD(budget + fee)} total to send)`

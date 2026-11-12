@@ -371,7 +371,7 @@ export default async function AdminPage({
           : wStatus === "approved"
             ? "sky"
             : wStatus === "paid"
-              ? "green"
+              ? "sky"
               : "red",
       created_at: w.created_at,
       network: w.method,
@@ -555,7 +555,7 @@ export default async function AdminPage({
           </p>
         </div>
         <div className="rounded-3xl border border-fg/10 bg-card p-4">
-          <p className="font-display text-2xl font-black text-green-300">
+          <p className="font-display text-2xl font-black text-red-300">
             {approvedCount}
           </p>
           <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-fg/50">

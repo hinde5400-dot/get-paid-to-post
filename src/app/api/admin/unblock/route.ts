@@ -98,11 +98,22 @@ export async function POST(request: Request) {
   // a successful unblock that never happened.
   const { data: target } = await supabase
     .from("users")
-    .select("id")
+    .select("id, is_blocked")
     .eq("id", body.userId)
     .maybeSingle();
   if (!target) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+  // Round-6 A4: never reset the ladder of a creator who is not
+  // blocked — the old code unconditionally cleared flagged_at /
+  // banned_at, so unblocking a never-blocked creator sitting at
+  // 9 bot rejections silently wiped their ladder. 409, the
+  // already-decided status every other admin route uses.
+  if ((target as { is_blocked?: boolean }).is_blocked !== true) {
+    return NextResponse.json(
+      { error: "Creator is not blocked." },
+      { status: 409 }
+    );
   }
   const { data: unblocked, error } = await supabase
     .from("users")

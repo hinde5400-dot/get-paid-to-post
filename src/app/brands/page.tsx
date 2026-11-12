@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   title: "For Brands",
   description:
     "Launch a funded campaign: set your rate per 1,000 views and your budget, fund it in USDT, and get real clips from creators on TikTok, Instagram and YouTube.",
+  openGraph: {
+    title: "For Brands | Get Paid To Post",
+    description:
+      "Launch a funded campaign: set your rate per 1,000 views and your budget, fund it in USDT, and get real clips from creators on TikTok, Instagram and YouTube.",
+  },
 };
 
 const FUNDING_STEPS = [

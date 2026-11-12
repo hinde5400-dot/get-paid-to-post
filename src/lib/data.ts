@@ -82,7 +82,7 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
 }
 
 function mapSubmission(row: Record<string, unknown>): Submission {
-  return {
+  const mapped: Submission = {
     id: String(row.id),
     submission_code: String(row.submission_code ?? ""),
     user_id: String(row.user_id ?? ""),
@@ -125,6 +125,22 @@ function mapSubmission(row: Record<string, unknown>): Submission {
     created_at: String(row.created_at ?? ""),
     updated_at: (row.updated_at as string | null) ?? null,
   };
+  // Approval-time rate/cap (migration 0044, Round-6 C4): the
+  // rate per 1k and max payout/post in force at approve time, so
+  // My Posts renders history from approval-time values, never
+  // the campaign's current rate/cap. Attached via cast — the
+  // Submission type gains these fields in a companion change;
+  // until then they are plain runtime properties. select("*")
+  // never errors on a missing column, so on the pre-0044 DB the
+  // keys are simply absent and both stay null (never a fake 0).
+  const extra = mapped as unknown as Record<string, unknown>;
+  extra.approval_rate =
+    row.approval_rate == null ? null : Number(row.approval_rate);
+  extra.approval_max_payout =
+    row.approval_max_payout == null
+      ? null
+      : Number(row.approval_max_payout);
+  return mapped;
 }
 
 // Live / settling definitions live in src/lib/campaigns.ts (pure,
@@ -385,24 +401,28 @@ export async function getBrandCampaignStats(
   if (!supabase) return { ...stats, total_views: null };
   let total_views: number | null = null;
   try {
-    const { data, error } = await supabase
-      .from("submissions")
-      .select("views")
-      .eq("campaign_id", campaignId)
-      .eq("status", "approved");
-    if (!error && data) {
-      const rows = data as Record<string, unknown>[];
-      if (rows.length > 0) {
-        total_views = rows.reduce(
-          (s, r) => s + Number(r.views ?? 0),
-          0
-        );
-      } else {
-        // No readable rows: genuinely zero views only when the
-        // campaign has no submissions at all (stats.total === 0);
-        // otherwise the views are RLS-blocked, not zero.
-        total_views = stats.total === 0 ? 0 : null;
-      }
+    // Round-6 C5: chunked to exhaustion — the old unpaged select
+    // silently capped at 1,000 rows, undercounting total views on
+    // a campaign with 1,000+ approved submissions.
+    const rows = await fetchAllPages(async (offset, chunk) => {
+      const { data, error } = await supabase
+        .from("submissions")
+        .select("views")
+        .eq("campaign_id", campaignId)
+        .eq("status", "approved")
+        .range(offset, offset + chunk - 1);
+      return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+    });
+    if (rows.length > 0) {
+      total_views = rows.reduce(
+        (s, r) => s + Number(r.views ?? 0),
+        0
+      );
+    } else {
+      // No readable rows: genuinely zero views only when the
+      // campaign has no submissions at all (stats.total === 0);
+      // otherwise the views are RLS-blocked, not zero.
+      total_views = stats.total === 0 ? 0 : null;
     }
   } catch {
     total_views = null;
@@ -456,14 +476,25 @@ export async function getCampaignStats(
     };
   }
   // 2) Fallback: the owner can read every submission via RLS.
+  // Chunked to exhaustion (Round-6 sweep) — the old unpaged
+  // select silently capped at 1,000 rows, undercounting totals
+  // on a campaign with 1,000+ submissions.
   const { data: isAdmin } = await supabase.rpc("is_admin");
   if (isAdmin !== true) return null;
-  const { data: rows, error: qError } = await supabase
-    .from("submissions")
-    .select("user_id, status, created_at, views")
-    .eq("campaign_id", campaignId);
-  if (qError || !rows) return null;
-  const list = rows as Record<string, unknown>[];
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await fetchAllPages(async (offset, chunk) => {
+      const { data: page, error: qError } = await supabase
+        .from("submissions")
+        .select("user_id, status, created_at, views")
+        .eq("campaign_id", campaignId)
+        .range(offset, offset + chunk - 1);
+      return { rows: (page ?? null) as Record<string, unknown>[] | null, error: qError };
+    });
+  } catch {
+    return null;
+  }
+  const list = rows;
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const active30d = new Set(
     list
@@ -486,10 +517,18 @@ export async function getCampaignStats(
 export async function getCampaignStatsMap(
   campaignIds: string[]
 ): Promise<Record<string, CampaignStats | null>> {
+  // Round-6 R2: the per-campaign stats calls are independent, so
+  // they run in parallel — the old sequential loop made
+  // /campaigns (and home) wait for one campaign_stats RPC after
+  // another (~2.8s warm). Promise.all keeps the input order, so
+  // the returned map is identical, only faster.
+  const results = await Promise.all(
+    campaignIds.map((id) => getCampaignStats(id))
+  );
   const out: Record<string, CampaignStats | null> = {};
-  for (const id of campaignIds) {
-    out[id] = await getCampaignStats(id);
-  }
+  campaignIds.forEach((id, i) => {
+    out[id] = results[i];
+  });
   return out;
 }
 
@@ -497,16 +536,26 @@ export async function getCampaignStatsMap(
 export async function getUserSubmissions(userId: string): Promise<Submission[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("submissions")
-    .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+  // Round-6 C1: chunked to exhaustion — the old unpaged select
+  // silently capped at 1,000 rows, dropping a creator's oldest
+  // submissions from My Posts / the dashboard and undercounting
+  // the approved/15 + cooldown display.
+  // The "*" select already carries submissions.approval_rate /
+  // approval_max_payout (migration 0044) when the columns exist;
+  // mapSubmission reads them as optional with a fallback, so
+  // rows written before 0044 still map cleanly.
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("submissions")
+      .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
   // Forms #26 contract: throw on DB error, never [] (see
-  // getCampaigns).
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load your submissions.");
-  const rows = data as Record<string, unknown>[];
+  // getCampaigns). fetchAllPages already throws on DB error, so
+  // reaching here means the load succeeded.
   // Active flags (migration 0031): a flagged payout is paused, and
   // the creator must see that on My Posts — the old code fetched
   // submissions only, so a flagged clip looked like an ordinary
@@ -514,19 +563,21 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
   const flagMap = new Map<string, { reason: string; flagged_at: string }>();
   if (rows.length > 0) {
     try {
-      const { data: flags } = await supabase
-        .from("submission_flags")
-        .select("submission_id, reason, created_at")
-        .in(
-          "submission_id",
-          rows.map((r) => String(r.id))
-        )
-        .is("resolved_at", null);
-      for (const f of (flags ?? []) as Record<string, unknown>[]) {
-        flagMap.set(String(f.submission_id), {
-          reason: String(f.reason ?? ""),
-          flagged_at: String(f.created_at ?? ""),
-        });
+      // Chunked in 500-id batches: one .in() with every id would
+      // itself grow unbounded on a creator with 1,000+ clips.
+      const ids = rows.map((r) => String(r.id));
+      for (let i = 0; i < ids.length; i += 500) {
+        const { data: flags } = await supabase
+          .from("submission_flags")
+          .select("submission_id, reason, created_at")
+          .in("submission_id", ids.slice(i, i + 500))
+          .is("resolved_at", null);
+        for (const f of (flags ?? []) as Record<string, unknown>[]) {
+          flagMap.set(String(f.submission_id), {
+            reason: String(f.reason ?? ""),
+            flagged_at: String(f.created_at ?? ""),
+          });
+        }
       }
     } catch {
       // Pre-migration 0031 — no flags exist, nothing to attach.
@@ -739,16 +790,21 @@ function mapWithdrawal(row: Record<string, unknown>): Withdrawal {
 export async function getWithdrawals(userId: string): Promise<Withdrawal[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("withdrawals")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+  // Round-6 sweep: chunked to exhaustion — the old unpaged
+  // select silently capped at 1,000 rows, dropping a creator's
+  // oldest withdrawals from their history.
+  const rows = await fetchAllPages(async (offset, chunk) => {
+    const { data, error } = await supabase
+      .from("withdrawals")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + chunk - 1);
+    return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+  });
   // Forms #26 contract: throw on DB error, never [] (see
-  // getCampaigns).
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load withdrawals.");
-  return (data as Record<string, unknown>[]).map(mapWithdrawal);
+  // getCampaigns). fetchAllPages already throws on DB error.
+  return rows.map(mapWithdrawal);
 }
 
 /** All withdrawal requests, newest first — owner only. */
@@ -976,13 +1032,20 @@ export async function getCampaignMessages(
     "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read, brand_read";
   const selectLegacy =
     "id, campaign_id, user_id, message, proof_url, sender, message_type, image_path, created_at, is_read";
+  // Round-6 B4: newest-first + .limit(200) + reverse, mirroring
+  // the API chat route — the old ascending, unbounded select hit
+  // PostgREST's 1,000-row cap and returned the OLDEST 1,000, so
+  // on a long thread the newest admin replies (rejection reason,
+  // "payment verified") silently vanished from the brand's main
+  // chat surface. The returned order is still oldest-first.
   let data: Record<string, unknown>[] | null = null;
   let error: { message: string } | null = null;
   const first = await supabase
     .from("brand_messages")
     .select(selectWithBrandRead)
     .eq("campaign_id", campaignId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (!first.error) {
     data = first.data as Record<string, unknown>[] | null;
   } else if (
@@ -993,7 +1056,8 @@ export async function getCampaignMessages(
       .from("brand_messages")
       .select(selectLegacy)
       .eq("campaign_id", campaignId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false })
+      .limit(200);
     data = retry.data as Record<string, unknown>[] | null;
     error = retry.error;
   } else {
@@ -1004,7 +1068,10 @@ export async function getCampaignMessages(
   // (payment page, rejection-reason lookup) catch it themselves.
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Could not load messages.");
-  return (data as Record<string, unknown>[]).map(mapBrandMessage);
+  return (data as Record<string, unknown>[])
+    .slice()
+    .reverse()
+    .map(mapBrandMessage);
 }
 
 /**
@@ -1137,8 +1204,25 @@ export interface RefundRequest {
 export async function getOpenRefundRequests(): Promise<RefundRequest[]> {
   const supabase = getServerClient();
   if (!supabase) return [];
+  // Round-6 P1-1: only a missing table (42P01, pre-migration
+  // 0041) means "no refunds can exist" and returns []. EVERY
+  // other DB error is rethrown, so /admin renders AdminLoadError
+  // (its try/catch already covers this loader) instead of an
+  // honestly-empty-looking refund queue with a brand's money
+  // invisible inside it. The old try/catch returned [] for any
+  // error at all. fetchAllPages throws plain Errors carrying
+  // only the PostgREST message, so the 42P01 check matches the
+  // message text ("relation … does not exist") as well as the
+  // code.
+  const isTableMissing = (err: unknown): boolean => {
+    const e = err as { code?: string; message?: string } | null;
+    if (!e) return false;
+    if (e.code === "42P01") return true;
+    return /relation .* does not exist/i.test(e.message ?? "");
+  };
+  let rows: Record<string, unknown>[];
   try {
-    const rows = await fetchAllPages(async (offset, chunk) => {
+    rows = await fetchAllPages(async (offset, chunk) => {
       const { data, error } = await supabase
         .from("refund_requests")
         .select("id, campaign_id, user_id, amount, payment_tx_id, status, created_at")
@@ -1147,43 +1231,50 @@ export async function getOpenRefundRequests(): Promise<RefundRequest[]> {
         .range(offset, offset + chunk - 1);
       return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
     });
-    const mapped = rows.map((row) => ({
-      id: String(row.id),
-      campaign_id: String(row.campaign_id),
-      user_id: String(row.user_id),
-      amount: Number(row.amount ?? 0),
-      payment_tx_id: (row.payment_tx_id as string | null) ?? null,
-      status: String(row.status ?? "requested"),
-      created_at: String(row.created_at ?? ""),
-    }));
-    // kind (migration 0043, Round-5 P2) — best-effort second
-    // read: selecting it in the main query would break the whole
-    // queue before 0043 is applied (42703), and the loader's
-    // catch-all would then hide every open refund. When the
-    // column is missing, kind stays undefined and the admin
-    // queue derives it from the campaign's status instead.
-    const { data: kindRows, error: kindError } = await supabase
-      .from("refund_requests")
-      .select("id, kind")
-      .eq("status", "requested");
-    if (!kindError && kindRows) {
-      const kindById = new Map(
-        (kindRows as Record<string, unknown>[]).map((r) => [
-          String(r.id),
-          String(r.kind ?? ""),
-        ])
-      );
-      for (const row of mapped) {
-        const kind = kindById.get(row.id);
-        if (kind) (row as RefundRequest).kind = kind;
-      }
-    }
-    return mapped;
-  } catch {
-    // Pre-migration 0041 — no refund_requests table yet, so no
-    // open requests can exist.
-    return [];
+  } catch (err) {
+    if (isTableMissing(err)) return [];
+    throw err;
   }
+  const mapped = rows.map((row) => ({
+    id: String(row.id),
+    campaign_id: String(row.campaign_id),
+    user_id: String(row.user_id),
+    amount: Number(row.amount ?? 0),
+    payment_tx_id: (row.payment_tx_id as string | null) ?? null,
+    status: String(row.status ?? "requested"),
+    created_at: String(row.created_at ?? ""),
+  }));
+  // kind (migration 0043, Round-5 P2) — best-effort second
+  // read: selecting it in the main query would break the whole
+  // queue before 0043 is applied (42703), and the loader's
+  // catch-all would then hide every open refund. When the
+  // column is missing, kind stays undefined and the admin
+  // queue derives it from the campaign's status instead.
+  // Round-6 A7: paged with fetchAllPages like the main query —
+  // the old unpaged select silently capped at 1,000 rows, so
+  // open refunds past 1,000 lost their kind. A failure here
+  // (missing column pre-0043, transient error) still only
+  // drops kinds, never the queue itself.
+  try {
+    const kindRows = await fetchAllPages(async (offset, chunk) => {
+      const { data, error } = await supabase
+        .from("refund_requests")
+        .select("id, kind")
+        .eq("status", "requested")
+        .range(offset, offset + chunk - 1);
+      return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+    });
+    const kindById = new Map(
+      kindRows.map((r) => [String(r.id), String(r.kind ?? "")])
+    );
+    for (const row of mapped) {
+      const kind = kindById.get(row.id);
+      if (kind) (row as RefundRequest).kind = kind;
+    }
+  } catch {
+    // Kinds unavailable — the queue above is still complete.
+  }
+  return mapped;
 }
 
 /** One row of the public.users directory (Round-4 P2-A12): the
@@ -1353,10 +1444,17 @@ export async function getCreatorBotRejections(
   // rejection counts, as before.
   const unblockedAtById = new Map<string, string>();
   try {
-    const { data: unblocked } = await supabase
-      .from("creator_flags")
-      .select("user_id, unblocked_at");
-    for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
+    // Round-6 sweep: chunked to exhaustion — the old unpaged
+    // select silently capped at 1,000 rows, so an unblock past
+    // 1,000 flag rows never applied to the ladder counts below.
+    const unblocked = await fetchAllPages(async (offset, chunk) => {
+      const { data, error } = await supabase
+        .from("creator_flags")
+        .select("user_id, unblocked_at")
+        .range(offset, offset + chunk - 1);
+      return { rows: (data ?? null) as Record<string, unknown>[] | null, error };
+    });
+    for (const row of unblocked) {
       const userId = String(row.user_id ?? "");
       if (userId && row.unblocked_at) {
         unblockedAtById.set(userId, String(row.unblocked_at));
@@ -1461,16 +1559,21 @@ export async function getCreatorFlags(): Promise<
 > {
   const supabase = getServerClient();
   if (!supabase) return {};
-  const { data, error } = await supabase
-    .from("creator_flags")
-    .select("user_id, bot_rejections, flagged_at, banned_at");
+  // Round-6 sweep: chunked to exhaustion — the old unpaged
+  // select silently capped at 1,000 rows, so flag rows past
+  // 1,000 vanished from the fraud view.
+  const data = await fetchAllPages(async (offset, chunk) => {
+    const { data: page, error } = await supabase
+      .from("creator_flags")
+      .select("user_id, bot_rejections, flagged_at, banned_at")
+      .range(offset, offset + chunk - 1);
+    return { rows: (page ?? null) as Record<string, unknown>[] | null, error };
+  });
   // Forms #26 contract: throw on DB error, never {} (see
   // getCampaigns) — a failed flag load is a failed load, not
-  // "no flags".
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load creator flags.");
+  // "no flags". fetchAllPages already throws on DB error.
   const out: Record<string, CreatorFlag> = {};
-  for (const row of data as Record<string, unknown>[]) {
+  for (const row of data) {
     const userId = String(row.user_id ?? "");
     if (!userId) continue;
     out[userId] = {
@@ -1482,10 +1585,14 @@ export async function getCreatorFlags(): Promise<
     };
   }
   try {
-    const { data: unblocked } = await supabase
-      .from("creator_flags")
-      .select("user_id, unblocked_at");
-    for (const row of (unblocked ?? []) as Record<string, unknown>[]) {
+    const unblocked = await fetchAllPages(async (offset, chunk) => {
+      const { data: page, error } = await supabase
+        .from("creator_flags")
+        .select("user_id, unblocked_at")
+        .range(offset, offset + chunk - 1);
+      return { rows: (page ?? null) as Record<string, unknown>[] | null, error };
+    });
+    for (const row of unblocked) {
       const userId = String(row.user_id ?? "");
       if (userId && out[userId]) {
         out[userId].unblocked_at =
@@ -1499,18 +1606,21 @@ export async function getCreatorFlags(): Promise<
   // best-effort read, same pattern as unblocked_at: selecting it
   // in the main query would break the whole flag load before
   // 0043 is applied, and a failed reason read must not hide the
-  // flagged/banned dates either.
+  // flagged/banned dates either. Chunked like the reads above
+  // (Round-6 sweep).
   try {
-    const { data: reasons, error: reasonsError } = await supabase
-      .from("creator_flags")
-      .select("user_id, unblock_reason");
-    if (!reasonsError) {
-      for (const row of (reasons ?? []) as Record<string, unknown>[]) {
-        const userId = String(row.user_id ?? "");
-        if (userId && out[userId]) {
-          out[userId].unblock_reason =
-            (row.unblock_reason as string | null) ?? null;
-        }
+    const reasons = await fetchAllPages(async (offset, chunk) => {
+      const { data: page, error: reasonsError } = await supabase
+        .from("creator_flags")
+        .select("user_id, unblock_reason")
+        .range(offset, offset + chunk - 1);
+      return { rows: (page ?? null) as Record<string, unknown>[] | null, error: reasonsError };
+    });
+    for (const row of reasons) {
+      const userId = String(row.user_id ?? "");
+      if (userId && out[userId]) {
+        out[userId].unblock_reason =
+          (row.unblock_reason as string | null) ?? null;
       }
     }
   } catch {
@@ -1529,12 +1639,19 @@ export async function getSubmissionFlags(): Promise<
 > {
   const supabase = getServerClient();
   if (!supabase) return {};
-  const { data, error } = await supabase
-    .from("submission_flags")
-    .select("submission_id, reason, created_at")
-    .is("resolved_at", null);
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Could not load submission flags.");
+  // Round-6 sweep: chunked to exhaustion — the old unpaged
+  // select silently capped at 1,000 rows, so active flags past
+  // 1,000 vanished from /admin.
+  const data = await fetchAllPages(async (offset, chunk) => {
+    const { data: page, error } = await supabase
+      .from("submission_flags")
+      .select("submission_id, reason, created_at")
+      .is("resolved_at", null)
+      .range(offset, offset + chunk - 1);
+    return { rows: (page ?? null) as Record<string, unknown>[] | null, error };
+  });
+  // fetchAllPages already throws on DB error, per the Forms #26
+  // contract (see getCampaigns).
   const out: Record<string, SubmissionFlag> = {};
   for (const row of data as {
     submission_id: string;

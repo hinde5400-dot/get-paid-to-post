@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Platform } from "@/lib/types";
 import { formatUSD } from "@/lib/money";
+import { truncateTxId } from "@/lib/validate";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
 
-export type PayoutTone = "amber" | "sky" | "green" | "red";
+export type PayoutTone = "amber" | "sky" | "red";
 
 export interface PayoutRow {
   key: string;
@@ -37,7 +38,6 @@ export interface PayoutRow {
 const TONE_CLS: Record<PayoutTone, string> = {
   amber: "bg-amber-500/15 text-amber-300",
   sky: "bg-sky-500/15 text-sky-300",
-  green: "bg-green-500/15 text-green-300",
   red: "bg-red-500/15 text-red-300",
 };
 
@@ -209,7 +209,7 @@ export default function AdminPayoutsList({ rows }: { rows: PayoutRow[] }) {
                     rel="noreferrer"
                     className="font-mono font-bold text-fg underline"
                   >
-                    {r.payoutTxId}
+                    {truncateTxId(r.payoutTxId)}
                   </a>
                 </p>
               )}

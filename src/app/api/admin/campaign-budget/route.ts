@@ -188,17 +188,30 @@ export async function POST(request: Request) {
     p_campaign_id: row.id,
     p_new_total: newTotal,
   });
+  const historyId = (historyRow as { id: string } | null)?.id ?? "";
   if (budgetRpcError) {
     // Function missing = migration 0036 not applied yet. Remove
     // the history row (the edit did not happen) and say so.
     const { error: rollbackError } = await supabase
       .from("campaign_budget_history")
       .delete()
-      .eq("id", (historyRow as { id: string } | null)?.id ?? "");
+      .eq("id", historyId);
     if (rollbackError) {
+      // Round-6 A6: a failed rollback is NOT a silent
+      // console.error any more — the history row now records a
+      // budget edit that never happened, and the overpayment
+      // math reads it. Tell Turn the exact row to delete by
+      // hand instead of claiming "nothing was changed".
       console.error(
         "[admin/campaign-budget] could not roll back history row after missing-0036 RPC failure:",
         rollbackError.message
+      );
+      return NextResponse.json(
+        {
+          error:
+            `Budget could not be updated atomically — run migration 0036 in Supabase first, then retry. Nothing was changed, BUT the budget-history row ${historyId} could not be deleted and still records this edit as if it happened — delete it by hand in Supabase (campaign_budget_history table, id ${historyId}) or the overpayment math will read a phantom edit.`,
+        },
+        { status: 500 }
       );
     }
     return NextResponse.json(
@@ -218,11 +231,21 @@ export async function POST(request: Request) {
     const { error: rollbackError } = await supabase
       .from("campaign_budget_history")
       .delete()
-      .eq("id", (historyRow as { id: string } | null)?.id ?? "");
+      .eq("id", historyId);
     if (rollbackError) {
+      // Round-6 A6: same phantom-row hazard as above — the
+      // history row records an edit that never happened. Surface
+      // the orphaned row id instead of a silent console.error.
       console.error(
         "[admin/campaign-budget] could not roll back history row after rejected budget edit:",
         rollbackError.message
+      );
+      return NextResponse.json(
+        {
+          error:
+            `New budget cannot be below what is already spent ($${spent.toFixed(2)}). BUT the budget-history row ${historyId} could not be deleted and still records this edit as if it happened — delete it by hand in Supabase (campaign_budget_history table, id ${historyId}) or the overpayment math will read a phantom edit.`,
+        },
+        { status: 500 }
       );
     }
     return NextResponse.json(

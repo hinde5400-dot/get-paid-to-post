@@ -75,6 +75,11 @@ export default function SubmitBundleForm({
      *  clip(s) went in unverified (round-3 P2-18) — the creator
      *  is told so instead of seeing a silent success. */
     tiktokUnverified?: boolean;
+    /** Instagram post times can't be verified automatically yet
+     *  (no Meta app — round-6 P2-C2), so the Instagram clip(s)
+     *  went in unverified — the creator is told so instead of
+     *  seeing a silent success. */
+    instagramUnverified?: boolean;
   } | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -227,6 +232,7 @@ export default function SubmitBundleForm({
         message: data.message ?? "Your post was submitted!",
         duplicateWarning: Boolean(data.duplicateWarning),
         tiktokUnverified: Boolean(data.tiktokUnverified),
+        instagramUnverified: Boolean(data.instagramUnverified),
       });
       // Clear the link/proof inputs so a resubmit after this
       // success cannot produce a confusing "already been
@@ -285,7 +291,7 @@ export default function SubmitBundleForm({
         ⏱ Submit your link within 30 minutes of posting
         {allowedPlatforms.includes("instagram")
           ? ". TikTok and YouTube links posted more than 30 minutes ago are not accepted. Instagram post times can't be verified automatically — the admin hand-checks the 30-minute rule instead."
-          : " — a link posted more than 30 minutes ago is not accepted. Instagram links are hand-checked by the admin (no automatic check yet)."}
+          : " — a link posted more than 30 minutes ago is not accepted."}
       </p>
       {isLoggedIn && (
         <p className="mt-1 text-sm text-fg/60">
@@ -508,6 +514,15 @@ export default function SubmitBundleForm({
                 unverified. Your TikTok clip is under review, but its
                 ownership and post time could not be checked
                 automatically — the admin will check it by hand.
+              </p>
+            )}
+            {success.instagramUnverified && (
+              <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-left text-sm font-semibold leading-relaxed text-amber-200">
+                ⚠️ Instagram post times can&apos;t be verified
+                automatically yet — submitted unverified. Your
+                Instagram clip is under review, but its post time
+                could not be checked automatically — the admin will
+                hand-check the 30-minute rule.
               </p>
             )}
             {success.codes.length > 0 && (
