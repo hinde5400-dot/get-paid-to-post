@@ -25,6 +25,24 @@ export const TIKTOK_SCOPES = "user.info.basic,video.list";
 export const YOUTUBE_OAUTH_REDIRECT_URI = `${SITE_URL}/api/auth/youtube/callback`;
 export const YOUTUBE_OAUTH_SCOPES =
   "https://www.googleapis.com/auth/youtube.readonly";
+// Instagram OAuth — Meta app "Get Paid To Post" (App ID
+// 1433209415104875, Unified login / Instagram API with Instagram
+// Login). The redirect URI must be registered in the Meta app
+// (Instagram API → Instagram Login → OAuth Redirect URIs)
+// character for character, or Meta refuses the login.
+// Scopes are deliberately minimal — only what reading a creator's
+// own Reel views needs: instagram_business_basic (profile + own
+// media) + instagram_business_manage_insights (the `views`
+// insight on their Reels). The app never posts, comments or
+// messages. Needs Vercel env vars INSTAGRAM_APP_ID /
+// INSTAGRAM_APP_SECRET. Until they are set this redirects to
+// /connect with instagram=not_configured instead of crashing.
+// NOTE: while the app is in Development mode, only Instagram
+// Testers (Roles → Instagram Testers) can connect — e9064136 is
+// the first tester. App Review + business verification come later.
+export const INSTAGRAM_REDIRECT_URI = `${SITE_URL}/api/auth/instagram/callback`;
+export const INSTAGRAM_SCOPES =
+  "instagram_business_basic,instagram_business_manage_insights";
 
 // Community — support runs on Discord only (no live chat on site).
 export const DISCORD_URL = "https://discord.gg/kyNcGQkE7y";

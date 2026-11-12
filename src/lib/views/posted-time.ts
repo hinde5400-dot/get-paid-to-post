@@ -11,9 +11,16 @@
 // - TikTok: create_time via video/query (video/list fallback), using
 //   the creator's connected TikTok tokens (same load + refresh +
 //   save-back pattern as refresh.ts).
-// - Instagram: NOT available — no Meta app / API access yet, so the
-//   posted time cannot be fetched. Returns null (unverified).
+// - Instagram: media timestamp via /me/media (the connected
+//   account's own media list), using the creator's connected
+//   Instagram tokens (same load + refresh + save-back pattern as
+//   TikTok). A Reel that is not in the connected account returns
+//   null (unverified).
 import { fetchTikTokViews, type TikTokTokens } from "./tiktok";
+import {
+  fetchInstagramViews,
+  type InstagramTokens,
+} from "./instagram";
 import { fetchYouTubeVideoDetails } from "./youtube";
 import { decryptToken, encryptToken } from "./crypto";
 import { getServerClient } from "../supabase/server";
@@ -86,7 +93,43 @@ export async function fetchPostedTime(
     return { postedAt: result.postedAt };
   }
 
-  // Instagram: no Meta app / API access yet — cannot fetch a
-  // posted time, so the submit is allowed but flagged unverified.
+  // Instagram: the media timestamp from the connected account's
+  // own media list — a Reel that is not in the connected account
+  // returns null (unverified). The submit route already fetched
+  // this for the ownership gate — reuse it instead of calling
+  // Meta a second time.
+  if (platform === "instagram") {
+    if (preFetchedPostedAt !== undefined) {
+      return { postedAt: preFetchedPostedAt };
+    }
+    const supabase = getServerClient();
+    if (!supabase) return { postedAt: null };
+    const { data: tokenRow } = await supabase
+      .from("instagram_connections")
+      .select("user_id, ig_user_id, access_token, token_expires_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!tokenRow) return { postedAt: null };
+    const accessToken = decryptToken(tokenRow.access_token as string);
+    if (!accessToken) return { postedAt: null };
+    const tokens: InstagramTokens = {
+      accessToken,
+      tokenExpiresAt: tokenRow.token_expires_at as string | null,
+    };
+    const result = await fetchInstagramViews(postUrl, tokens);
+    if ("error" in result) return { postedAt: null };
+    if (result.tokens) {
+      // Token was refreshed — save the new one back encrypted
+      // (same as the 3-hour refresh does).
+      await supabase.rpc("save_instagram_tokens", {
+        p_user_id: tokenRow.user_id,
+        p_ig_user_id: tokenRow.ig_user_id,
+        p_access_token: encryptToken(result.tokens.accessToken),
+        p_token_expires_at: result.tokens.tokenExpiresAt,
+      });
+    }
+    return { postedAt: result.postedAt };
+  }
+
   return { postedAt: null };
 }

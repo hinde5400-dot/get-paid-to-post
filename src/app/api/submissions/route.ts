@@ -22,6 +22,10 @@ import {
   fetchTikTokViews,
   type TikTokTokens,
 } from "@/lib/views/tiktok";
+import {
+  fetchInstagramViews,
+  type InstagramTokens,
+} from "@/lib/views/instagram";
 import { decryptToken, encryptToken } from "@/lib/views/crypto";
 
 interface BundleBody {
@@ -345,6 +349,96 @@ export async function POST(request: Request) {
     }
   }
 
+  // Instagram API ownership gate (2026-11-13, Meta app live):
+  // a Reel only counts when it is in the creator's CONNECTED
+  // Instagram account. The Graph API's /me/media only ever
+  // returns the connected account's own media, so a successful
+  // lookup IS the ownership proof — same rule as TikTok. Without
+  // this, anyone could paste any viral Reel's link and claim its
+  // views. The handle gate above stays as the first check.
+  let instagramPostedAt: string | null = null;
+  // Instagram fails OPEN on an API outage (like TikTok, unlike
+  // YouTube): the submit is still allowed, but flagged unverified
+  // for the admin's hand-check (instagramPostedAt stays null).
+  let instagramUnverified = false;
+  if (instagramLink) {
+    const { data: igConn } = await supabase
+      .from("instagram_connections")
+      .select("user_id, ig_user_id, access_token, token_expires_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!igConn) {
+      return NextResponse.json(
+        {
+          error:
+            "Connect your Instagram account first on the Connect page — only Reels from your own connected Instagram account can be submitted.",
+        },
+        { status: 400 }
+      );
+    }
+    const accessToken = decryptToken(igConn.access_token as string);
+    if (!accessToken) {
+      return NextResponse.json(
+        {
+          error:
+            "Your Instagram login could not be read — reconnect Instagram on the Connect page and try again.",
+        },
+        { status: 400 }
+      );
+    }
+    const tokens: InstagramTokens = {
+      accessToken,
+      tokenExpiresAt: igConn.token_expires_at as string | null,
+    };
+    const result = await fetchInstagramViews(instagramLink.url, tokens);
+    if ("error" in result) {
+      if (result.tokens) {
+        // Token was refreshed during the failed lookup — save it
+        // back encrypted (same as the 3-hour refresh does).
+        await supabase.rpc("save_instagram_tokens", {
+          p_user_id: igConn.user_id,
+          p_ig_user_id: igConn.ig_user_id,
+          p_access_token: encryptToken(result.tokens.accessToken),
+          p_token_expires_at: result.tokens.tokenExpiresAt,
+        });
+      }
+      if (result.error.startsWith("Reel not found")) {
+        return NextResponse.json(
+          {
+            error:
+              "This Reel is not in your connected Instagram account. Submit only Reels from the account you connected.",
+          },
+          { status: 400 }
+        );
+      }
+      if (result.error.startsWith("Instagram login expired")) {
+        return NextResponse.json(
+          {
+            error:
+              "Your Instagram login expired — reconnect Instagram on the Connect page and try again.",
+          },
+          { status: 400 }
+        );
+      }
+      // "Instagram could not be reached right now" / "Could not
+      // read views for this Reel" / unreadable Reel ID: the API
+      // failed, not the creator — allow the submit flagged
+      // unverified for the admin's hand-check (instagramPostedAt
+      // stays null, so the clip is unverified).
+      instagramUnverified = true;
+    } else {
+      if (result.tokens) {
+        await supabase.rpc("save_instagram_tokens", {
+          p_user_id: igConn.user_id,
+          p_ig_user_id: igConn.ig_user_id,
+          p_access_token: encryptToken(result.tokens.accessToken),
+          p_token_expires_at: result.tokens.tokenExpiresAt,
+        });
+      }
+      instagramPostedAt = result.postedAt;
+    }
+  }
+
   // YouTube ownership gate (2026-11-09): a YouTube link only
   // counts when the video belongs to the creator's CONNECTED
   // channel. Without this, anyone could paste any viral video's
@@ -549,13 +643,13 @@ export async function POST(request: Request) {
   // Checked BEFORE any insert, so a too-old link rejects the
   // whole bundle instead of half-creating it.
   const postedInfo: { postedAt: string | null; unverified: boolean }[] = [];
-  // Round-6 P2-C2: Instagram has no Meta app / API access yet,
-  // so an Instagram clip's post time can never be verified
-  // automatically — it always goes in unverified, like a TikTok
-  // clip on an API outage (tiktokUnverified above). The UI shows
-  // this instead of a silent success. Derived from the same
-  // postedInfo flag that is stored as posted_time_unverified.
-  let instagramUnverified = false;
+  // Instagram: the API gate above already fetched the Reel's
+  // posted time (instagramPostedAt) — null when the gate was
+  // skipped (API failure), which flags the clip unverified for
+  // the admin's hand-check, like a TikTok clip on an API outage
+  // (tiktokUnverified above). The UI shows this instead of a
+  // silent success. Derived from the same postedInfo flag that is
+  // stored as posted_time_unverified.
   for (const l of links) {
     let postedAt: string | null = null;
     try {
@@ -567,9 +661,14 @@ export async function POST(request: Request) {
         // when the gate was skipped (API failure), which flags the
         // clip unverified for the admin's hand-check.
         l.platform === "youtube" ? youtubePublishedAt : undefined,
-        // TikTok: the ownership gate already fetched create_time —
-        // null when the gate was skipped (API failure).
-        l.platform === "tiktok" ? tiktokPostedAt : undefined
+        // TikTok / Instagram: the ownership gate already fetched
+        // the posted time — null when the gate was skipped (API
+        // failure).
+        l.platform === "tiktok"
+          ? tiktokPostedAt
+          : l.platform === "instagram"
+            ? instagramPostedAt
+            : undefined
       );
       const ms = res.postedAt ? new Date(res.postedAt).getTime() : NaN;
       postedAt = Number.isFinite(ms) ? res.postedAt : null;
@@ -779,9 +878,9 @@ export async function POST(request: Request) {
     // clip(s) went in unverified — the UI shows this instead of
     // a silent success. The submit itself still succeeded.
     ...(tiktokUnverified ? { tiktokUnverified: true } : {}),
-    // Round-6 P2-C2: Instagram equivalent of tiktokUnverified
-    // (see above) — Instagram is always unverified today (no
-    // Meta app), so this is present on every Instagram submit.
+    // Instagram equivalent of tiktokUnverified (see above) —
+    // Meta could not be reached, so the Instagram clip(s) went
+    // in unverified.
     ...(instagramUnverified ? { instagramUnverified: true } : {}),
     message: duplicateWarning
       ? "Submitted, but a duplicate link was detected and rejected as a duplicate."

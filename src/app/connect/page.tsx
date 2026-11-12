@@ -26,6 +26,11 @@ export default function ConnectPage() {
     null
   );
   const [disconnectingYoutube, setDisconnectingYoutube] = useState(false);
+  const [instagramStatus, setInstagramStatus] = useState<string | null>(null);
+  const [instagramConnected, setInstagramConnected] = useState<string | null>(
+    null
+  );
+  const [disconnectingInstagram, setDisconnectingInstagram] = useState(false);
 
   // TikTok Login Kit returns here with ?tiktok=<status> (see
   // /api/auth/tiktok/callback). Read it from the URL so the page can
@@ -36,6 +41,8 @@ export default function ConnectPage() {
     if (tiktok) setTiktokStatus(tiktok);
     const youtube = params.get("youtube");
     if (youtube) setYoutubeStatus(youtube);
+    const instagram = params.get("instagram");
+    if (instagram) setInstagramStatus(instagram);
   }, []);
 
   // P2-13: validate a NAMED connection's token on load. A stored
@@ -76,6 +83,21 @@ export default function ConnectPage() {
       };
       if (p.connected === false) return null;
       return p.channel_title ?? p.channel_handle ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function fetchConfirmedInstagramName(): Promise<string | null> {
+    try {
+      const res = await fetch("/api/auth/instagram/profile?validate=1");
+      if (!res.ok) return null;
+      const p = (await res.json()) as {
+        connected?: boolean;
+        username?: string | null;
+      };
+      if (p.connected === false) return null;
+      return p.username ?? null;
     } catch {
       return null;
     }
@@ -195,6 +217,53 @@ export default function ConnectPage() {
       } catch {
         // Table not set up yet — the YouTube card still works.
       }
+      // Show the linked Instagram account, if one was saved
+      // through Instagram Login. The table only exists after
+      // migration 0045 is run, so a missing table is ignored here
+      // instead of breaking the page.
+      try {
+        const { data: igConn } = await supabase
+          .from("instagram_connections")
+          .select("username")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const ig = igConn as { username?: string | null } | null;
+        if (ig) {
+          const name = ig.username;
+          if (name) {
+            // Row has a name — validate the token before claiming
+            // "Connected" (P2-13), same as TikTok above.
+            const confirmed = await fetchConfirmedInstagramName();
+            setInstagramConnected(confirmed ?? "saved-reconnect");
+          } else {
+            // Row exists but Meta never returned a username (the
+            // profile call failed during the callback) — re-read
+            // it from Meta now so the card shows the real account.
+            try {
+              const res = await fetch("/api/auth/instagram/profile");
+              if (res.ok) {
+                const p = (await res.json()) as {
+                  username?: string | null;
+                };
+                const refreshed = p.username;
+                if (refreshed) setInstagramConnected(refreshed);
+                // The profile re-fetch failed or returned no name:
+                // do NOT claim "Connected as @…" — the row is saved
+                // but unverified, and the creator finds out at
+                // submit. Say so plainly instead.
+                else setInstagramConnected("saved-unverified");
+              } else {
+                setInstagramConnected("saved-unverified");
+              }
+            } catch {
+              setInstagramConnected("saved-unverified");
+            }
+          }
+        }
+      } catch {
+        // Table not set up yet — the Instagram card still works.
+      }
       setLoading(false);
     }
     void load();
@@ -262,6 +331,39 @@ export default function ConnectPage() {
     }
   }
 
+  async function disconnectInstagram() {
+    if (
+      !window.confirm(
+        "Disconnect your Instagram account? You can reconnect anytime."
+      )
+    ) {
+      return;
+    }
+    setDisconnectingInstagram(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/instagram", { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error ?? "Could not disconnect Instagram.");
+      }
+      setInstagramConnected(null);
+      setInstagramStatus("disconnected");
+      showSuccess("Instagram disconnected.");
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Could not disconnect Instagram.";
+      setError(message);
+      showError(message);
+    } finally {
+      setDisconnectingInstagram(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-fg/60">Loading…</p>;
   }
@@ -289,11 +391,10 @@ export default function ConnectPage() {
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
       <p className="mt-2 text-sm text-fg/60">
-        Connect your TikTok and YouTube accounts so your
+        Connect your TikTok, Instagram and YouTube accounts so your
         submitted clips can be matched to you. Only videos from your
-        own connected TikTok and YouTube accounts count — a link to
-        someone else&apos;s video will not earn. (Instagram connects
-        later.)
+        own connected accounts count — a link to someone else&apos;s
+        video will not earn.
       </p>
       {tiktokStatus && (
         <p
@@ -354,22 +455,66 @@ export default function ConnectPage() {
         )}
       </div>
 
-      {/* Instagram — coming soon */}
+      {/* Instagram — live via Instagram Login (Meta app, Development
+          mode: only Instagram Testers can connect until App Review) */}
       <div className={`mt-4 ${cardCls}`}>
         <h2 className="text-sm font-bold text-fg">Connect Instagram</h2>
         <p className="mt-1 text-sm text-fg/60">
-          Log in with Instagram so we can verify your identity and read
-          your own Reels&apos; view counts. We never post, edit or delete
-          your videos.
+          {instagramConnected
+            ? instagramConnected === "saved-unverified"
+              ? "Saved — we couldn't confirm the account name, so verify it at submit: only Reels from your own connected Instagram account count. We use this only to verify your identity and read your own Reels' view counts."
+              : instagramConnected === "saved-reconnect"
+                ? "Saved — we couldn't confirm this login, so reconnect it: only Reels from your own connected Instagram account count. We use this only to verify your identity and read your own Reels' view counts."
+                : `Connected as @${instagramConnected}. We use this only to verify your identity and read your own Reels' view counts.`
+            : "Log in with Instagram so we can verify your identity and read your own Reels' view counts. We never post, edit or delete your videos."}
         </p>
-        <p className="mt-2 text-sm font-semibold text-fg/60">
-          Instagram login isn&apos;t ready yet — connect it here once
-          it&apos;s live.
+        <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold leading-relaxed text-amber-200">
+          Instagram login is still in Development mode — only
+          Instagram Testers added by the site owner can connect until
+          Meta approves our app. If your login fails, that is why.
         </p>
-        <span className="mt-4 inline-block cursor-not-allowed rounded-full bg-fg/10 px-6 py-3 text-sm font-bold text-fg/40">
-          Coming soon
-        </span>
+        {instagramConnected ? (
+          <button
+            type="button"
+            onClick={disconnectInstagram}
+            disabled={disconnectingInstagram}
+            className="mt-4 inline-block rounded-full border border-red-500/50 px-6 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+          >
+            {disconnectingInstagram ? "Disconnecting..." : "Disconnect Instagram"}
+          </button>
+        ) : (
+          <a
+            href="/api/auth/instagram"
+            className="mt-4 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark"
+          >
+            Connect Instagram
+          </a>
+        )}
       </div>
+
+      {instagramStatus && (
+        <p
+          className={`mt-4 rounded-xl px-4 py-2.5 text-sm font-semibold ${
+            instagramStatus === "connected"
+              ? "bg-lime/15 text-lime"
+              : "bg-red-500/15 text-red-300"
+          }`}
+        >
+          {instagramStatus === "connected"
+            ? "Instagram connected — your account is linked."
+            : instagramStatus === "disconnected"
+              ? "Instagram disconnected — your account is unlinked."
+              : instagramStatus === "not_configured"
+                ? "Instagram login is not set up yet — the site owner still needs to add the Instagram keys."
+                : instagramStatus === "save_failed"
+                  ? "Instagram login worked, but saving the connection failed — please try again. If it keeps failing, the database setup may not be done yet."
+                  : instagramStatus === "no_account"
+                    ? "No Instagram account was found on this login — connect with the Instagram account you want to earn with."
+                    : instagramStatus === "denied"
+                      ? "You declined the Instagram login — nothing was connected."
+                      : "Instagram login did not complete — please try again."}
+        </p>
+      )}
 
       {/* YouTube — live via Google OAuth (app unverified, 100-user cap) */}
       <div className={`mt-4 ${cardCls}`}>

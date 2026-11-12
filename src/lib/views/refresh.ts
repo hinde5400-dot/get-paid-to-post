@@ -18,9 +18,12 @@
 // - TikTok: the creator's own video via their saved (encrypted)
 //   Login Kit tokens, refreshed when expired. A legacy plaintext
 //   token is re-saved encrypted the first time it is used.
-// - Instagram: NOT connected yet (no Meta app / API access — setup
-//   paused at mobile verification), so those rows are skipped with
-//   a clear reason instead of failing silently.
+// - Instagram: the creator's own Reels via their saved
+//   (encrypted) long-lived token (60 days, refreshed inside its
+//   last 7 days). A legacy plaintext token is re-saved encrypted
+//   the first time it is used. A Reel is only counted when it is
+//   found in the connected account's own media list — a link to
+//   someone else's Reel is never counted.
 // - A refreshed number only ever updates the stored `views`,
 //   `likes` and `comments` on a still-pending submission. The
 //   like/comment counts feed the 1% engagement minimum
@@ -32,6 +35,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { VIEW_REFRESH_MS } from "@/lib/constants";
 import { fetchYouTubeVideoDetails } from "./youtube";
 import { fetchTikTokViews, type TikTokTokens } from "./tiktok";
+import { fetchInstagramViews, type InstagramTokens } from "./instagram";
 import { decryptToken, encryptToken, isEncryptedToken } from "./crypto";
 
 export interface RefreshSummary {
@@ -81,6 +85,13 @@ interface TokenRow {
   refresh_token: string;
   token_expires_at: string | null;
   refresh_expires_at: string | null;
+}
+
+interface InstagramTokenRow {
+  user_id: string;
+  ig_user_id: string;
+  access_token: string;
+  token_expires_at: string | null;
 }
 
 interface YouTubeChannelRow {
@@ -221,6 +232,47 @@ export async function refreshPendingViews(
     youtubeChannelByUser.set(row.user_id, row.channel_id);
   }
 
+  // Instagram tokens, once per run, keyed by creator — same
+  // pattern as TikTok above (migration 0045). A list error is
+  // logged, not silently ignored — with no tokens every Instagram
+  // row below fails as "not connected", and the log is the only
+  // trace that the real cause was the token lookup.
+  const { data: igTokenRows, error: igTokenListError } = await supabase.rpc(
+    "list_instagram_tokens_for_refresh"
+  );
+  if (igTokenListError) {
+    console.error(
+      "[refresh] list_instagram_tokens_for_refresh failed:",
+      igTokenListError.message
+    );
+    summary.errors.push(
+      `Could not list Instagram tokens: ${igTokenListError.message}`
+    );
+  }
+  const igTokensByUser = new Map<string, InstagramTokenRow>();
+  for (const row of (igTokenRows ?? []) as InstagramTokenRow[]) {
+    igTokensByUser.set(row.user_id, row);
+    // Re-save legacy plaintext tokens encrypted, so the database
+    // never keeps a usable token in the clear after this runs.
+    if (process.env.ENCRYPTION_KEY && !isEncryptedToken(row.access_token)) {
+      const { error: saveError } = await supabase.rpc(
+        "save_instagram_tokens",
+        {
+          p_user_id: row.user_id,
+          p_ig_user_id: row.ig_user_id,
+          p_access_token: encryptToken(decryptToken(row.access_token)),
+          p_token_expires_at: row.token_expires_at,
+        }
+      );
+      if (saveError) {
+        console.error(
+          `[refresh] could not re-save encrypted Instagram tokens for user ${row.user_id.slice(0, 8)}:`,
+          saveError.message
+        );
+      }
+    }
+  }
+
   for (const row of batch) {
     summary.checked += 1;
     const platform = row.platform;
@@ -234,15 +286,79 @@ export async function refreshPendingViews(
     }
 
     if (platform === "instagram") {
-      summary.skipped += 1;
-      tally(platform, "skipped");
-      summary.errors.push(
-        `Instagram not connected yet — ${row.id.slice(0, 8)} skipped.`
-      );
-      // P2-8: stamp the skip too — an unstamped Instagram row
-      // stays stalest-first forever and crowds out good rows
-      // exactly like a failed row.
-      await stampAttempt(row);
+      const tokenRow = igTokensByUser.get(row.user_id);
+      if (!tokenRow) {
+        summary.failed += 1;
+        tally(platform, "failed");
+        summary.errors.push(
+          `Instagram ${row.id.slice(0, 8)}: creator has not connected Instagram.`
+        );
+        await stampAttempt(row);
+        continue;
+      }
+      const accessToken = decryptToken(tokenRow.access_token);
+      if (!accessToken) {
+        summary.failed += 1;
+        tally(platform, "failed");
+        summary.errors.push(
+          `Instagram ${row.id.slice(0, 8)}: saved login cannot be used.`
+        );
+        await stampAttempt(row);
+        continue;
+      }
+      const tokens: InstagramTokens = {
+        accessToken,
+        tokenExpiresAt: tokenRow.token_expires_at,
+      };
+      const result = await fetchInstagramViews(row.post_url, tokens);
+      if (result.tokens) {
+        // Token was refreshed — save the new one back encrypted.
+        const { error: saveError } = await supabase.rpc(
+          "save_instagram_tokens",
+          {
+            p_user_id: tokenRow.user_id,
+            p_ig_user_id: tokenRow.ig_user_id,
+            p_access_token: encryptToken(result.tokens.accessToken),
+            p_token_expires_at: result.tokens.tokenExpiresAt,
+          }
+        );
+        if (saveError) {
+          console.error(
+            `[refresh] could not save refreshed Instagram tokens for user ${tokenRow.user_id.slice(0, 8)}:`,
+            saveError.message
+          );
+          summary.errors.push(
+            `Instagram ${row.id.slice(0, 8)}: refreshed login could not be saved (${saveError.message})`
+          );
+        }
+      }
+      if ("error" in result) {
+        summary.failed += 1;
+        tally(platform, "failed");
+        summary.errors.push(
+          `Instagram ${row.id.slice(0, 8)}: ${result.error}`
+        );
+        await stampAttempt(row);
+        continue;
+      }
+      const { error: applyError } = await supabase.rpc("apply_view_refresh", {
+        p_submission_id: row.id,
+        p_views: result.views,
+        // Meta may omit an engagement count — keep the stored
+        // number then, instead of zeroing it.
+        p_likes: result.likes ?? row.likes ?? 0,
+        p_comments: result.comments ?? row.comments ?? 0,
+      });
+      if (applyError) {
+        summary.failed += 1;
+        tally(platform, "failed");
+        summary.errors.push(
+          `Instagram ${row.id.slice(0, 8)}: could not save (${applyError.message})`
+        );
+        continue;
+      }
+      summary.updated += 1;
+      tally(platform, "updated");
       continue;
     }
 
