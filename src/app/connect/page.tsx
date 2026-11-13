@@ -5,12 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/Toast";
+import BioVerifyCard, {
+  type BioProfileStatus,
+} from "@/components/BioVerifyCard";
 
 /**
- * Connect TikTok / Instagram / YouTube accounts
- * through OAuth — no manual profile links. TikTok works today via
- * Login Kit, YouTube via Google OAuth; the Instagram card is shown
- * the same way and switches on when its login is ready.
+ * Verify profiles with a bio code (the way submissions are
+ * checked now), plus the OAuth logins below for automatic view
+ * sync. Bio-code: paste a profile link, put the code in your bio,
+ * wait 2 minutes, click Verify — the server reads the public bio.
  */
 export default function ConnectPage() {
   const router = useRouter();
@@ -31,6 +34,14 @@ export default function ConnectPage() {
     null
   );
   const [disconnectingInstagram, setDisconnectingInstagram] = useState(false);
+  const [bioProfiles, setBioProfiles] = useState<BioProfileStatus[] | null>(
+    null
+  );
+  const [savedLinks, setSavedLinks] = useState<{
+    tiktok: string | null;
+    instagram: string | null;
+    youtube: string | null;
+  }>({ tiktok: null, instagram: null, youtube: null });
 
   // TikTok Login Kit returns here with ?tiktok=<status> (see
   // /api/auth/tiktok/callback). Read it from the URL so the page can
@@ -116,6 +127,41 @@ export default function ConnectPage() {
         return;
       }
       setLoggedIn(true);
+      // Bio-code verification status (migration 0046) + the
+      // profile links saved in onboarding, to pre-fill the cards.
+      // A missing table is ignored here instead of breaking the page.
+      try {
+        const res = await fetch("/api/profile/verify");
+        if (res.ok) {
+          const body = (await res.json()) as {
+            profiles?: BioProfileStatus[];
+          };
+          setBioProfiles(body.profiles ?? []);
+        }
+      } catch {
+        // Verification table not set up yet — the cards still work.
+      }
+      try {
+        const { data: me } = await supabase
+          .from("users")
+          .select("tiktok_url, instagram_url, youtube_url")
+          .eq("id", data.user.id)
+          .maybeSingle();
+        const m = me as {
+          tiktok_url?: string | null;
+          instagram_url?: string | null;
+          youtube_url?: string | null;
+        } | null;
+        if (m) {
+          setSavedLinks({
+            tiktok: m.tiktok_url ?? null,
+            instagram: m.instagram_url ?? null,
+            youtube: m.youtube_url ?? null,
+          });
+        }
+      } catch {
+        // Profile links not saved yet — the cards still work.
+      }
       // Show the linked TikTok account, if one was saved through Login
       // Kit. The table only exists after migration 0016 is run, so a
       // missing table is ignored here instead of breaking the page.
@@ -391,10 +437,46 @@ export default function ConnectPage() {
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Connect your profiles</h1>
       <p className="mt-2 text-sm text-fg/60">
-        Connect your TikTok, Instagram and YouTube accounts so your
-        submitted clips can be matched to you. Only videos from your
-        own connected accounts count — a link to someone else&apos;s
-        video will not earn.
+        Verify your TikTok, Instagram and YouTube profiles with a bio
+        code so your submitted clips can be matched to you. Only
+        videos from your own verified profiles count — a link to
+        someone else&apos;s video will not earn. Once verified, a
+        profile is locked to your account.
+      </p>
+
+      {/* Bio-code verification — the ownership check for submissions */}
+      <BioVerifyCard
+        platform="tiktok"
+        title="TikTok"
+        placeholder="https://www.tiktok.com/@yourhandle"
+        bioHint="Add the code anywhere in your TikTok bio, save it, then wait for the timer and click Verify."
+        savedUrl={savedLinks.tiktok}
+        initial={bioProfiles?.find((p) => p.platform === "tiktok") ?? null}
+      />
+      <BioVerifyCard
+        platform="instagram"
+        title="Instagram"
+        placeholder="https://www.instagram.com/yourhandle"
+        bioHint="Add the code anywhere in your Instagram bio, save it, then wait for the timer and click Verify."
+        savedUrl={savedLinks.instagram}
+        initial={
+          bioProfiles?.find((p) => p.platform === "instagram") ?? null
+        }
+      />
+      <BioVerifyCard
+        platform="youtube"
+        title="YouTube"
+        placeholder="https://www.youtube.com/@yourhandle"
+        bioHint="Add the code anywhere in your channel description (Customise channel → Basic info → Description), save it, then wait for the timer and click Verify."
+        savedUrl={savedLinks.youtube}
+        initial={bioProfiles?.find((p) => p.platform === "youtube") ?? null}
+      />
+
+      <p className="mt-6 text-sm font-bold text-fg">Log in (optional)</p>
+      <p className="mt-1 text-sm text-fg/60">
+        Logging in below is optional — it lets view counts sync
+        automatically. Your profile is verified with the bio code
+        above, with or without a login.
       </p>
       {tiktokStatus && (
         <p

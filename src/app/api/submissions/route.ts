@@ -26,6 +26,10 @@ import {
   fetchInstagramViews,
   type InstagramTokens,
 } from "@/lib/views/instagram";
+import {
+  fetchPublicPostViews,
+  tiktokHandleFromVideoUrl,
+} from "@/lib/verify/bio";
 import { decryptToken, encryptToken } from "@/lib/views/crypto";
 
 interface BundleBody {
@@ -57,26 +61,6 @@ function instagramHandleFromUrl(raw: string): string | null {
       return segs[0].toLowerCase();
     }
     return null;
-  } catch {
-    return null;
-  }
-}
-
-/** Handle from a stored Instagram profile link (instagram.com/<handle>). */
-function instagramHandleFromProfileLink(
-  raw: string | null | undefined
-): string | null {
-  if (!raw) return null;
-  try {
-    const u = new URL(
-      /^https?:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`
-    );
-    const segs = u.pathname.split("/").filter(Boolean);
-    if (segs.length === 0) return null;
-    // A profile link is just the handle; a Reel/post link saved
-    // by mistake is not a profile link.
-    if (segs[0] === "reel" || segs[0] === "reels" || segs[0] === "p") return null;
-    return segs[0].toLowerCase();
   } catch {
     return null;
   }
@@ -300,31 +284,69 @@ export async function POST(request: Request) {
     }
     instagramHandle = instagramHandleFromUrl(handleSource);
   }
+
+  // TikTok handle, read BEFORE canonicalization drops the author
+  // segment (tiktok.com/video/<id> carries no handle — the same
+  // trap as Instagram). vm/vt short links and /t/ share links
+  // resolve to the full @handle/video URL first.
+  const tiktokRawUrl =
+    links.find((l) => l.platform === "tiktok")?.url ?? null;
+  let tiktokHandle: string | null = null;
+  if (tiktokRawUrl) {
+    let handleSource = tiktokRawUrl;
+    try {
+      const rawUrl = new URL(
+        /^https?:\/\//i.test(tiktokRawUrl.trim())
+          ? tiktokRawUrl.trim()
+          : `https://${tiktokRawUrl.trim()}`
+      );
+      const rawHost = rawUrl.hostname.toLowerCase();
+      if (
+        rawHost === "vm.tiktok.com" ||
+        rawHost === "vt.tiktok.com" ||
+        rawHost.endsWith(".vm.tiktok.com") ||
+        rawHost.endsWith(".vt.tiktok.com") ||
+        /^\/t\/[^/]+/.test(rawUrl.pathname)
+      ) {
+        handleSource = await resolveRedirectUrl(tiktokRawUrl);
+      }
+    } catch {
+      // Unparseable / unresolvable short link: keep the raw URL —
+      // the gate below rejects it for having no handle.
+    }
+    tiktokHandle = tiktokHandleFromVideoUrl(handleSource);
+  }
+
   for (const l of links) {
     l.url = await canonicalizePostUrl(l.url, l.platform);
   }
 
-  // Instagram ownership gate: Instagram has no API access, so the
-  // only ownership signal is the handle in the Reel URL compared
-  // with the Instagram profile link the creator saved in
-  // onboarding (users.instagram_url). No stored link → the creator
-  // must save one first. A mismatching handle → the Reel is not
-  // theirs. A URL with no extractable handle (bare
-  // instagram.com/reel/<id>, or an ig.me link that did not resolve
-  // to a handle-bearing URL) is REJECTED — it cannot be checked
-  // against the linked profile at all, so it must not slip past
-  // the gate flagged unverified. The admin hand-check remains as
-  // the second check, against the handle stored on the submission
-  // (migration 0039), not the creator's current profile link.
+  // Instagram ownership gate (bio-code system, 2026-11-13): the
+  // Reel must be from the creator's VERIFIED Instagram profile
+  // (verified_profiles — locked by a bio code on the Connect
+  // page). The onboarding profile link no longer proves anything:
+  // a pasted link is not proof, the bio code is. A URL with no
+  // extractable handle (bare instagram.com/reel/<id>, or an ig.me
+  // link that did not resolve to a handle-bearing URL) is REJECTED
+  // — it cannot be checked against the verified profile at all,
+  // so it must not slip past the gate flagged unverified. The
+  // admin hand-check remains as the second check, against the
+  // handle stored on the submission (migration 0039).
   const instagramLink = links.find((l) => l.platform === "instagram");
   if (instagramLink) {
-    const storedInstagram = profile?.instagram_url ?? null;
-    const storedHandle = instagramHandleFromProfileLink(storedInstagram);
-    if (!storedInstagram || !storedHandle) {
+    const { data: vp } = await supabase
+      .from("verified_profiles")
+      .select("handle")
+      .eq("user_id", user.id)
+      .eq("platform", "instagram")
+      .not("verified_at", "is", null)
+      .maybeSingle();
+    const verifiedHandle = (vp as { handle?: string } | null)?.handle ?? null;
+    if (!verifiedHandle) {
       return NextResponse.json(
         {
           error:
-            "Save your Instagram profile link in onboarding first — Instagram submissions are checked against the profile link you saved there.",
+            "Verify your Instagram profile first on the Connect page — paste your profile link, put the code in your bio, and click Verify. Only Reels from your verified Instagram profile can be submitted.",
         },
         { status: 400 }
       );
@@ -333,136 +355,108 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Paste the full Reel link from the profile, not a share link — a bare instagram.com/reel/… link or an ig.me share link does not show whose Reel it is, so it cannot be checked against your linked Instagram profile. Open the Reel on the profile and copy that link instead.",
+            "Paste the full Reel link from the profile, not a share link — a bare instagram.com/reel/… link or an ig.me share link does not show whose Reel it is, so it cannot be checked against your verified Instagram profile. Open the Reel on the profile and copy that link instead.",
         },
         { status: 400 }
       );
     }
-    if (instagramHandle !== storedHandle) {
+    if (instagramHandle !== verifiedHandle) {
       return NextResponse.json(
         {
           error:
-            "This Reel is not from your linked Instagram profile — submit only Reels from the Instagram profile you linked in onboarding.",
+            "This Reel is not from your verified Instagram profile — submit only Reels from the Instagram profile you verified on the Connect page.",
         },
         { status: 400 }
       );
     }
   }
 
-  // Instagram API ownership gate (2026-11-13, Meta app live):
-  // a Reel only counts when it is in the creator's CONNECTED
-  // Instagram account. The Graph API's /me/media only ever
-  // returns the connected account's own media, so a successful
-  // lookup IS the ownership proof — same rule as TikTok. Without
-  // this, anyone could paste any viral Reel's link and claim its
-  // views. The handle gate above stays as the first check.
+  // Instagram views gate (bio-code system, 2026-11-13): ownership
+  // is already proven by the verified handle above — this gate
+  // only reads WHEN the Reel was posted (30-minute rule). The
+  // PUBLIC Reel page is tried first (no login needed); the
+  // connected Instagram account's API is the fallback when the
+  // public page cannot be read. If both fail, the submit is
+  // allowed flagged unverified for the admin's hand-check (fail
+  // OPEN, like before). A "Reel not found" from the API no longer
+  // rejects anything — ownership does not depend on the API.
   let instagramPostedAt: string | null = null;
-  // Instagram fails OPEN on an API outage (like TikTok, unlike
-  // YouTube): the submit is still allowed, but flagged unverified
-  // for the admin's hand-check (instagramPostedAt stays null).
   let instagramUnverified = false;
   if (instagramLink) {
-    const { data: igConn } = await supabase
-      .from("instagram_connections")
-      .select("user_id, ig_user_id, access_token, token_expires_at")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!igConn) {
-      return NextResponse.json(
-        {
-          error:
-            "Connect your Instagram account first on the Connect page — only Reels from your own connected Instagram account can be submitted.",
-        },
-        { status: 400 }
-      );
-    }
-    const accessToken = decryptToken(igConn.access_token as string);
-    if (!accessToken) {
-      return NextResponse.json(
-        {
-          error:
-            "Your Instagram login could not be read — reconnect Instagram on the Connect page and try again.",
-        },
-        { status: 400 }
-      );
-    }
-    const tokens: InstagramTokens = {
-      accessToken,
-      igUserId: igConn.ig_user_id as string,
-      tokenExpiresAt: igConn.token_expires_at as string | null,
-    };
-    const result = await fetchInstagramViews(instagramLink.url, tokens);
-    if ("error" in result) {
-      if (result.tokens) {
-        // Token was refreshed during the failed lookup — save it
-        // back encrypted (same as the 3-hour refresh does).
-        await supabase.rpc("save_instagram_tokens", {
-          p_user_id: igConn.user_id,
-          p_ig_user_id: igConn.ig_user_id,
-          p_access_token: encryptToken(result.tokens.accessToken),
-          p_token_expires_at: result.tokens.tokenExpiresAt,
-        });
-      }
-      if (result.error.startsWith("Reel not found")) {
-        return NextResponse.json(
-          {
-            error:
-              "This Reel is not in your connected Instagram account. Submit only Reels from the account you connected.",
-          },
-          { status: 400 }
-        );
-      }
-      if (result.error.startsWith("Instagram login expired")) {
-        return NextResponse.json(
-          {
-            error:
-              "Your Instagram login expired — reconnect Instagram on the Connect page and try again.",
-          },
-          { status: 400 }
-        );
-      }
-      // "Instagram could not be reached right now" / "Could not
-      // read views for this Reel" / unreadable Reel ID: the API
-      // failed, not the creator — allow the submit flagged
-      // unverified for the admin's hand-check (instagramPostedAt
-      // stays null, so the clip is unverified).
-      instagramUnverified = true;
+    const pub = await fetchPublicPostViews("instagram", instagramLink.url);
+    if (!("error" in pub)) {
+      instagramPostedAt = pub.postedAt;
     } else {
-      if (result.tokens) {
-        await supabase.rpc("save_instagram_tokens", {
-          p_user_id: igConn.user_id,
-          p_ig_user_id: igConn.ig_user_id,
-          p_access_token: encryptToken(result.tokens.accessToken),
-          p_token_expires_at: result.tokens.tokenExpiresAt,
-        });
+      const { data: igConn } = await supabase
+        .from("instagram_connections")
+        .select("user_id, ig_user_id, access_token, token_expires_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!igConn) {
+        instagramUnverified = true;
+      } else {
+        const accessToken = decryptToken(igConn.access_token as string);
+        if (!accessToken) {
+          instagramUnverified = true;
+        } else {
+          const tokens: InstagramTokens = {
+            accessToken,
+            igUserId: igConn.ig_user_id as string,
+            tokenExpiresAt: igConn.token_expires_at as string | null,
+          };
+          const result = await fetchInstagramViews(instagramLink.url, tokens);
+          if ("error" in result) {
+            if (result.tokens) {
+              // Token was refreshed during the failed lookup — save it
+              // back encrypted (same as the 3-hour refresh does).
+              await supabase.rpc("save_instagram_tokens", {
+                p_user_id: igConn.user_id,
+                p_ig_user_id: igConn.ig_user_id,
+                p_access_token: encryptToken(result.tokens.accessToken),
+                p_token_expires_at: result.tokens.tokenExpiresAt,
+              });
+            }
+            instagramUnverified = true;
+          } else {
+            if (result.tokens) {
+              await supabase.rpc("save_instagram_tokens", {
+                p_user_id: igConn.user_id,
+                p_ig_user_id: igConn.ig_user_id,
+                p_access_token: encryptToken(result.tokens.accessToken),
+                p_token_expires_at: result.tokens.tokenExpiresAt,
+              });
+            }
+            instagramPostedAt = result.postedAt;
+          }
+        }
       }
-      instagramPostedAt = result.postedAt;
     }
   }
 
-  // YouTube ownership gate (2026-11-09): a YouTube link only
-  // counts when the video belongs to the creator's CONNECTED
-  // channel. Without this, anyone could paste any viral video's
-  // link and claim its views.
+  // YouTube ownership gate (bio-code system, 2026-11-13): a
+  // YouTube link only counts when the video's channelId matches
+  // the creator's VERIFIED channel (locked by a bio code on the
+  // Connect page). The public videos.list call (API key, no OAuth)
+  // reads the video's channel, views and posted time in one call.
   const youtubeLink = links.find((l) => l.platform === "youtube");
   // When the YouTube video itself was posted (30-minute rule) —
   // captured here so the submit route reuses the gate's lookup.
   let youtubePublishedAt: string | null = null;
   if (youtubeLink) {
-    const { data: ytConn } = await supabase
-      .from("youtube_connections")
+    const { data: vp } = await supabase
+      .from("verified_profiles")
       .select("channel_id")
       .eq("user_id", user.id)
-      .order("updated_at", { ascending: false })
-      .limit(1)
+      .eq("platform", "youtube")
+      .not("verified_at", "is", null)
       .maybeSingle();
-    const channelId = (ytConn as { channel_id?: string } | null)
+    const channelId = (vp as { channel_id?: string | null } | null)
       ?.channel_id;
     if (!channelId) {
       return NextResponse.json(
         {
           error:
-            "Connect your YouTube channel first on the Connect page — only videos from your own connected channel can be submitted.",
+            "Verify your YouTube channel first on the Connect page — paste your channel link, put the code in your channel description, and click Verify. Only videos from your verified channel can be submitted.",
         },
         { status: 400 }
       );
@@ -503,7 +497,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              "This YouTube video is not from your connected YouTube channel. Submit only videos from the channel you connected.",
+              "This YouTube video is not from your verified YouTube channel. Submit only videos from the channel you verified on the Connect page.",
           },
           { status: 400 }
         );
@@ -512,13 +506,14 @@ export async function POST(request: Request) {
     }
   }
 
-  // TikTok ownership gate (same rule as YouTube): a TikTok link
-  // only counts when the video is in the creator's CONNECTED
-  // TikTok account. TikTok's video/query only ever returns the
-  // authorized user's own videos, so a successful lookup IS the
-  // ownership proof. Without this, anyone could paste any viral
-  // TikTok video and claim its views — the hole YouTube's gate
-  // was built to stop, silently absent for TikTok.
+  // TikTok ownership gate (bio-code system, 2026-11-13): the
+  // video must be from the creator's VERIFIED TikTok profile —
+  // the handle in the video URL vs the locked verified handle.
+  // Views / posted time come from the PUBLIC video page first;
+  // the connected TikTok account's API is the fallback when the
+  // public page cannot be read. A "Video not found" from the API
+  // no longer rejects anything — ownership is proven by the
+  // verified handle, not by the API.
   const tiktokLink = links.find((l) => l.platform === "tiktok");
   // When the TikTok video itself was posted (30-minute rule) —
   // captured here so the posted-time loop reuses the gate's
@@ -530,117 +525,109 @@ export async function POST(request: Request) {
   // seeing a silent success.
   let tiktokUnverified = false;
   if (tiktokLink) {
-    const { data: tkConn } = await supabase
-      .from("tiktok_connections")
-      .select(
-        "user_id, open_id, access_token, refresh_token, token_expires_at, refresh_expires_at"
-      )
+    const { data: vp } = await supabase
+      .from("verified_profiles")
+      .select("handle")
       .eq("user_id", user.id)
+      .eq("platform", "tiktok")
+      .not("verified_at", "is", null)
       .maybeSingle();
-    if (!tkConn) {
+    const verifiedHandle = (vp as { handle?: string } | null)?.handle ?? null;
+    if (!verifiedHandle) {
       return NextResponse.json(
         {
           error:
-            "Connect your TikTok account first on the Connect page — only videos from your own connected TikTok account can be submitted.",
+            "Verify your TikTok profile first on the Connect page — paste your profile link, put the code in your bio, and click Verify. Only videos from your verified TikTok profile can be submitted.",
         },
         { status: 400 }
       );
     }
-    const accessToken = decryptToken(tkConn.access_token as string);
-    const refreshToken = decryptToken(tkConn.refresh_token as string);
-    if (!accessToken) {
+    if (!tiktokHandle) {
       return NextResponse.json(
         {
           error:
-            "Your TikTok login could not be read — reconnect TikTok on the Connect page and try again.",
+            "Paste the full TikTok video link from the profile, not a share link — a vm.tiktok.com or tiktok.com/t/… link that did not resolve does not show whose video it is, so it cannot be checked against your verified TikTok profile. Open the video on the profile and copy that link instead.",
         },
         { status: 400 }
       );
     }
-    const tokens: TikTokTokens = {
-      accessToken,
-      refreshToken,
-      tokenExpiresAt: tkConn.token_expires_at as string | null,
-      refreshExpiresAt: tkConn.refresh_expires_at as string | null,
-    };
-    const result = await fetchTikTokViews(tiktokLink.url, tokens);
-    if ("error" in result) {
-      if (result.tokens) {
-        // Tokens were refreshed during the failed lookup — save
-        // them back encrypted (same as the 3-hour refresh does).
-        await supabase.rpc("save_tiktok_tokens", {
-          p_user_id: tkConn.user_id,
-          p_open_id: tkConn.open_id,
-          p_access_token: encryptToken(result.tokens.accessToken),
-          p_refresh_token: encryptToken(result.tokens.refreshToken),
-          p_token_expires_at: result.tokens.tokenExpiresAt,
-          p_refresh_expires_at: result.tokens.refreshExpiresAt,
-        });
-      }
-      if (result.error.startsWith("Video not found")) {
-        return NextResponse.json(
-          {
-            error:
-              "This TikTok video is not in your connected TikTok account. Submit only videos from the account you connected.",
-          },
-          { status: 400 }
-        );
-      }
-      if (result.error.startsWith("TikTok login expired")) {
-        return NextResponse.json(
-          {
-            error:
-              "Your TikTok login expired — reconnect TikTok on the Connect page and try again.",
-          },
-          { status: 400 }
-        );
-      }
-      if (
-        result.error.startsWith("Could not read a video ID") &&
-        /\/t\/[^/]+/.test(tiktokLink.url)
-      ) {
-        // A tiktok.com/t/ share link that could not be resolved
-        // server-side: say plainly it could not be verified,
-        // instead of "not a video link" — the link itself is a
-        // real TikTok share link, we just cannot read the video
-        // behind it. The creator pastes the full video link.
-        return NextResponse.json(
-          {
-            error:
-              "We couldn't verify this TikTok share link (tiktok.com/t/…) — please paste the full video link (tiktok.com/@you/video/…) instead.",
-          },
-          { status: 400 }
-        );
-      }
-      // "TikTok could not be reached right now" / unreadable
-      // video ID: the API failed, not the creator — allow the
-      // submit flagged unverified for the admin's hand-check
-      // (tiktokPostedAt stays null, so the clip is unverified),
-      // and surface that to the creator in the response (P2-18)
-      // instead of a silent success.
-      tiktokUnverified = true;
+    if (tiktokHandle !== verifiedHandle) {
+      return NextResponse.json(
+        {
+          error:
+            "This TikTok video is not from your verified TikTok profile — submit only videos from the TikTok profile you verified on the Connect page.",
+        },
+        { status: 400 }
+      );
+    }
+    const pub = await fetchPublicPostViews("tiktok", tiktokLink.url);
+    if (!("error" in pub)) {
+      tiktokPostedAt = pub.postedAt;
     } else {
-      if (result.tokens) {
-        await supabase.rpc("save_tiktok_tokens", {
-          p_user_id: tkConn.user_id,
-          p_open_id: tkConn.open_id,
-          p_access_token: encryptToken(result.tokens.accessToken),
-          p_refresh_token: encryptToken(result.tokens.refreshToken),
-          p_token_expires_at: result.tokens.tokenExpiresAt,
-          p_refresh_expires_at: result.tokens.refreshExpiresAt,
-        });
+      // Fallback: the connected TikTok account's API, when one
+      // exists. Any failure here only flags the clip unverified
+      // for the admin's hand-check (tiktokPostedAt stays null).
+      const { data: tkConn } = await supabase
+        .from("tiktok_connections")
+        .select(
+          "user_id, open_id, access_token, refresh_token, token_expires_at, refresh_expires_at"
+        )
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!tkConn) {
+        tiktokUnverified = true;
+      } else {
+        const accessToken = decryptToken(tkConn.access_token as string);
+        const refreshToken = decryptToken(tkConn.refresh_token as string);
+        if (!accessToken) {
+          tiktokUnverified = true;
+        } else {
+          const tokens: TikTokTokens = {
+            accessToken,
+            refreshToken,
+            tokenExpiresAt: tkConn.token_expires_at as string | null,
+            refreshExpiresAt: tkConn.refresh_expires_at as string | null,
+          };
+          const result = await fetchTikTokViews(tiktokLink.url, tokens);
+          if ("error" in result) {
+            if (result.tokens) {
+              // Tokens were refreshed during the failed lookup — save
+              // them back encrypted (same as the 3-hour refresh does).
+              await supabase.rpc("save_tiktok_tokens", {
+                p_user_id: tkConn.user_id,
+                p_open_id: tkConn.open_id,
+                p_access_token: encryptToken(result.tokens.accessToken),
+                p_refresh_token: encryptToken(result.tokens.refreshToken),
+                p_token_expires_at: result.tokens.tokenExpiresAt,
+                p_refresh_expires_at: result.tokens.refreshExpiresAt,
+              });
+            }
+            tiktokUnverified = true;
+          } else {
+            if (result.tokens) {
+              await supabase.rpc("save_tiktok_tokens", {
+                p_user_id: tkConn.user_id,
+                p_open_id: tkConn.open_id,
+                p_access_token: encryptToken(result.tokens.accessToken),
+                p_refresh_token: encryptToken(result.tokens.refreshToken),
+                p_token_expires_at: result.tokens.tokenExpiresAt,
+                p_refresh_expires_at: result.tokens.refreshExpiresAt,
+              });
+            }
+            tiktokPostedAt = result.postedAt;
+          }
+        }
       }
-      tiktokPostedAt = result.postedAt;
     }
   }
 
   // 30-minute submit rule (admin batch 2, Turn's decision
   // 2026-11-10, matches Content Rewards exactly): the post link
   // must be submitted within 30 minutes of the video being
-  // posted. The posted time is fetched from the platform API;
-  // when it cannot be obtained (Instagram has no API access yet,
-  // or the API fails) the submit is allowed but flagged
-  // "posted time unverified" for the admin to check by hand.
+  // posted. The posted time is fetched from the public post page
+  // first, then the platform API; when it cannot be obtained the
+  // submit is allowed but flagged "posted time unverified" for
+  // the admin to check by hand.
   // Checked BEFORE any insert, so a too-old link rejects the
   // whole bundle instead of half-creating it.
   const postedInfo: { postedAt: string | null; unverified: boolean }[] = [];
