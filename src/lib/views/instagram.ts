@@ -197,7 +197,13 @@ async function fetchMediaViews(
     return null;
   }
   if (!res.ok) {
-    console.error("Instagram media insights failed:", res.status);
+    let detail = "";
+    try {
+      detail = await res.text();
+    } catch {
+      detail = "(unreadable)";
+    }
+    console.error("Instagram media insights failed:", res.status, detail);
     return null;
   }
   const data = (await res.json()) as InsightsResponse;
