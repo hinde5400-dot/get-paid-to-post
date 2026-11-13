@@ -117,11 +117,21 @@ export async function POST(request: Request) {
   if ("error" in result) {
     // YouTube errors are specific (bad link, API key) — pass them
     // through. TikTok / Instagram return "unreadable" when the
-    // public page did not carry a bio after 3 server-side tries:
-    // the creator waits 2 minutes and tries again, or contacts
-    // Support (the help bubble on every page). No screenshot, ever.
+    // public page did not carry a bio after 3 server-side tries.
+    // Instagram only (Turn's order): the card auto-retries this
+    // check after 30 seconds, up to 3 times, before the message
+    // below is shown — so a first failure never reads as "bio not
+    // found". TikTok keeps the single-shot message.
     if (platform === "youtube") {
       return NextResponse.json({ verified: false, error: result.error }, { status: 400 });
+    }
+    if (platform === "instagram") {
+      return NextResponse.json({
+        verified: false,
+        retryable: true,
+        error:
+          "Instagram is taking a moment — try Verify again in 2 minutes.",
+      });
     }
     return NextResponse.json({
       verified: false,

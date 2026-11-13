@@ -59,6 +59,7 @@ type ApiBody = {
   verified_at?: string;
   message?: string;
   error?: string;
+  retryable?: boolean;
   already_verified?: boolean;
   reused?: boolean;
   issued_at?: string;
@@ -131,6 +132,14 @@ export default function BioVerifyCard({
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Guards the 30-second auto-retry waits: if the creator leaves
+  // the page mid-retry, no state is set on the unmounted card.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const waitRemaining = issuedAt
     ? Math.max(
@@ -193,18 +202,44 @@ export default function BioVerifyCard({
   async function verify() {
     setBusy(true);
     setMessage("");
-    const { ok, data } = await postJson("/api/profile/verify/check", {
-      platform,
-    });
-    setBusy(false);
-    if (ok && data.verified) {
-      setVerifiedAt(data.verified_at ?? new Date().toISOString());
-      setHandle(data.handle ?? handle);
-      setCode(null);
-      say("ok", "Connected — this profile is now locked to your account.");
+    // Instagram only (Turn's order): when the bio cannot be read,
+    // the check auto-retries after 30 seconds, up to 3 tries in
+    // total, before the error is shown — one click, no re-tapping.
+    // TikTok / YouTube are untouched: one shot, as before.
+    const maxAttempts = platform === "instagram" ? 3 : 1;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        say(
+          "info",
+          `Instagram is taking a moment — retrying… (attempt ${attempt} of 3)`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 30000));
+        if (!aliveRef.current) return;
+      }
+      const { ok, data } = await postJson("/api/profile/verify/check", {
+        platform,
+      });
+      if (!aliveRef.current) return;
+      if (ok && data.verified) {
+        setVerifiedAt(data.verified_at ?? new Date().toISOString());
+        setHandle(data.handle ?? handle);
+        setCode(null);
+        setBusy(false);
+        say("ok", "Connected — this profile is now locked to your account.");
+        return;
+      }
+      if (
+        platform === "instagram" &&
+        data.retryable &&
+        attempt < maxAttempts
+      ) {
+        continue;
+      }
+      setBusy(false);
+      say("err", data.error ?? "Could not verify — please try again.");
       return;
     }
-    say("err", data.error ?? "Could not verify — please try again.");
+    setBusy(false);
   }
 
   async function disconnect() {

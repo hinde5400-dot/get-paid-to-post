@@ -134,6 +134,18 @@ export async function POST(request: Request) {
   }
   const handle = parsed.handle;
   const channelId = parsed.channelId ?? null;
+  // Store the clean canonical link (Turn's order): any query or
+  // tracking part (?srtk=, ?igsh=, …) is dropped — only the
+  // username survives. The handle already ignores the query, but
+  // the stored link is what the card shows back.
+  const canonicalUrl =
+    platform === "tiktok"
+      ? `https://www.tiktok.com/@${handle}`
+      : platform === "instagram"
+        ? `https://www.instagram.com/${handle}/`
+        : channelId
+          ? `https://www.youtube.com/channel/${channelId}`
+          : `https://www.youtube.com/@${handle}`;
 
   // Existing row for this user + platform.
   const { data: existing } = await supabase
@@ -231,7 +243,7 @@ export async function POST(request: Request) {
       {
         user_id: user.id,
         platform,
-        profile_url: profileUrl,
+        profile_url: canonicalUrl,
         handle,
         channel_id: channelId,
         bio_code: code,

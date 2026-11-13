@@ -16,7 +16,11 @@
 //   blob, often not, from a datacenter IP.
 // - Instagram: the profile page is a JS shell with no bio in the
 //   HTML; web_profile_info needs a warmed session and usually
-//   answers 429.
+//   answers 429. Fixed 2026-11-13 (Turn's order): every Instagram
+//   request now carries full browser headers + an anonymous device
+//   cookie (ig_did/mid — NOT a login), tries the page, then
+//   web_profile_info, then the page again; and the Verify button
+//   auto-retries the whole check after 30 seconds, up to 3 times.
 //
 // So TikTok / Instagram fetches RETRY server-side (3 attempts,
 // short waits — Turn's order). When the bio still cannot be read,
@@ -25,14 +29,16 @@
 // not found", and never as verified.
 //
 // Retries are budgeted for the Vercel Hobby 10-second function
-// limit: 3 attempts × 2s timeout + 2 × 1s waits = 8s worst case,
-// plus ~0.5s of route overhead.
+// limit: TikTok 3 attempts × 2s timeout + 2 × 1s waits = 8s worst
+// case; Instagram 2 attempts per call (4s page + 2s API + 0.5s
+// wait = 6.5s), and the Verify button auto-retries the whole
+// Instagram check after 30 seconds, up to 3 times.
 //
 // The same rule applies to public view counts (fetchPublicPostViews):
 // try the public page first, fall back to the existing OAuth/manual
 // paths when it cannot be read.
 
-import { randomInt } from "crypto";
+import { randomInt, randomUUID } from "crypto";
 import type { Platform } from "../types";
 import { fetchYouTubeVideoDetails } from "../views/youtube";
 
@@ -158,8 +164,58 @@ const BIO_FETCH_TIMEOUT_MS = 2000;
 const BIO_RETRY_WAIT_MS = 1000;
 /** Server-side bio read attempts per Verify click (Turn's order). */
 const BIO_MAX_ATTEMPTS = 3;
+/** Instagram timeouts (probe 2026-11-13): the profile page is
+ *  slow from a server IP (2.3s), web_profile_info answers fast
+ *  or 429s. Two attempts per call — 4s + 0.5s + 2s = 6.5s worst
+ *  case, inside the 10-second function limit with margin. */
+const IG_PAGE_TIMEOUT_MS = 4000;
+const IG_API_TIMEOUT_MS = 2000;
+const IG_RETRY_WAIT_MS = 500;
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
+/**
+ * Instagram only (Turn's order, 2026-11-13): a plain fetch gets
+ * blocked — the profile page comes back a JS shell with no bio,
+ * and web_profile_info answers 429. So every Instagram request
+ * goes out looking like a real browser: full navigation / XHR
+ * headers plus an anonymous device cookie (ig_did + mid — random
+ * IDs, the same thing any first-time browser sends; NOT a login,
+ * NOT a session, no account behind it). One device id per Verify
+ * call, reused across its attempts. TikTok / YouTube are untouched.
+ */
+function instagramPageHeaders(
+  igDid: string,
+  mid: string
+): Record<string, string> {
+  return {
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    Cookie: `ig_did=${igDid}; mid=${mid}`,
+  };
+}
+
+function instagramApiHeaders(
+  igDid: string,
+  mid: string,
+  handle: string
+): Record<string, string> {
+  return {
+    Accept: "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    Referer: `https://www.instagram.com/${encodeURIComponent(handle)}/`,
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "X-IG-App-ID": "936619743392459",
+    "X-ASBD-ID": "129477",
+    Cookie: `ig_did=${igDid}; mid=${mid}`,
+  };
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -324,17 +380,19 @@ export async function fetchTikTokBio(handle: string): Promise<BioResult> {
 
 /** One web_profile_info attempt: the bio string, or null. */
 async function fetchInstagramWebProfileBio(
-  handle: string
+  handle: string,
+  igDid: string,
+  mid: string
 ): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), BIO_FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), IG_API_TIMEOUT_MS);
   try {
     const res = await fetch(
       `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
       {
         headers: {
           "User-Agent": BROWSER_UA,
-          "X-IG-App-ID": "936619743392459",
+          ...instagramApiHeaders(igDid, mid, handle),
         },
         signal: controller.signal,
       }
@@ -359,51 +417,56 @@ async function fetchInstagramWebProfileBio(
 }
 
 /**
- * Instagram profile bio from the public profile page.
- * Retries server-side (3 attempts, short waits — Turn's order):
- * attempt 1 and 3 read the page's embedded JSON, attempt 2 tries
- * web_profile_info. The page is a JS shell with no bio in the
- * HTML, and web_profile_info usually answers 429 from a server
- * IP — so a missing bio means "could not read", never "code not
- * found". The creator is then told to wait 2 minutes and click
- * Verify again.
+ * Instagram profile bio — three ways, in order (Turn's order,
+ * 2026-11-13): (a) the public profile page with full browser
+ * headers + device cookie; (b) web_profile_info with the same
+ * headers; (c) the Verify button auto-retries the whole check
+ * after 30 seconds, up to 3 times (the card does that part — one
+ * server call cannot wait 90 seconds on the 10-second function
+ * limit). Two attempts per call: the page is slow from a server
+ * IP (2.3s in the probe), web_profile_info answers fast or 429s —
+ * 4s + 0.5s + 2s = 6.5s worst case, inside the limit with margin.
+ * A missing bio means "could not read", never "code not found".
  */
 export async function fetchInstagramBio(handle: string): Promise<BioResult> {
-  for (let attempt = 1; attempt <= BIO_MAX_ATTEMPTS; attempt++) {
-    if (attempt > 1) await sleep(BIO_RETRY_WAIT_MS);
-    if (attempt === 2) {
-      const bio = await fetchInstagramWebProfileBio(handle);
-      if (bio !== null) return { bio };
-      continue;
-    }
-    const got = await fetchText(
-      `https://www.instagram.com/${encodeURIComponent(handle)}/`,
-      {},
-      BIO_FETCH_TIMEOUT_MS
+  // One anonymous device id per Verify call, reused across its
+  // attempts so the requests look like one browser session.
+  const igDid = randomUUID();
+  const mid = randomUUID();
+
+  // Attempt 1: the public page with browser headers.
+  const got = await fetchText(
+    `https://www.instagram.com/${encodeURIComponent(handle)}/`,
+    instagramPageHeaders(igDid, mid),
+    IG_PAGE_TIMEOUT_MS
+  );
+  if ("error" in got) {
+    console.warn(
+      `Instagram bio page fetch failed for @${handle}:`,
+      got.error
     );
-    if ("error" in got) {
-      console.warn(
-        `Instagram bio page fetch failed for @${handle} (attempt ${attempt}):`,
-        got.error
-      );
-      continue;
-    }
+  } else {
     const m = got.text.match(/"biography":"((?:\\.|[^"\\])*)"/);
-    if (!m) {
+    if (m) {
+      try {
+        return { bio: JSON.parse(`"${m[1]}"`) as string };
+      } catch {
+        console.warn(
+          `Instagram bio page for @${handle}: biography did not parse.`
+        );
+      }
+    } else {
       console.warn(
-        `Instagram bio page for @${handle}: no biography in page (attempt ${attempt}).`
+        `Instagram bio page for @${handle}: no biography in page.`
       );
-      continue;
-    }
-    try {
-      return { bio: JSON.parse(`"${m[1]}"`) as string };
-    } catch {
-      console.warn(
-        `Instagram bio page for @${handle}: biography did not parse (attempt ${attempt}).`
-      );
-      continue;
     }
   }
+
+  await sleep(IG_RETRY_WAIT_MS);
+
+  // Attempt 2: web_profile_info with the same headers.
+  const bio = await fetchInstagramWebProfileBio(handle, igDid, mid);
+  if (bio !== null) return { bio };
   return { error: "unreadable" };
 }
 
