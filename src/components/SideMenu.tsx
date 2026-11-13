@@ -8,15 +8,17 @@ import SignOutButton from "./SignOutButton";
 import ThemeToggle from "./ThemeToggle";
 import Logo from "./Logo";
 import DiscordButton from "./DiscordButton";
+import type { UserMode } from "@/lib/mode";
 
 /**
  * Top-left hamburger menu opening a slide-in sidebar drawer. One
- * clean menu only — Home, Explore, My Clips, Profile, Earnings,
- * Support — plus the Discord community button and the
- * JOINED list. No filler, no duplicate menus. The owner also sees
- * an Admin entry here.
+ * clean menu per mode — creator mode keeps Home, Explore, My
+ * Clips, Profile, Earnings, Support plus the JOINED list; brand
+ * mode shows ONLY brand pages (My Campaigns, Launch Campaign,
+ * Payments, Brand Profile, Support) and never a creator link.
+ * The owner also sees an Admin entry here, in both modes.
  */
-const MENU = [
+const CREATOR_MENU = [
   { href: "/", label: "Home", icon: "⌂" },
   { href: "/campaigns", label: "Explore", icon: "◎" },
   { href: "/my-posts", label: "My Clips", icon: "▣" },
@@ -25,16 +27,26 @@ const MENU = [
   { href: "/support", label: "Support", icon: "💬" },
 ];
 
+const BRAND_MENU = [
+  { href: "/brand/campaigns", label: "My Campaigns", icon: "🏢" },
+  { href: "/brands", label: "Launch Campaign", icon: "➕" },
+  { href: "/brand/payments", label: "Payments", icon: "$" },
+  { href: "/brand/profile", label: "Brand Profile", icon: "○" },
+  { href: "/support", label: "Support", icon: "💬" },
+];
+
 export default function SideMenu({
   userEmail,
   userName,
   isAdmin = false,
   joined = [],
+  mode = "creator",
 }: {
   userEmail: string | null;
   userName?: string | null;
   isAdmin?: boolean;
   joined?: { id: string; title: string }[];
+  mode?: UserMode;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -60,6 +72,7 @@ export default function SideMenu({
 
   const displayName = userName ?? userEmail ?? "Guest";
   const initial = displayName[0].toUpperCase();
+  const menu = mode === "brand" ? BRAND_MENU : CREATOR_MENU;
 
   return (
     <>
@@ -115,7 +128,7 @@ export default function SideMenu({
             </div>
 
             <nav className="flex-1 overflow-y-auto px-3 py-3">
-              {MENU.map((item) => {
+              {menu.map((item) => {
                 const active = pathname === item.href;
                 return (
                   <Link
@@ -158,9 +171,11 @@ export default function SideMenu({
               <DiscordButton className="mt-3 px-3" />
             </nav>
 
-            {/* JOINED — campaigns this user has submitted to (real data
-                only). Guests and users with no submissions see the
-                honest empty line. */}
+            {/* JOINED — campaigns this creator has submitted to
+                (real data only). Creator mode only: a brand never
+                sees creator submissions here. Guests and users with
+                no submissions see the honest empty line. */}
+            {mode === "creator" && (
             <div className="border-t border-fg/10 px-5 py-4">
               <p className="text-xs font-black uppercase tracking-widest text-fg/50">
                 Joined
@@ -185,6 +200,7 @@ export default function SideMenu({
                 </ul>
               )}
             </div>
+            )}
 
             <div className="border-t border-fg/10 p-4">
               <p className="mb-3 text-center text-xs text-fg/40">
@@ -200,11 +216,11 @@ export default function SideMenu({
               {userEmail ? (
                 <div className="flex gap-2">
                   <Link
-                    href="/dashboard"
+                    href={mode === "brand" ? "/brand/campaigns" : "/dashboard"}
                     onClick={() => setOpen(false)}
                     className="flex-1 rounded-full bg-lime py-2.5 text-center text-sm font-black text-black transition hover:bg-limedark"
                   >
-                    Dashboard
+                    {mode === "brand" ? "My Campaigns" : "Dashboard"}
                   </Link>
                   <SignOutButton />
                 </div>

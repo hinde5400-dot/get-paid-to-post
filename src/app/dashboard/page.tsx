@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentUser, getProfile } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { getModeContext } from "@/lib/mode";
 import {
   campaignStatus,
   getBrandCampaigns,
@@ -46,7 +47,13 @@ export default async function DashboardPage() {
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const profile = await getProfile(user.id);
+  // Brand mode never sees the creator dashboard — brands live in
+  // My Campaigns (/brand/campaigns). A brand-role user who also
+  // posts clips and switches to creator mode lands here instead.
+  // Mode context is cached per request — one auth + profile read
+  // shared with the layout/Navbar.
+  const { mode, profile } = await getModeContext();
+  if (mode === "brand") redirect("/brand/campaigns");
 
   // Brands never see the creator dashboard: they get their own
   // campaigns (with a Create button) and no earnings cards.

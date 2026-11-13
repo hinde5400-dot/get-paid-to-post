@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getCurrentUser, getProfile } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getModeContext } from "@/lib/mode";
 import { getWallet } from "@/lib/data";
 import { formatUSD } from "@/lib/money";
 import SignOutButton from "@/components/SignOutButton";
+import ModeSwitch from "@/components/ModeSwitch";
 
 export const metadata: Metadata = {
   title: "More",
@@ -21,9 +23,13 @@ const LINKS = [
 ];
 
 export default async function MorePage() {
-  const user = await getCurrentUser();
+  // Mode context is cached per request — one auth + profile read
+  // shared with the layout/Navbar.
+  const { user, profile, mode, canSwitch } = await getModeContext();
+  // Brand mode never sees the creator More page — brands have
+  // Brand Profile instead.
+  if (user && mode === "brand") redirect("/brand/profile");
   const wallet = user ? await getWallet(user.id) : null;
-  const profile = user ? await getProfile(user.id) : null;
   const metaName = user?.user_metadata?.full_name;
   const displayName =
     profile?.full_name ??
@@ -50,6 +56,20 @@ export default async function MorePage() {
             <p className="truncate text-sm text-fg/60">{user.email}</p>
           </div>
           <SignOutButton />
+        </div>
+      )}
+
+      {/* Mode switch — only when this account is both a creator
+          and a brand (owns campaigns and has submissions). */}
+      {user && canSwitch && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fg/10 bg-card p-5">
+          <div>
+            <p className="font-bold text-fg">You also have a brand account</p>
+            <p className="mt-0.5 text-sm text-fg/60">
+              Switch to manage your campaigns instead of your clips.
+            </p>
+          </div>
+          <ModeSwitch mode="creator" />
         </div>
       )}
 

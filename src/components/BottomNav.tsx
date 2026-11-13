@@ -2,25 +2,55 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { UserMode } from "@/lib/mode";
 
 /**
- * Bottom navigation — only three items: Discover, My Posts, More.
- * It coexists with the top-left hamburger menu. Bigger icons,
- * lime active state.
+ * Bottom navigation — one navigation per mode, never both.
+ * Guests keep the old three items. Creator mode: Discover, My
+ * Posts, Earnings, More. Brand mode: My Campaigns, Launch
+ * Campaign, Payments, Brand Profile. Same position, style and
+ * colours as before; only the items change with the mode.
  */
-const ITEMS = [
+const GUEST_ITEMS = [
   { href: "/campaigns", label: "Discover", icon: "🔍" },
   { href: "/my-posts", label: "My Posts", icon: "🎬" },
   { href: "/more", label: "More", icon: "☰" },
 ];
 
-export default function BottomNav() {
+const CREATOR_ITEMS = [
+  { href: "/campaigns", label: "Discover", icon: "🔍" },
+  { href: "/my-posts", label: "My Posts", icon: "🎬" },
+  { href: "/earnings", label: "Earnings", icon: "$" },
+  { href: "/more", label: "More", icon: "☰" },
+];
+
+const BRAND_ITEMS = [
+  { href: "/brand/campaigns", label: "My Campaigns", icon: "🏢" },
+  { href: "/brands", label: "Launch Campaign", icon: "➕" },
+  { href: "/brand/payments", label: "Payments", icon: "$" },
+  { href: "/brand/profile", label: "Brand Profile", icon: "○" },
+];
+
+export default function BottomNav({
+  mode,
+  isGuest,
+}: {
+  mode: UserMode;
+  isGuest: boolean;
+}) {
   const pathname = usePathname();
+  const items = isGuest
+    ? GUEST_ITEMS
+    : mode === "brand"
+      ? BRAND_ITEMS
+      : CREATOR_ITEMS;
+  const cols = items.length === 4 ? "grid-cols-4" : "grid-cols-3";
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-fg/10 bg-ink/95 backdrop-blur md:hidden">
-      <div className="grid grid-cols-3">
-        {ITEMS.map((item) => {
-          const active = pathname === item.href;
+      <div className={`grid ${cols}`}>
+        {items.map((item) => {
+          const active =
+            pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}

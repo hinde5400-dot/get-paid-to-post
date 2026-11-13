@@ -7,6 +7,7 @@ import HelpBubble from "@/components/HelpBubble";
 import NavigationLoader from "@/components/NavigationLoader";
 import ToastProvider from "@/components/Toast";
 import { BRAND_NAME, SITE_URL } from "@/lib/constants";
+import { getModeContext } from "@/lib/mode";
 import "./globals.css";
 
 // next/font/google bundles these fonts at build time and self-hosts them
@@ -62,11 +63,15 @@ export const viewport: Viewport = {
 // data-theme on <html>. Default is dark.
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("gptp-theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Mode (creator / brand navigation split) — cached per request,
+  // so Navbar and the pages share this one computation. Guests get
+  // the public nav; signed-in users get their mode's nav.
+  const { mode, user } = await getModeContext();
   return (
     <html
       lang="en"
@@ -81,8 +86,8 @@ export default function RootLayout({
           <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-24 pt-6 md:pb-10">
             {children}
           </main>
-          <Footer />
-          <BottomNav />
+          <Footer mode={user === null ? null : mode} />
+          <BottomNav mode={mode} isGuest={user === null} />
           <HelpBubble />
         </ToastProvider>
       </body>

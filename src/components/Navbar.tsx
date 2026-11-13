@@ -1,5 +1,5 @@
-import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import { getCampaigns, getUserSubmissions } from "@/lib/data";
+import { getModeContext } from "@/lib/mode";
 import SideMenu from "./SideMenu";
 import ProfileMenu from "./ProfileMenu";
 import Logo from "./Logo";
@@ -11,16 +11,16 @@ import DiscordButton from "./DiscordButton";
  * sidebar drawer; the header stays clean.
  */
 export default async function Navbar() {
-  const user = await getCurrentUser();
+  // Mode + user + profile (creator / brand navigation split) —
+  // cached per request, so this shares the auth/profile reads
+  // with the layout and the pages.
+  const { user, profile, isAdmin, mode } = await getModeContext();
 
   // The creator's name, never "Guest" for a logged-in user: the
   // profile row (migration 0005) first, then the signup metadata
   // (saved before the migration runs), then the email.
   let userName: string | null = null;
-  let isAdmin = false;
   if (user) {
-    const profile = await getProfile(user.id);
-    isAdmin = isOwner(profile);
     const metaName = user.user_metadata?.full_name;
     userName =
       profile?.full_name ??
@@ -58,6 +58,7 @@ export default async function Navbar() {
           userName={userName}
           isAdmin={isAdmin}
           joined={joined}
+          mode={mode}
         />
 
         {/* Centered logo. */}
@@ -68,7 +69,7 @@ export default async function Navbar() {
         {/* Discord + profile icon at the top-right. */}
         <div className="flex items-center gap-2">
           <DiscordButton compact />
-          <ProfileMenu userEmail={user?.email ?? null} userName={userName} isAdmin={isAdmin} />
+          <ProfileMenu userEmail={user?.email ?? null} userName={userName} isAdmin={isAdmin} mode={mode} />
         </div>
       </div>
     </header>

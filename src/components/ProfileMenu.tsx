@@ -5,21 +5,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import SignOutButton from "./SignOutButton";
+import type { UserMode } from "@/lib/mode";
 
 /**
  * Profile icon at the top-right of the header, opening a
  * dropdown menu. Guests see Create Account / Sign in / Light mode.
- * Signed-in users see Dashboard / Profile / Earnings / Light mode /
- * Log out. The owner also sees an Admin entry.
+ * Creator mode: Dashboard / Profile / Earnings / Light mode /
+ * Log out. Brand mode: ONLY brand pages (My Campaigns, Launch
+ * Campaign, Payments, Brand Profile) — never a creator link.
+ * The owner also sees an Admin entry, in both modes.
  */
 export default function ProfileMenu({
   userEmail,
   userName,
   isAdmin = false,
+  mode = "creator",
 }: {
   userEmail: string | null;
   userName?: string | null;
   isAdmin?: boolean;
+  mode?: UserMode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -91,22 +96,44 @@ export default function ProfileMenu({
 
           <div className="py-2">
             {userEmail ? (
-              <>
-                <Link href="/dashboard" className={itemCls}>
-                  <span className="w-5 text-center">▣</span> Dashboard
-                </Link>
-                <Link href="/dashboard" className={itemCls}>
-                  <span className="w-5 text-center">○</span> Profile
-                </Link>
-                <Link href="/earnings" className={itemCls}>
-                  <span className="w-5 text-center">$</span> Earnings
-                </Link>
-                {isAdmin && (
-                  <Link href="/admin" className={itemCls}>
-                    <span className="w-5 text-center">⚙</span> Admin
+              mode === "brand" ? (
+                <>
+                  <Link href="/brand/campaigns" className={itemCls}>
+                    <span className="w-5 text-center">🏢</span> My Campaigns
                   </Link>
-                )}
-              </>
+                  <Link href="/brands" className={itemCls}>
+                    <span className="w-5 text-center">➕</span> Launch Campaign
+                  </Link>
+                  <Link href="/brand/payments" className={itemCls}>
+                    <span className="w-5 text-center">$</span> Payments
+                  </Link>
+                  <Link href="/brand/profile" className={itemCls}>
+                    <span className="w-5 text-center">○</span> Brand Profile
+                  </Link>
+                  {isAdmin && (
+                    <Link href="/admin" className={itemCls}>
+                      <span className="w-5 text-center">⚙</span> Admin
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Link href="/dashboard" className={itemCls}>
+                    <span className="w-5 text-center">▣</span> Dashboard
+                  </Link>
+                  <Link href="/dashboard" className={itemCls}>
+                    <span className="w-5 text-center">○</span> Profile
+                  </Link>
+                  <Link href="/earnings" className={itemCls}>
+                    <span className="w-5 text-center">$</span> Earnings
+                  </Link>
+                  {isAdmin && (
+                    <Link href="/admin" className={itemCls}>
+                      <span className="w-5 text-center">⚙</span> Admin
+                    </Link>
+                  )}
+                </>
+              )
             ) : (
               <>
                 <Link

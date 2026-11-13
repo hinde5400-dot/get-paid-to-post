@@ -5,6 +5,10 @@
 
 export const BRAND_NAME = "Get Paid To Post";
 export const BRAND_TAGLINE = "Post Clips. Get Paid Per View.";
+// Mode cookie (creator / brand navigation split): which navigation
+// a signed-in user sees. The server reads it in src/lib/mode.ts;
+// the ModeSwitch client component writes it. One year, site-wide.
+export const MODE_COOKIE = "gptp-mode";
 export const REPO_NAME = "get-paid-to-post";
 export const SITE_DOMAIN = "get-paid-to-post.vercel.app";
 export const SITE_URL = `https://${SITE_DOMAIN}`;
