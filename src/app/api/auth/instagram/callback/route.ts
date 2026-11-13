@@ -20,7 +20,10 @@ import { encryptToken } from "@/lib/views/crypto";
  * Flow: verify `state` against the cookie set by
  * /api/auth/instagram, exchange the one-time `code` server-side
  * for a short-lived token (POST
- * https://api.instagram.com/oauth/access_token), exchange that
+ * https://graph.instagram.com/oauth/access_token — the Instagram
+ * API with Instagram Login (Unified login) endpoint; the legacy
+ * api.instagram.com endpoint REJECTS codes issued by the
+ * facebook.com/dialog/oauth authorize URL), exchange that
  * for a 60-day long-lived token (GET
  * https://graph.instagram.com/access_token), fetch the creator's
  * Instagram profile (GET /me), then save the connection in
@@ -37,7 +40,7 @@ import { encryptToken } from "@/lib/views/crypto";
 export const dynamic = "force-dynamic";
 
 const STATE_COOKIE = "instagram_oauth_state";
-const SHORT_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
+const SHORT_TOKEN_URL = "https://graph.instagram.com/oauth/access_token";
 const LONG_TOKEN_URL = "https://graph.instagram.com/access_token";
 const ME_URL = "https://graph.instagram.com/me?fields=id,username,account_type";
 
