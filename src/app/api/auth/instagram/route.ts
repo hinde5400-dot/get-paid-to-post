@@ -4,8 +4,8 @@ import { getCurrentUser, getProfile } from "@/lib/auth";
 import { getServerClient } from "@/lib/supabase/server";
 import {
   SITE_URL,
+  INSTAGRAM_CONFIG_ID,
   INSTAGRAM_REDIRECT_URI,
-  INSTAGRAM_SCOPES,
 } from "@/lib/constants";
 
 /**
@@ -56,10 +56,15 @@ export async function GET() {
   }
 
   const state = randomBytes(16).toString("hex");
-  const authorize = new URL("https://www.instagram.com/oauth/authorize");
+  // Unified login (Meta dashboard): the legacy Instagram authorize
+  // endpoint rejects this app ("Invalid platform app") — the app
+  // must authorize through the Facebook dialog with its Login
+  // Configuration ID. No scope param: the configuration governs
+  // permissions, and IG Login scope names are rejected by the dialog.
+  const authorize = new URL("https://www.facebook.com/dialog/oauth");
   authorize.searchParams.set("client_id", appId);
+  authorize.searchParams.set("config_id", INSTAGRAM_CONFIG_ID);
   authorize.searchParams.set("redirect_uri", INSTAGRAM_REDIRECT_URI);
-  authorize.searchParams.set("scope", INSTAGRAM_SCOPES);
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("state", state);
 

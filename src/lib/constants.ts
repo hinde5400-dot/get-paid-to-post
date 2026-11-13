@@ -40,6 +40,16 @@ export const YOUTUBE_OAUTH_SCOPES =
 // NOTE: while the app is in Development mode, only Instagram
 // Testers (Roles → Instagram Testers) can connect — e9064136 is
 // the first tester. App Review + business verification come later.
+// Unified login: this app was created after Meta removed the
+// standalone "API setup with Instagram Login", so the legacy
+// authorize endpoint (instagram.com/oauth/authorize) rejects our
+// app with "Invalid platform app". The Meta dashboard's Unified
+// login page gives the authorize URL: facebook.com/dialog/oauth
+// with this Login Configuration ID. Permissions come from that
+// configuration (not a scope param — IG Login scope names are
+// rejected by the Facebook dialog). Config ID 1128721699950808,
+// "Instagram API (unified login)", redirect URI already registered.
+export const INSTAGRAM_CONFIG_ID = "1128721699950808";
 export const INSTAGRAM_REDIRECT_URI = `${SITE_URL}/api/auth/instagram/callback`;
 export const INSTAGRAM_SCOPES =
   "instagram_business_basic,instagram_business_manage_insights";
