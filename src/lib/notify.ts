@@ -47,6 +47,48 @@ import {
   SITE_URL,
 } from "./constants";
 import { formatUSD, platformFeeFor } from "./money";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * Minimal in-app notifications (migration 0049, admin tabs):
+ * insert one row for a user. Best-effort by design — a missing
+ * notifications table (migration not run yet) or an RLS failure
+ * must NEVER break the action that triggered it (marking a
+ * withdrawal paid, warning a creator). The caller logs the
+ * failure and carries on; the notification is a nice-to-have
+ * on top of the real state change.
+ */
+export async function createNotification(
+  supabase: SupabaseClient,
+  input: {
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    link?: string | null;
+  }
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("notifications").insert({
+      user_id: input.userId,
+      type: input.type,
+      title: input.title,
+      message: input.message,
+      link: input.link ?? null,
+    });
+    if (error) {
+      console.error("[notify] notification insert failed:", error.message);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error(
+      "[notify] notification insert failed:",
+      error instanceof Error ? error.message : error
+    );
+    return false;
+  }
+}
 
 /** True when the value looks like a Discord webhook URL:
  *  https://discord.com/api/webhooks/<id>/<token> (or the older

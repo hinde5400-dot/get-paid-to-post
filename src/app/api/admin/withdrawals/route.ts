@@ -3,6 +3,8 @@ import { getServerClient } from "@/lib/supabase/server";
 import { getProfile, isOwner } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { isValidTronTxId } from "@/lib/validate";
+import { createNotification } from "@/lib/notify";
+import { formatUSD } from "@/lib/money";
 
 /**
  * Owner-only withdrawal review. Mirrors the owner check in
@@ -273,6 +275,20 @@ export async function POST(request: Request) {
     // POST /api/withdrawals — the wallet trigger's withdrawal
     // shape). Marking paid only flips the status; incrementing
     // withdrawn_total here again would double-count it.
+    //
+    // Admin tabs (migration 0049): marking Paid notifies the
+    // creator in-app (dashboard Notifications). Best-effort —
+    // a missing notifications table never fails the mark-paid.
+    const paidAmount = Number(row.final_amount ?? row.amount ?? 0);
+    await createNotification(supabase, {
+      userId: String(row.user_id),
+      type: "withdrawal_paid",
+      title: "Your withdrawal was paid",
+      message: payoutTxId
+        ? `Your withdrawal of ${formatUSD(paidAmount)} was marked as paid (TxID ${payoutTxId.toLowerCase()}). Check your USDT (TRC20) wallet.`
+        : `Your withdrawal of ${formatUSD(paidAmount)} was marked as paid. Check your USDT (TRC20) wallet.`,
+      link: "/earnings",
+    });
     return NextResponse.json({
       ok: true,
       message: payoutTxId

@@ -198,6 +198,11 @@ export interface Campaign {
   max_posts: number;
   earn_up_to: number;
   is_funded: boolean;
+  /** Paused by the admin (migration 0049, admin tabs): a paused
+   *  campaign is NOT live — hidden from Discover, its detail page
+   *  404s, and new submissions are rejected until the admin starts
+   *  it again. Pending campaigns are unaffected. Default false. */
+  is_paused: boolean;
   status: string;
   created_at?: string;
   /** Optional brief / asset link pasted by the brand (migration 0009). */
@@ -210,6 +215,38 @@ export interface Campaign {
   started_at?: string | null;
   /** started_at + duration_days; null when duration is open-ended. */
   ends_at?: string | null;
+}
+
+/**
+ * In-app notification (migration 0049, admin tabs). Minimal:
+ * one row per event — a withdrawal marked Paid, a creator
+ * Warning — shown in the creator's dashboard. No push, no email.
+ * type is a short key ("withdrawal_paid", "warning"); title and
+ * message are the human text; link is an optional dashboard path.
+ */
+export interface NotificationItem {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+/**
+ * Creator warning (migration 0049, admin tabs). A record that the
+ * admin warned a creator, with the reason — NOT a ban. Bans still
+ * go through the fraud ladder / block flow. The creator is told
+ * via a notification row at warn time.
+ */
+export interface CreatorWarning {
+  id: string;
+  user_id: string;
+  reason: string;
+  created_by?: string | null;
+  created_at: string;
 }
 
 export interface Submission {

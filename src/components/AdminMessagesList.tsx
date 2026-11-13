@@ -201,6 +201,35 @@ export default function AdminMessagesList({
               <p className="min-w-0 flex-1 truncate font-display text-base font-black tracking-tight text-fg">
                 {first?.campaign_title ?? "Campaign"}
               </p>
+              {/* Replied / not-replied indicator (admin tabs):
+                  the last message decides — if the admin wrote
+                  last, the brand has been answered; if the brand
+                  wrote last, the admin still owes a reply. */}
+              {last ? (
+                last.sender === "admin" ? (
+                  <span
+                    className="shrink-0 rounded-full bg-lime/15 px-3 py-1 text-xs font-black text-lime"
+                    title={`You replied ${new Date(last.created_at).toLocaleString("en-US")}`}
+                  >
+                    ✓ Replied
+                  </span>
+                ) : (
+                  <span
+                    className="shrink-0 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-black text-amber-300"
+                    title={`Brand wrote last, ${new Date(last.created_at).toLocaleString("en-US")} — no reply from you yet`}
+                  >
+                    ⏳ Awaiting your reply
+                  </span>
+                )
+              ) : null}
+              {thread.some((m) => m.message_type === "image") && (
+                <span
+                  className="shrink-0 rounded-full bg-sky-500/15 px-3 py-1 text-xs font-bold text-sky-300"
+                  title="This thread has a payment-proof image attached"
+                >
+                  📎 Proof attached
+                </span>
+              )}
               {unread > 0 && (
                 <span className="shrink-0 rounded-full bg-red-500 px-3 py-1 text-xs font-black text-white">
                   {unread} New
@@ -343,7 +372,7 @@ export default function AdminMessagesList({
         <div className="flex gap-2">
           {page > 1 ? (
             <a
-              href={`?inboxPage=${page - 1}${otherPage > 1 ? `&reviewPage=${otherPage}` : ""}`}
+              href={`?tab=messages&inboxPage=${page - 1}${otherPage > 1 ? `&reviewPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               ← Prev
@@ -355,7 +384,7 @@ export default function AdminMessagesList({
           )}
           {page < totalPages ? (
             <a
-              href={`?inboxPage=${page + 1}${otherPage > 1 ? `&reviewPage=${otherPage}` : ""}`}
+              href={`?tab=messages&inboxPage=${page + 1}${otherPage > 1 ? `&reviewPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               Next →

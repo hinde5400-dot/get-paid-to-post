@@ -161,6 +161,52 @@ function AdminCampaignCard({
 
   const status = campaignStatus(c);
   const isPending = c.status === "pending";
+  // Paused by the admin (migration 0049, admin tabs): a paused
+  // campaign keeps status "live" in the DB but is not live for
+  // creators. The badge shows Paused, not Live.
+  const isPaused = Boolean(c.is_paused);
+  const [pauseBusy, setPauseBusy] = useState(false);
+
+  /** Pause / Start (admin tabs): freeze a live campaign so no
+   *  new clips come in and it hides from Discover, or start it
+   *  again. Only live campaigns can be paused — pending ones
+   *  are not live anyway, settling ones already ended. */
+  async function togglePause() {
+    if (pauseBusy) return;
+    const next = !isPaused;
+    if (
+      !window.confirm(
+        next
+          ? `Pause "${c.title}"? It hides from Discover and creators can no longer submit to it. Existing clips are untouched.`
+          : `Start "${c.title}" again? It goes back live on Discover and creators can submit to it.`
+      )
+    ) {
+      return;
+    }
+    setPauseBusy(true);
+    try {
+      const res = await fetch("/api/admin/campaigns/pause", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: c.id, paused: next }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        showError(data.error ?? "Could not change the campaign state.");
+        return;
+      }
+      showSuccess(data.message ?? (next ? "Campaign paused." : "Campaign started."));
+      router.refresh();
+    } catch {
+      showError("Could not change the campaign state.");
+    } finally {
+      setPauseBusy(false);
+    }
+  }
   // TxID submission time (migration 0038) — the Campaign type in
   // lib/types.ts does not declare it yet (another file's change),
   // so it is read off the mapped row here; mapCampaign in
@@ -434,21 +480,39 @@ function AdminCampaignCard({
         </div>
         <span
           className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
-            status === "live"
-              ? "bg-red-500/15 text-red-300"
-              : status === "settling"
-                ? "bg-sky-500/15 text-sky-300"
-                : "bg-amber-500/15 text-amber-300"
+            isPaused
+              ? "bg-amber-500/15 text-amber-300"
+              : status === "live"
+                ? "bg-red-500/15 text-red-300"
+                : status === "settling"
+                  ? "bg-sky-500/15 text-sky-300"
+                  : "bg-amber-500/15 text-amber-300"
           }`}
         >
-          {status === "live"
-            ? "Live"
-            : status === "settling"
-              ? "Settling — review window"
-              : "Pending"}
+          {isPaused
+            ? "Paused"
+            : status === "live"
+              ? "Live"
+              : status === "settling"
+                ? "Settling — review window"
+                : "Pending"}
         </span>
-        <a
-          href={hasProof ? `#brand-thread-${c.id}` : "#brand-messages"}
+        {/* Proof button — jumps to this campaign's brand chat
+            thread in the Brand Messages TAB (admin tabs): the
+            tab shell switches tabs without a reload, then
+            scrolls to the thread. */}
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent("admin:tab", {
+                detail: {
+                  tab: "messages",
+                  anchor: hasProof ? `brand-thread-${c.id}` : undefined,
+                },
+              })
+            );
+          }}
           className="shrink-0 rounded-full border border-red-400/40 px-3 py-1.5 text-xs font-black text-red-300 transition hover:bg-red-500/10"
           title={
             hasProof
@@ -459,7 +523,7 @@ function AdminCampaignCard({
           }
         >
           {hasProof ? "Proof ↗" : hasMessages ? "Chat ↗" : "Proof — none yet"}
-        </a>
+        </button>
       </div>
 
       {/* Budget % used bar (same % -only bar as the public card)
@@ -827,6 +891,24 @@ function AdminCampaignCard({
         >
           {editOpen ? "Close budget edit" : "Edit budget"}
         </button>
+        {/* Pause / Start (admin tabs): freeze a live campaign so
+            no new clips come in and it hides from Discover, or
+            start it again. Pending campaigns are not live anyway,
+            settling ones already ended — the button is live-only. */}
+        {c.status === "live" && (
+          <button
+            type="button"
+            onClick={() => void togglePause()}
+            disabled={pauseBusy}
+            className={`flex flex-1 items-center justify-center rounded-full border py-2.5 text-sm font-bold transition disabled:opacity-40 ${
+              isPaused
+                ? "border-lime-500/50 text-lime-300 hover:bg-lime-500/10"
+                : "border-amber-500/50 text-amber-300 hover:bg-amber-500/10"
+            }`}
+          >
+            {pauseBusy ? "Working…" : isPaused ? "▶ Start" : "⏸ Pause"}
+          </button>
+        )}
         {/* Round-4 P1-B4: rate + brief edit, pending campaigns
             only — a live campaign's rate is frozen. */}
         {isPending && (

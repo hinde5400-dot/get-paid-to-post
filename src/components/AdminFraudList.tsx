@@ -80,6 +80,12 @@ export default function AdminFraudList({
   const router = useRouter();
   const { showError, showSuccess } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  // Inline unblock reason per creator (admin tabs): the Unblock
+  // button stays disabled until a reason is typed here, and the
+  // reason is stored with the unblock. No more window.prompt.
+  const [unblockReasons, setUnblockReasons] = useState<
+    Record<string, string>
+  >({});
 
   // Pagination footer: "Showing X–Y of Z" so the admin always
   // knows when creators sit past this page. Same shape as the
@@ -92,6 +98,7 @@ export default function AdminFraudList({
   const showingTo = Math.min(page * pageSize, totalCount);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const keepParams =
+    `&tab=fraud` +
     `${reviewPage > 1 ? `&reviewPage=${reviewPage}` : ""}` +
     `${inboxPage > 1 ? `&inboxPage=${inboxPage}` : ""}`;
 
@@ -147,16 +154,13 @@ export default function AdminFraudList({
     if (!window.confirm(lines.join("\n"))) {
       return;
     }
-    // Reason + confirm first (decided spec, Round-5 P1): a reason
-    // is required and recorded, max 200 chars like campaign
-    // reject / budget edit. Cancelling the prompt aborts the
-    // unblock — nothing is sent.
-    const reason = window.prompt(
-      `Why are you unblocking ${c.email}? The reason is recorded (max 200 characters).`,
-      ""
-    );
-    if (reason === null) return;
-    const trimmed = reason.trim();
+    // Reason + confirm first (decided spec, Round-5 P1; admin
+    // tabs): a reason is required and recorded, max 200 chars
+    // like campaign reject / budget edit. The reason is typed
+    // in the inline box on the card — the button stays disabled
+    // until one is entered, so an unblock without a reason is
+    // impossible. Nothing is sent when the confirm is cancelled.
+    const trimmed = (unblockReasons[c.user_id] ?? "").trim();
     if (!trimmed) {
       showError("A reason is required to unblock a creator.");
       return;
@@ -279,8 +283,11 @@ export default function AdminFraudList({
         )}
 
         <div className="mt-4 flex flex-wrap gap-2">
+          {/* Jumps to the Review tab filtered to this creator's
+              submissions (server-side username search) — a
+              navigation, because the filter lives in the URL. */}
           <a
-            href="#submission-review"
+            href={`/admin?tab=review&reviewSearch=${encodeURIComponent(c.email)}`}
             className="inline-flex items-center rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
           >
             View their submissions ↓
@@ -290,10 +297,32 @@ export default function AdminFraudList({
               <span className="inline-flex items-center rounded-full bg-red-500/15 px-4 py-2 text-sm font-bold text-red-300">
                 Blocked
               </span>
+              <input
+                type="text"
+                maxLength={200}
+                value={unblockReasons[c.user_id] ?? ""}
+                onChange={(e) =>
+                  setUnblockReasons((prev) => ({
+                    ...prev,
+                    [c.user_id]: e.target.value,
+                  }))
+                }
+                placeholder="Unblock reason (required, recorded)"
+                aria-label={`Unblock reason for ${c.email}`}
+                className="min-w-0 flex-1 rounded-xl border border-fg/15 bg-ink px-3 py-2 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
+              />
               <button
                 onClick={() => unblockCreator(c)}
-                disabled={busy === c.user_id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 disabled:opacity-40"
+                disabled={
+                  busy === c.user_id ||
+                  !(unblockReasons[c.user_id] ?? "").trim()
+                }
+                title={
+                  !(unblockReasons[c.user_id] ?? "").trim()
+                    ? "Write the unblock reason first — it is recorded."
+                    : undefined
+                }
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {busy === c.user_id ? (
                   <>

@@ -188,6 +188,16 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Paused by the admin (migration 0049, admin tabs): a paused
+  // campaign is not live for creators until the admin starts it
+  // again. The column is absent before 0049 runs — undefined is
+  // not paused, so old rows keep working.
+  if ((campaign as Record<string, unknown>).is_paused === true) {
+    return NextResponse.json(
+      { error: "This campaign is paused right now — please check back later." },
+      { status: 400 }
+    );
+  }
   // Ended campaigns must not accept submissions by direct API call
   // either: duration passed, or the budget is spent.
   if (

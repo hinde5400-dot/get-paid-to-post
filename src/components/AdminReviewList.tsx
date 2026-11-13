@@ -6,14 +6,25 @@ import type { Submission } from "@/lib/types";
 import { formatUSD, payoutForViews } from "@/lib/money";
 import { PLATFORM_LABELS, MAX_PAYOUT_DEFAULT } from "@/lib/constants";
 import { engagementRate, formatEngagementRate } from "@/lib/engagement";
+import { timeAgo } from "@/lib/time";
 import StatusBadge from "./StatusBadge";
+import VideoPreview from "./VideoPreview";
 import { useToast } from "@/components/Toast";
 import Spinner from "@/components/Spinner";
 
 /** Fixed rejection reasons (P0 batch 3) — a fixed set so later
  *  fraud tooling can count them (e.g. how many "bot views"
  *  rejections a creator has). "other" takes a short free-text note,
- *  combined into the stored reason string. */
+ *  combined into the stored reason string.
+ *
+ *  The admin picks Turn's four labels (admin tabs): Fake Views,
+ *  Low Quality, Wrong Hashtag, Copied Video. They map to the
+ *  STORED values below — Fake Views stores as "bot views" so the
+ *  fraud ladder keeps counting it (10 bot rejections = flag, one
+ *  more = auto-ban); the others store as the closest existing
+ *  values. The stored value is what the creator sees and what
+ *  the fraud tooling counts — the label is only the admin's
+ *  button text. */
 export const REJECTION_REASONS = [
   "bot views",
   "brief mismatch",
@@ -22,16 +33,37 @@ export const REJECTION_REASONS = [
   "other",
 ] as const;
 
-export interface AdminSubmission extends Submission {
-  creator_email: string;
+/** Admin-facing label for each stored reason value. */
+export const REJECTION_REASON_LABELS: Record<string, string> = {
+  "bot views": "Fake Views",
+  "brief mismatch": "Wrong Hashtag",
+  "wrong content": "Low Quality",
+  duplicate: "Copied Video",
+  other: "Other",
+};
+
+/** Display label for a stored rejection reason (also handles
+ *  "other: <note>" strings, which the creator sees as-is). */
+export function displayRejectionReason(stored: string): string {
+  if (stored.startsWith("other:")) {
+    return `Other — ${stored.slice("other:".length).trim()}`;
+  }
+  return REJECTION_REASON_LABELS[stored] ?? stored;
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return "just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
+/** One creator's history, for the review card (admin tabs):
+ *  live counts from every submission, plus the fraud-ladder
+ *  state — the only fraud score that exists (bot-rejection
+ *  count + ladder status). No invented 0–100 score. */
+export interface CreatorHistory {
+  approved: number;
+  rejected: number;
+  botRejections: number;
+  fraudStatus: string;
+}
+
+export interface AdminSubmission extends Submission {
+  creator_email: string;
 }
 
 /**
@@ -68,6 +100,16 @@ export default function AdminReviewList({
   /** Creators' linked Instagram profile URLs (users.instagram_url,
    *  pasted at onboarding) — for the Instagram hand-check below. */
   instagramUrls = {},
+  /** Creator history per user id (admin tabs) — approved /
+   *  rejected counts + fraud-ladder state, shown on each card. */
+  creatorHistory = {},
+  /** URL-encoded params the pagination links must keep
+   *  (tab=review + the active search/filter), e.g.
+   *  "tab=review&reviewStatus=pending&reviewSearch=x". */
+  extraQuery = "",
+  /** True when a search or status filter is active — the empty
+   *  state then says "no match" instead of "no submissions yet". */
+  searchActive = false,
 }: {
   submissions: AdminSubmission[];
   botCounts?: Record<string, number>;
@@ -77,6 +119,9 @@ export default function AdminReviewList({
   pageSize?: number;
   otherPage?: number;
   instagramUrls?: Record<string, string>;
+  creatorHistory?: Record<string, CreatorHistory>;
+  extraQuery?: string;
+  searchActive?: boolean;
 }) {
   const router = useRouter();
   const [views, setViews] = useState<Record<string, string>>({});
@@ -95,6 +140,14 @@ export default function AdminReviewList({
   const [refreshing, setRefreshing] = useState(false);
   const [flagReasons, setFlagReasons] = useState<Record<string, string>>({});
   const [flagBusy, setFlagBusy] = useState<string | null>(null);
+  // Bulk approve (admin tabs): checkboxes on pending cards +
+  // one button that approves many at once via the existing
+  // approve API, one call per clip. Clips whose posted time is
+  // unverified are SKIPPED, never auto-overridden — they need
+  // the hand-check, one by one.
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
   const { showError, showSuccess } = useToast();
   // Sort (admin batch 2): newest first by default, or by views,
   // or by bot signal (most bot rejections first) for fraud triage.
@@ -374,12 +427,115 @@ export default function AdminReviewList({
     );
   }
 
+  /** Bulk approve (admin tabs): approve every selected pending
+   *  clip, one existing-API call per clip, in order. No confirm
+   *  dialogs (one per clip would be unusable) — but the same
+   *  guards as a single approve apply: views must be entered,
+   *  the 1,000-view minimum and the 1% engagement rule are
+   *  enforced by the server, and a clip whose posted time is
+   *  unverified is SKIPPED (counted, never auto-overridden) so
+   *  the admin hand-checks it separately. The per-clip results
+   *  are reported honestly — approved / skipped / failed — and
+   *  a 429 (the review rate limit is 10 decisions per minute)
+   *  stops the run with the remaining clips still selected. */
+  async function bulkApprove() {
+    const targets = sorted.filter(
+      (s) => s.status === "pending" && selected[s.id]
+    );
+    if (targets.length === 0) return;
+    if (
+      !window.confirm(
+        `Approve ${targets.length} clip${targets.length === 1 ? "" : "s"} at once? Each one is checked by the server (views, 1% engagement, 1,000-view minimum, budget). Clips whose posted time is unverified will be skipped — check those by hand.`
+      )
+    ) {
+      return;
+    }
+    setBulkBusy(true);
+    setBulkResult(null);
+    let approved = 0;
+    let skipped = 0;
+    let failed = 0;
+    let lastError = "";
+    for (const s of targets) {
+      const v = Number(views[s.id] ?? s.views ?? 0);
+      const l = Number(likes[s.id] ?? s.likes ?? 0);
+      const c = Number(comments[s.id] ?? s.comments ?? 0);
+      if (!v || v <= 0) {
+        failed++;
+        lastError = `${s.submission_code || s.id.slice(0, 8)}: no verified views entered.`;
+        continue;
+      }
+      try {
+        const res = await fetch("/api/admin/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            submissionId: s.id,
+            action: "approve",
+            views: v,
+            likes: l,
+            comments: c,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          needsUnverifiedOverride?: boolean;
+        };
+        if (!res.ok && data.needsUnverifiedOverride) {
+          skipped++;
+          continue;
+        }
+        if (!res.ok) {
+          failed++;
+          lastError = `${s.submission_code || s.id.slice(0, 8)}: ${data.error ?? "Action failed."}`;
+          if (res.status === 429) break;
+          continue;
+        }
+        approved++;
+        setSelected((prev) => {
+          const next = { ...prev };
+          delete next[s.id];
+          return next;
+        });
+      } catch {
+        failed++;
+        lastError = `${s.submission_code || s.id.slice(0, 8)}: request failed.`;
+      }
+    }
+    setBulkBusy(false);
+    const parts = [`Approved ${approved}`];
+    if (skipped > 0) {
+      parts.push(
+        `${skipped} skipped — posted time unverified, check by hand`
+      );
+    }
+    if (failed > 0) parts.push(`${failed} failed`);
+    const summary = parts.join(" · ") + ".";
+    setBulkResult(
+      failed > 0 && lastError ? `${summary} Last failure: ${lastError}` : summary
+    );
+    if (approved > 0) showSuccess(summary);
+    router.refresh();
+  }
+
+  const pendingOnPage = sorted.filter((s) => s.status === "pending");
+  const selectedCount = pendingOnPage.filter((s) => selected[s.id]).length;
+  const allSelected =
+    pendingOnPage.length > 0 && selectedCount === pendingOnPage.length;
+
   if (submissions.length === 0) {
     return (
       <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
-        <p className="font-bold text-fg">No submissions yet</p>
+        <p className="font-bold text-fg">
+          {searchActive
+            ? "No submissions match this search or filter"
+            : "No submissions yet"}
+        </p>
         <p className="mt-1 text-sm text-fg/60">
-          Creator submissions will appear here for approval.
+          {searchActive
+            ? "Try a different username or status filter."
+            : "Creator submissions will appear here for approval."}
         </p>
       </div>
     );
@@ -430,34 +586,130 @@ export default function AdminReviewList({
           </button>
         </div>
       </div>
+      {pendingOnPage.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-fg/10 bg-card px-4 py-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-fg">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setSelected((prev) => {
+                  const next = { ...prev };
+                  for (const s of pendingOnPage) {
+                    if (checked) next[s.id] = true;
+                    else delete next[s.id];
+                  }
+                  return next;
+                });
+              }}
+              className="h-4 w-4 accent-red-500"
+            />
+            Select all pending on this page ({pendingOnPage.length})
+          </label>
+          {selectedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => void bulkApprove()}
+              disabled={bulkBusy}
+              className="rounded-full bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-40"
+            >
+              {bulkBusy
+                ? "Approving…"
+                : `Approve selected (${selectedCount})`}
+            </button>
+          )}
+          {bulkResult && (
+            <p className="text-sm font-semibold text-fg/70">{bulkResult}</p>
+          )}
+        </div>
+      )}
       {sorted.map((s) => (
         <article
           key={s.id}
           className="rounded-2xl border border-fg/10 bg-card p-5"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-red-300">
-                {PLATFORM_LABELS[s.platform]} · {s.creator_email}
-              </p>
-              <h3 className="mt-1 font-bold text-fg">
-                {s.campaign_title ?? "Campaign"}
-              </h3>
-              <a
-                href={s.post_url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 block max-w-md truncate text-sm text-fg/60 underline"
-              >
-                {s.post_url}
-              </a>
-              <p className="mt-1 text-xs text-fg/50">
-                ID: <span className="font-mono text-fg">{s.submission_code || s.id.slice(0, 8)}</span>
-                {" · "}
-                {new Date(s.created_at).toLocaleString("en-US")}
-              </p>
+            <div className="flex min-w-0 items-start gap-3">
+              {s.status === "pending" && (
+                <input
+                  type="checkbox"
+                  checked={Boolean(selected[s.id])}
+                  onChange={(e) =>
+                    setSelected((prev) => {
+                      const next = { ...prev };
+                      if (e.target.checked) next[s.id] = true;
+                      else delete next[s.id];
+                      return next;
+                    })
+                  }
+                  aria-label={`Select ${s.submission_code || s.id.slice(0, 8)} for bulk approve`}
+                  className="mt-1 h-4 w-4 shrink-0 accent-red-500"
+                />
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wider text-red-300">
+                  {PLATFORM_LABELS[s.platform]} · {s.creator_email}
+                </p>
+                <h3 className="mt-1 font-bold text-fg">
+                  {s.campaign_title ?? "Campaign"}
+                </h3>
+                <a
+                  href={s.post_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 block max-w-md truncate text-sm text-fg/60 underline"
+                >
+                  {s.post_url}
+                </a>
+                <p className="mt-1 text-xs text-fg/50">
+                  ID: <span className="font-mono text-fg">{s.submission_code || s.id.slice(0, 8)}</span>
+                  {" · "}
+                  {new Date(s.created_at).toLocaleString("en-US")} ·{" "}
+                  {timeAgo(s.created_at)}
+                </p>
+                {/* Creator history (admin tabs): how many approved
+                    / rejected, plus the fraud-ladder state — the
+                    only fraud score that exists. */}
+                {(() => {
+                  const h = creatorHistory[s.user_id];
+                  const approved = h?.approved ?? 0;
+                  const rejected = h?.rejected ?? 0;
+                  const fraud = h?.fraudStatus ?? "ok";
+                  const botN = h?.botRejections ?? botCounts[s.user_id] ?? 0;
+                  return (
+                    <p className="mt-1 text-xs text-fg/60">
+                      Creator history:{" "}
+                      <span className="font-bold text-fg">
+                        {approved} approved · {rejected} rejected
+                      </span>{" "}
+                      · Fraud:{" "}
+                      <span
+                        className={
+                          fraud === "ok"
+                            ? "font-bold text-fg"
+                            : fraud === "concern"
+                              ? "font-bold text-amber-300"
+                              : "font-bold text-red-300"
+                        }
+                      >
+                        {fraud === "ok"
+                          ? `OK (${botN} bot rejection${botN === 1 ? "" : "s"})`
+                          : `${fraud} (${botN} bot rejection${botN === 1 ? "" : "s"})`}
+                      </span>
+                    </p>
+                  );
+                })()}
+              </div>
             </div>
             <StatusBadge status={s.status} />
+          </div>
+
+          {/* Video preview — plays INSIDE the panel (admin tabs):
+              YouTube iframe, TikTok / Instagram official embeds,
+              with a link fallback — never a broken box. */}
+          <div className="mt-4">
+            <VideoPreview url={s.post_url} platform={s.platform} />
           </div>
 
           {s.is_duplicate && (
@@ -627,7 +879,15 @@ export default function AdminReviewList({
                 return (
                   <>
                     <span className="font-bold text-fg">Est. payout: </span>
-                    {formatUSD(est)}
+                    {formatUSD(est)}{" "}
+                    <span className="text-fg/50">
+                      ({formatUSD(s.rate_per_1k)}/1k ×{" "}
+                      {v.toLocaleString()} views
+                      {s.max_payout_per_post != null
+                        ? `, capped at ${formatUSD(s.max_payout_per_post)} per post`
+                        : ""}
+                      )
+                    </span>
                     {note}
                   </>
                 );
@@ -743,7 +1003,7 @@ export default function AdminReviewList({
 
           {s.status === "rejected" && s.rejection_reason && (
             <p className="mt-3 rounded-xl bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-300">
-              Rejected: {s.rejection_reason}
+              Rejected: {displayRejectionReason(s.rejection_reason)}
             </p>
           )}
 
@@ -823,7 +1083,7 @@ export default function AdminReviewList({
                 <option value="">Select a reason…</option>
                 {REJECTION_REASONS.map((r) => (
                   <option key={r} value={r}>
-                    {r}
+                    {REJECTION_REASON_LABELS[r] ?? r}
                   </option>
                 ))}
               </select>
@@ -926,7 +1186,7 @@ export default function AdminReviewList({
         <div className="flex gap-2">
           {page > 1 ? (
             <a
-              href={`?reviewPage=${page - 1}${otherPage > 1 ? `&inboxPage=${otherPage}` : ""}`}
+              href={`?${extraQuery ? `${extraQuery}&` : ""}reviewPage=${page - 1}${otherPage > 1 ? `&inboxPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               ← Prev
@@ -938,7 +1198,7 @@ export default function AdminReviewList({
           )}
           {page < totalPages ? (
             <a
-              href={`?reviewPage=${page + 1}${otherPage > 1 ? `&inboxPage=${otherPage}` : ""}`}
+              href={`?${extraQuery ? `${extraQuery}&` : ""}reviewPage=${page + 1}${otherPage > 1 ? `&inboxPage=${otherPage}` : ""}`}
               className="rounded-full border border-fg/20 px-4 py-2 text-sm font-bold text-fg transition hover:border-red-500 hover:text-red-300"
             >
               Next →

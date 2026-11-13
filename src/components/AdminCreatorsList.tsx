@@ -5,6 +5,7 @@ import type { Platform } from "@/lib/types";
 import { formatUSD } from "@/lib/money";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import StatusBadge from "./StatusBadge";
+import WarnCreatorButton from "./WarnCreatorButton";
 
 export interface CreatorClip {
   id: string;
@@ -28,13 +29,26 @@ export interface CreatorRow {
 /**
  * CREATORS (admin batch 2, Content Rewards-style): every creator
  * who has submitted, with clip count, total views and total
- * earnings. Click a creator to see their clips. Display-only over
- * existing submissions data — no actions, no money changes.
+ * earnings. Click a creator to see their clips. Admin tabs adds
+ * per creator: which accounts are connected via bio-code
+ * verification (a ticked platform = profile locked to this
+ * user), how many warnings they have, and the Warning button.
+ * Display-only over existing submissions data apart from the
+ * warning — no money changes.
  */
 export default function AdminCreatorsList({
   creators,
+  /** Verified bio-code profiles per user id (admin tabs). */
+  verifiedByUser = {},
+  /** Warning count per user id (admin tabs, migration 0049). */
+  warningCounts = {},
 }: {
   creators: CreatorRow[];
+  verifiedByUser?: Record<
+    string,
+    { platform: string; handle: string; verified_at: string | null }[]
+  >;
+  warningCounts?: Record<string, number>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   // Round-4 P2-A12: paginate — the list used to render every
@@ -83,11 +97,54 @@ export default function AdminCreatorsList({
                   </span>{" "}
                   earned
                 </p>
+                {/* Connected accounts (admin tabs): bio-code
+                    verification — a ticked platform means the
+                    profile is locked to this creator. */}
+                <p className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                  {(["tiktok", "instagram", "youtube"] as const).map(
+                    (platform) => {
+                      const row = (verifiedByUser[c.user_id] ?? []).find(
+                        (p) => p.platform === platform && p.verified_at
+                      );
+                      return (
+                        <span
+                          key={platform}
+                          title={
+                            row
+                              ? `${PLATFORM_LABELS[platform]} connected as ${row.handle}`
+                              : `${PLATFORM_LABELS[platform]} not connected`
+                          }
+                          className={`rounded-full px-2 py-0.5 font-bold ${
+                            row
+                              ? "bg-lime/15 text-lime"
+                              : "bg-fg/10 text-fg/50"
+                          }`}
+                        >
+                          {row
+                            ? `✓ ${PLATFORM_LABELS[platform]}`
+                            : `✕ ${PLATFORM_LABELS[platform]}`}
+                        </span>
+                      );
+                    }
+                  )}
+                  {(warningCounts[c.user_id] ?? 0) > 0 && (
+                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-bold text-amber-300">
+                      ⚠ {warningCounts[c.user_id]} warning
+                      {(warningCounts[c.user_id] ?? 0) === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </p>
               </div>
               <span className="shrink-0 rounded-full border border-fg/20 px-3 py-1 text-xs font-bold text-fg">
                 {open ? "Hide clips ▲" : "Show clips ▼"}
               </span>
             </button>
+
+            {/* Warning button (admin tabs) — outside the expand
+                toggle, so it never nests inside another button. */}
+            <div className="mt-3 flex justify-end border-t border-fg/10 pt-3">
+              <WarnCreatorButton userId={c.user_id} email={c.email} />
+            </div>
 
             {open && (
               <ul className="mt-4 space-y-2 border-t border-fg/10 pt-4">

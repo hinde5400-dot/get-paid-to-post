@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AdminSubmission } from "./AdminReviewList";
-import { REJECTION_REASONS } from "./AdminReviewList";
+import { REJECTION_REASONS, REJECTION_REASON_LABELS } from "./AdminReviewList";
 import { PLATFORM_LABELS } from "@/lib/constants";
 import { formatUSD } from "@/lib/money";
 import { engagementRate, formatEngagementRate } from "@/lib/engagement";
@@ -176,7 +176,7 @@ export default function AdminRecheckList({
                         <option value="">Select a reason…</option>
                         {REJECTION_REASONS.map((r) => (
                           <option key={r} value={r}>
-                            {r}
+                            {REJECTION_REASON_LABELS[r] ?? r}
                           </option>
                         ))}
                       </select>

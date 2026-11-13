@@ -18,6 +18,11 @@ import { budgetRemainingPct } from "./money";
  */
 export function isCampaignLive(c: Campaign, now: number = Date.now()): boolean {
   if (!c.is_funded || c.status !== "live") return false;
+  // Paused by the admin (migration 0049, admin tabs): a paused
+  // campaign keeps status "live" in the DB but is not live for
+  // creators — hidden from Discover, detail page 404s, /submit
+  // refuses it — until the admin starts it again.
+  if (c.is_paused) return false;
   if (c.budget_left <= 0) return false;
   if (c.ends_at && new Date(c.ends_at).getTime() <= now) return false;
   return true;
@@ -36,7 +41,11 @@ export function isCampaignSettling(
   c: Campaign,
   now: number = Date.now()
 ): boolean {
-  return c.is_funded && c.status === "live" && !isCampaignLive(c, now);
+  // Paused is not settling — a paused campaign is a live campaign
+  // the admin froze, not one whose budget/duration ran out.
+  return (
+    c.is_funded && c.status === "live" && !c.is_paused && !isCampaignLive(c, now)
+  );
 }
 
 /** "live" | "settling" | "other" (pending, draft, unfunded, …). */

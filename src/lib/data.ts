@@ -1,6 +1,6 @@
 import { MAX_PAYOUT_DEFAULT } from "./constants";
 import { getServerClient } from "./supabase/server";
-import type { BrandMessage, Campaign, Submission, Wallet, Withdrawal } from "./types";
+import type { BrandMessage, Campaign, CreatorWarning, NotificationItem, Submission, SubmissionStatus, Wallet, Withdrawal } from "./types";
 import { platformsFromRow, ratesFromRow, rateForPlatform } from "./types";
 
 function mapCampaign(row: Record<string, unknown>): Campaign {
@@ -60,6 +60,9 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
     max_posts: Number(row.max_posts ?? 7),
     earn_up_to: Number(row.earn_up_to ?? 300),
     is_funded: Boolean(row.is_funded),
+    // Paused by the admin (migration 0049, admin tabs) — false
+    // on rows written before the migration (no column yet).
+    is_paused: Boolean(row.is_paused ?? false),
     status: String(row.status ?? "pending"),
     created_at: String(row.created_at ?? ""),
     // Campaign assets + schedule (migration 0009) — all optional so
@@ -280,7 +283,13 @@ export async function getDiscoverCampaigns(): Promise<Campaign[]> {
     });
     // Forms #26 contract: throw on DB error, never [] (see
     // getCampaigns).
-    return rows.map(mapCampaign);
+    //
+    // Paused campaigns (migration 0049, admin tabs) are NOT
+    // discoverable: filter in memory, not in the query — the
+    // is_paused column does not exist before 0049 runs, and a
+    // query filter on a missing column would break Discover.
+    // mapCampaign already maps a missing column to false.
+    return rows.map(mapCampaign).filter((c) => !c.is_paused);
   }
   return [];
 }
@@ -629,22 +638,177 @@ export async function getUserSubmissions(userId: string): Promise<Submission[]> 
  *  getSubmissionStatusCounts() so the UI always shows the total
  *  and truncation is never silent. */
 export async function getAllSubmissions(
-  opts: { limit?: number; offset?: number } = {}
+  opts: {
+    limit?: number;
+    offset?: number;
+    /** Server-side status filter (admin tabs): "pending" |
+     *  "approved" | "rejected" — applied in the query so it works
+     *  with pagination, not just the current page. */
+    status?: SubmissionStatus;
+    /** Server-side username search (admin tabs): user ids whose
+     *  email matched the search (see getUserIdsByEmailSearch).
+     *  An empty array matches nothing — the caller passes a
+     *  sentinel id when the search found no users. */
+    userIds?: string[];
+  } = {}
 ): Promise<Submission[]> {
   const limit = Math.max(1, Math.min(500, opts.limit ?? 100));
   const offset = Math.max(0, opts.offset ?? 0);
   const supabase = getServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
+  let query = supabase
     .from("submissions")
     .select("*, campaigns(title, view_bonus_per_1k, max_payout_per_post, rates, min_views, max_payout_per_creator, budget_left)")
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order("created_at", { ascending: false });
+  if (opts.status) query = query.eq("status", opts.status);
+  if (opts.userIds) query = query.in("user_id", opts.userIds);
+  const { data, error } = await query.range(offset, offset + limit - 1);
   // Forms #26 contract: throw on DB error, never [] (see
   // getCampaigns).
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Could not load submissions.");
   return (data as Record<string, unknown>[]).map(mapSubmissionWithCampaign);
+}
+
+/**
+ * Exact total for the SAME filters getAllSubmissions takes, so
+ * the review tab's pagination stays correct when a status filter
+ * or a username search is active (admin tabs). Throws on DB
+ * error, per the Forms #26 contract.
+ */
+export async function getSubmissionCount(opts: {
+  status?: SubmissionStatus;
+  userIds?: string[];
+} = {}): Promise<number> {
+  const supabase = getServerClient();
+  if (!supabase) return 0;
+  let query = supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true });
+  if (opts.status) query = query.eq("status", opts.status);
+  if (opts.userIds) query = query.in("user_id", opts.userIds);
+  const { count, error } = await query;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/**
+ * Username search for the admin review tab: user ids whose email
+ * contains the query (case-insensitive). The review list searches
+ * by email because that is the identifier /admin actually shows
+ * (creators have no public username on the site). Returns [] when
+ * nobody matches — the caller passes a sentinel id so the
+ * submission query then matches nothing instead of everything.
+ */
+export async function getUserIdsByEmailSearch(
+  query: string
+): Promise<string[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  const q = query.trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .ilike("email", `%${q.replace(/[%_\\]/g, "\\$&")}%`)
+    .limit(200);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => String((row as { id: unknown }).id));
+}
+
+/**
+ * In-app notifications for one user, newest first (migration
+ * 0049, admin tabs). Best-effort: a missing notifications table
+ * (migration not run yet) returns [] instead of breaking the
+ * dashboard — the user just sees no notifications yet.
+ */
+export async function getUserNotifications(
+  userId: string,
+  limit = 20
+): Promise<NotificationItem[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("id, user_id, type, title, message, link, is_read, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return [];
+    return (data ?? []) as NotificationItem[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Verified (bio-code) profiles for the admin Creators tab:
+ * user id → their verified profiles (platform, handle,
+ * verified_at). Best-effort: a missing table returns an empty
+ * map instead of breaking /admin.
+ */
+export async function getVerifiedProfilesByUser(): Promise<
+  Record<string, { platform: string; handle: string; verified_at: string | null }[]>
+> {
+  const supabase = getServerClient();
+  if (!supabase) return {};
+  try {
+    const { data, error } = await supabase
+      .from("verified_profiles")
+      .select("user_id, platform, handle, verified_at")
+      .order("platform", { ascending: true });
+    if (error) return {};
+    const out: Record<
+      string,
+      { platform: string; handle: string; verified_at: string | null }[]
+    > = {};
+    for (const row of (data ?? []) as {
+      user_id: string;
+      platform: string;
+      handle: string;
+      verified_at: string | null;
+    }[]) {
+      (out[row.user_id] ??= []).push({
+        platform: row.platform,
+        handle: row.handle,
+        verified_at: row.verified_at,
+      });
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * All creator warnings, newest first (migration 0049, admin
+ * tabs). Best-effort: a missing table returns [] instead of
+ * breaking /admin.
+ */
+export async function getCreatorWarnings(): Promise<CreatorWarning[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("creator_warnings")
+      .select("id, user_id, reason, created_by, created_at")
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return (data ?? []) as CreatorWarning[];
+  } catch {
+    return [];
+  }
+}
+
+/** Warning count per creator, for the admin Creators tab. */
+export async function getCreatorWarningCounts(): Promise<
+  Record<string, number>
+> {
+  const warnings = await getCreatorWarnings();
+  const counts: Record<string, number> = {};
+  for (const w of warnings) counts[w.user_id] = (counts[w.user_id] ?? 0) + 1;
+  return counts;
 }
 
 /** Shared row mapping for getAllSubmissions + getAllSubmissionsUnpaged:

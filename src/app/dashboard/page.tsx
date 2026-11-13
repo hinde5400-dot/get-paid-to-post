@@ -7,6 +7,7 @@ import {
   getBrandCampaignStats,
   getCampaignBudgetHistory,
   getCampaignRejectionReason,
+  getUserNotifications,
   getUserSubmissions,
   getWallet,
   isExpiredUnpaidPending,
@@ -18,6 +19,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import MyPostsList, {
   type CampaignHistoryRow,
 } from "@/components/MyPostsList";
+import NotificationsPanel from "@/components/NotificationsPanel";
 import RefundRequestButton from "@/components/RefundRequestButton";
 import CopyButton from "@/components/CopyButton";
 import SignOutButton from "@/components/SignOutButton";
@@ -70,6 +72,10 @@ export default async function DashboardPage() {
   // /my-posts, so it passes the same past-campaigns history —
   // without it the dashboard always said "No past campaigns yet".
   const pastCampaigns = await getUserCampaignHistory(user.id);
+  // In-app notifications (admin tabs, migration 0049): a
+  // withdrawal marked Paid, a creator Warning. Best-effort —
+  // a missing table returns [] and the panel hides.
+  const notifications = await getUserNotifications(user.id);
   if (loadError) {
     return (
       <div className="mx-auto max-w-lg rounded-3xl border border-red-500/40 bg-card p-8 text-center">
@@ -195,6 +201,10 @@ export default async function DashboardPage() {
           My accounts
         </Link>
       </div>
+
+      {/* Notifications (admin tabs): withdrawal Paid notices and
+          creator warnings land here. Hidden when empty. */}
+      <NotificationsPanel notifications={notifications} />
 
       <section>
         <h2 className="mb-4 text-xl font-extrabold text-fg">My Posts</h2>
