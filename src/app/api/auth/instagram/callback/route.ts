@@ -115,7 +115,16 @@ export async function GET(request: Request) {
       }),
     });
     if (!res.ok) {
-      console.error("Instagram token exchange failed:", res.status);
+      // Log Meta's error body: it names the exact cause
+      // (invalid code, bad client secret, redirect_uri mismatch).
+      // The body holds only error_type/code/message — no secrets.
+      let detail = "";
+      try {
+        detail = await res.text();
+      } catch {
+        detail = "(unreadable)";
+      }
+      console.error("Instagram token exchange failed:", res.status, detail);
       return fail("exchange_failed");
     }
     shortToken = (await res.json()) as ShortTokenResponse;
@@ -136,7 +145,13 @@ export async function GET(request: Request) {
     exchange.searchParams.set("access_token", shortToken.access_token);
     const res = await fetch(exchange.toString());
     if (!res.ok) {
-      console.error("Instagram long-lived exchange failed:", res.status);
+      let detail = "";
+      try {
+        detail = await res.text();
+      } catch {
+        detail = "(unreadable)";
+      }
+      console.error("Instagram long-lived exchange failed:", res.status, detail);
       return fail("exchange_failed");
     }
     longToken = (await res.json()) as LongTokenResponse;
