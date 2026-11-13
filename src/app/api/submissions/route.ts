@@ -388,6 +388,7 @@ export async function POST(request: Request) {
     }
     const tokens: InstagramTokens = {
       accessToken,
+      igUserId: igConn.ig_user_id as string,
       tokenExpiresAt: igConn.token_expires_at as string | null,
     };
     const result = await fetchInstagramViews(instagramLink.url, tokens);

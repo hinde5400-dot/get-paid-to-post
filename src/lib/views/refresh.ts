@@ -19,11 +19,14 @@
 //   Login Kit tokens, refreshed when expired. A legacy plaintext
 //   token is re-saved encrypted the first time it is used.
 // - Instagram: the creator's own Reels via their saved
-//   (encrypted) long-lived token (60 days, refreshed inside its
-//   last 7 days). A legacy plaintext token is re-saved encrypted
-//   the first time it is used. A Reel is only counted when it is
-//   found in the connected account's own media list — a link to
-//   someone else's Reel is never counted.
+//   (encrypted) Facebook user access token from Unified Login
+//   (migration 0045). The token's lifetime comes from the login
+//   configuration — it may be non-expiring; an expiring token is
+//   refreshed inside its last 7 days via fb_exchange_token. A
+//   legacy plaintext token is re-saved encrypted the first time it
+//   is used. A Reel is only counted when it is found in the
+//   connected account's own media list — a link to someone else's
+//   Reel is never counted.
 // - A refreshed number only ever updates the stored `views`,
 //   `likes` and `comments` on a still-pending submission. The
 //   like/comment counts feed the 1% engagement minimum
@@ -308,6 +311,7 @@ export async function refreshPendingViews(
       }
       const tokens: InstagramTokens = {
         accessToken,
+        igUserId: tokenRow.ig_user_id,
         tokenExpiresAt: tokenRow.token_expires_at,
       };
       const result = await fetchInstagramViews(row.post_url, tokens);

@@ -53,6 +53,13 @@ export const INSTAGRAM_CONFIG_ID = "1128721699950808";
 export const INSTAGRAM_REDIRECT_URI = `${SITE_URL}/api/auth/instagram/callback`;
 export const INSTAGRAM_SCOPES =
   "instagram_business_basic,instagram_business_manage_insights";
+// Unified Login runs on the FACEBOOK Graph API, not the Instagram
+// one: the dialog issues a Facebook authorization code, exchanged
+// at {graph}/oauth/access_token, and media/insights are read at
+// {graph}/{ig-user-id}/media and {graph}/{media-id}/insights.
+// Proven live 2026-11-13: both instagram.com token endpoints
+// reject the Facebook code with 400 / IGApiException code 190.
+export const INSTAGRAM_GRAPH_BASE = "https://graph.facebook.com/v22.0";
 
 // Community — support runs on Discord only (no live chat on site).
 export const DISCORD_URL = "https://discord.gg/kyNcGQkE7y";

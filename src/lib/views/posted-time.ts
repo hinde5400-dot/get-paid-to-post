@@ -114,6 +114,7 @@ export async function fetchPostedTime(
     if (!accessToken) return { postedAt: null };
     const tokens: InstagramTokens = {
       accessToken,
+      igUserId: tokenRow.ig_user_id as string,
       tokenExpiresAt: tokenRow.token_expires_at as string | null,
     };
     const result = await fetchInstagramViews(postUrl, tokens);

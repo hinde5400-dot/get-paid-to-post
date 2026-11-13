@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerClient } from "@/lib/supabase/server";
 import { decryptToken } from "@/lib/views/crypto";
+import { INSTAGRAM_GRAPH_BASE } from "@/lib/constants";
 
 /**
  * GET /api/auth/instagram/profile — re-read the linked Instagram
@@ -11,14 +12,13 @@ import { decryptToken } from "@/lib/views/crypto";
  * Used by /connect when a connection row exists but Meta never
  * returned a name during the callback (the profile call failed
  * there) — so the card shows the real account instead of a
- * placeholder. The long-lived token lives 60 days; if it is
- * inside its last 7 days this refreshes it first (and saves the
- * new one back encrypted) so the card never validates against a
- * dead token.
+ * placeholder. Unified Login reads the profile at
+ * {graph}/{ig-user-id} with the saved Facebook user access token.
  */
 export const dynamic = "force-dynamic";
 
-const ME_URL = "https://graph.instagram.com/me?fields=id,username,account_type";
+const PROFILE_URL = (igUserId: string) =>
+  `${INSTAGRAM_GRAPH_BASE}/${igUserId}?fields=id,username,account_type`;
 
 interface MeResponse {
   id?: string;
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
   }
   try {
     const res = await fetch(
-      `${ME_URL}&access_token=${encodeURIComponent(accessToken)}`
+      `${PROFILE_URL(row.ig_user_id)}&access_token=${encodeURIComponent(accessToken)}`
     );
     if (!res.ok) {
       if (validate) return invalid();
