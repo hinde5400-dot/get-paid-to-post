@@ -214,19 +214,22 @@ export async function GET(request: Request) {
     return fail("no_account");
   }
 
-  // 3) Read the account's profile. If the profile call fails,
-  // keep the discovery values (id + username) instead of
-  // failing the whole connect.
+  // 3) Read the account's profile. The Facebook-hosted IG User
+  // node exposes id, username, name, followers_count and
+  // media_count — but NOT account_type (that field exists only on
+  // graph.instagram.com's /me); requesting it fails the whole
+  // call with (#100). If the profile call fails, keep the
+  // discovery values (id + username) instead of failing the
+  // whole connect.
   let username = igUsername;
   let accountType: string | null = null;
   try {
     const res = await fetch(
-      `${INSTAGRAM_GRAPH_BASE}/${igUserId}?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`
+      `${INSTAGRAM_GRAPH_BASE}/${igUserId}?fields=id,username&access_token=${encodeURIComponent(accessToken)}`
     );
     if (res.ok) {
       const profile = (await res.json()) as ProfileResponse;
       if (profile.username) username = profile.username;
-      if (profile.account_type) accountType = profile.account_type;
     } else {
       console.error(
         "Instagram profile failed:",

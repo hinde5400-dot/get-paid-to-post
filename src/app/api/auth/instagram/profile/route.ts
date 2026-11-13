@@ -18,7 +18,7 @@ import { INSTAGRAM_GRAPH_BASE } from "@/lib/constants";
 export const dynamic = "force-dynamic";
 
 const PROFILE_URL = (igUserId: string) =>
-  `${INSTAGRAM_GRAPH_BASE}/${igUserId}?fields=id,username,account_type`;
+  `${INSTAGRAM_GRAPH_BASE}/${igUserId}?fields=id,username`;
 
 interface MeResponse {
   id?: string;
