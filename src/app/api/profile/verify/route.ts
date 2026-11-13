@@ -5,8 +5,9 @@
 // profile bio, waits 2 minutes, then hits Verify
 // (/api/profile/verify/check). A verified profile is LOCKED: the
 // same handle cannot be claimed by another user, and this user
-// cannot switch to a different handle without the admin unlocking
-// it. GET returns this user's rows for the Connect page.
+// cannot switch to a different handle without Disconnecting it
+// first (DELETE below frees the slot). GET returns this user's
+// rows for the Connect page.
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(
       {
-        error: `Your verified ${platform} profile is locked to @${row.handle} — ask the admin to unlock it if you need to change it.`,
+        error: `Your verified ${platform} profile is locked to @${row.handle} — disconnect it on the Connect page to connect a different one.`,
       },
       { status: 400 }
     );
@@ -259,4 +260,66 @@ export async function POST(request: Request) {
     reused: false,
     issued_at: (saved as VerifiedProfileRow).updated_at,
   });
+}
+
+/**
+ * Disconnect a profile (DELETE ?platform=tiktok) — frees the slot
+ * so the creator can connect a different profile on that platform.
+ * The row is deleted outright: a pending code dies with it, and a
+ * verified profile stops matching submissions immediately. Needs
+ * the "verified_profiles delete own" policy (migration 0047) —
+ * without it RLS refuses the delete. Idempotent: deleting a
+ * platform with no row is still ok.
+ */
+export async function DELETE(request: Request) {
+  const supabase = getServerClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Supabase is not configured yet." },
+      { status: 503 }
+    );
+  }
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) {
+    return NextResponse.json({ error: "Please log in first." }, { status: 401 });
+  }
+  const profile = await getProfile(auth.user.id);
+  if (profile?.is_blocked) {
+    return NextResponse.json(
+      { error: "This account is blocked." },
+      { status: 403 }
+    );
+  }
+  const platform = new URL(request.url).searchParams.get("platform") as
+    | Platform
+    | null;
+  if (!platform || !PLATFORMS.includes(platform)) {
+    return NextResponse.json(
+      { error: "Unknown platform." },
+      { status: 400 }
+    );
+  }
+  const rl = rateLimit(`bio-disconnect:${auth.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Too many requests — please wait ${rl.retryAfterSeconds ?? 60} seconds and try again.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      { status: 429 }
+    );
+  }
+  const { error } = await supabase
+    .from("verified_profiles")
+    .delete()
+    .eq("user_id", auth.user.id)
+    .eq("platform", platform);
+  if (error) {
+    console.error("Bio-code disconnect failed:", error);
+    return NextResponse.json(
+      { error: "Could not disconnect — please try again." },
+      { status: 500 }
+    );
+  }
+  return NextResponse.json({ ok: true, platform });
 }

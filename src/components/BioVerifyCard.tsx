@@ -1,16 +1,32 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  InstagramIcon,
+  TikTokIcon,
+  YouTubeIcon,
+} from "@/components/PlatformIcons";
 
 /**
- * Bio-code verification card — one per platform (TikTok /
- * Instagram / YouTube). The creator pastes a profile link, gets a
- * unique code (GPTP-XXXXXX), writes it in their profile bio, waits
- * 2 minutes, then clicks Verify. The server fetches the PUBLIC
- * profile bio and checks the code is really there — no login, no
- * API approval, and no screenshot/manual path: all three platforms
- * verify AUTOMATICALLY, the same way. When the server cannot read
- * the bio yet, the creator waits 2 minutes and clicks Verify again.
+ * Connect card — one per platform (TikTok / Instagram / YouTube).
+ * Professional bio-code flow, no login anywhere:
+ *
+ * 1. The card shows the platform's official logo + "Connect
+ *    TikTok". Click it and it opens in place.
+ * 2. The creator pastes a profile link and clicks "Get code for
+ *    bio". The site gives a unique code (GPTP-XXXXXX) with a Copy
+ *    button and one instruction: copy it into the profile bio,
+ *    wait 2 minutes, then click Verify.
+ * 3. Verify stays disabled until the 2-minute timer ends. The
+ *    server then fetches the PUBLIC profile bio (3 server-side
+ *    retries) and checks the code is really there. A code found
+ *    means CONNECTED, with a green tick. A bio the server cannot
+ *    read says so plainly — try again in 2 minutes, or contact
+ *    Support. No screenshot, no admin approval, ever.
+ * 4. A connected profile is LOCKED to the account: the creator
+ *    cannot connect a different profile on this platform until
+ *    they Disconnect the first one (the Disconnect button frees
+ *    the slot immediately).
  */
 
 export type BioProfileStatus = {
@@ -67,6 +83,19 @@ function formatCountdown(totalSeconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+const PLATFORM_ICONS = {
+  tiktok: TikTokIcon,
+  instagram: InstagramIcon,
+  youtube: YouTubeIcon,
+} as const;
+
+/** Official brand colour for the logo (TikTok adapts to the theme). */
+const PLATFORM_ICON_COLOR: Record<Props["platform"], string> = {
+  tiktok: "text-fg",
+  instagram: "text-[#FF0069]",
+  youtube: "text-[#FF0000]",
+};
+
 export default function BioVerifyCard({
   platform,
   title,
@@ -88,6 +117,11 @@ export default function BioVerifyCard({
   );
   const [verifiedAt, setVerifiedAt] = useState<string | null>(
     initial?.verified_at ?? null
+  );
+  // Collapsed by default; open when a code is already waiting, so
+  // the creator sees it straight away.
+  const [expanded, setExpanded] = useState(
+    Boolean(initial && !initial.verified_at && initial.bio_code)
   );
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"ok" | "err" | "info">(
@@ -142,7 +176,7 @@ export default function BioVerifyCard({
       setVerifiedAt(data.verified_at ?? new Date().toISOString());
       setHandle(data.handle ?? handle);
       setCode(null);
-      say("ok", "This profile is already verified.");
+      say("ok", "This profile is already connected.");
       return;
     }
     setCode(data.code ?? null);
@@ -167,10 +201,48 @@ export default function BioVerifyCard({
       setVerifiedAt(data.verified_at ?? new Date().toISOString());
       setHandle(data.handle ?? handle);
       setCode(null);
-      say("ok", "Verified — this profile is now locked to your account.");
+      say("ok", "Connected — this profile is now locked to your account.");
       return;
     }
     say("err", data.error ?? "Could not verify — please try again.");
+  }
+
+  async function disconnect() {
+    if (
+      !window.confirm(
+        `Disconnect your ${title} profile? You can connect a different profile after that.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/profile/verify?platform=${platform}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not disconnect.");
+      }
+      setVerifiedAt(null);
+      setHandle(null);
+      setCode(null);
+      setExpiresAt(null);
+      setIssuedAt(null);
+      setLink("");
+      setExpanded(true);
+      say("ok", "Disconnected — you can connect a different profile now.");
+    } catch (err) {
+      say(
+        "err",
+        err instanceof Error ? err.message : "Could not disconnect."
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function copyCode() {
@@ -184,85 +256,150 @@ export default function BioVerifyCard({
     }
   }
 
-  const cardCls = "rounded-3xl border border-fg/10 bg-card p-6";
+  const Icon = PLATFORM_ICONS[platform];
+  const bioPlace = platform === "youtube" ? "channel description" : `${title} bio`;
 
   return (
-    <div className={`mt-4 ${cardCls}`}>
-      <h2 className="text-sm font-bold text-fg">Verify {title}</h2>
-
-      {verifiedAt ? (
-        <p className="mt-2 rounded-xl bg-lime/15 px-4 py-2.5 text-sm font-semibold text-lime">
-          Verified as @{handle}. This profile is locked to your
-          account — only videos from it can be submitted. To change
-          it, ask the admin to unlock it.
-        </p>
-      ) : (
-        <>
-          <p className="mt-1 text-sm text-fg/60">
-            Paste your {title} profile link. We will give you a code
-            to put in your bio — that proves the profile is yours.
-          </p>
-          <input
-            type="url"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder={placeholder}
-            className="mt-3 w-full rounded-xl border border-fg/15 bg-bg px-4 py-2.5 text-sm text-fg placeholder:text-fg/40 focus:border-lime focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={getCode}
-            disabled={busy || !link.trim()}
-            className="mt-3 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
+    <div className="mt-4 rounded-3xl border border-fg/10 bg-card p-6">
+      {/* Card header — logo + Connect + status. Tapping opens the
+          flow in place. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-4 text-left"
+      >
+        <span
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-fg/5 ${PLATFORM_ICON_COLOR[platform]}`}
+        >
+          <Icon className="h-7 w-7" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-base font-black text-fg">
+            Connect {title}
+          </span>
+          <span className="mt-0.5 block truncate text-sm text-fg/60">
+            {verifiedAt
+              ? `Connected as @${handle ?? ""}`
+              : code && !codeExpired
+                ? "Your code is ready — add it to your bio"
+                : "Connect with a bio code — no login needed"}
+          </span>
+        </span>
+        {verifiedAt ? (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-lime/15 px-3 py-1.5 text-xs font-black text-lime">
+            <span aria-hidden>✓</span> Connected
+          </span>
+        ) : (
+          <span
+            aria-hidden
+            className="shrink-0 text-lg font-black text-fg/40"
           >
-            {busy ? "Working..." : code && !codeExpired ? "Get a new code" : "Get my code"}
-          </button>
+            {expanded ? "▲" : "▼"}
+          </span>
+        )}
+      </button>
 
-          {code && !codeExpired && (
-            <div className="mt-4 rounded-xl border border-lime/30 bg-lime/5 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-fg/60">
-                Your code — add it to your {title} bio
-              </p>
-              <div className="mt-2 flex items-center gap-3">
-                <code className="font-mono text-xl font-black tracking-wider text-fg">
-                  {code}
-                </code>
-                <button
-                  type="button"
-                  onClick={copyCode}
-                  className="rounded-full border border-fg/20 px-3 py-1 text-xs font-bold text-fg transition hover:bg-fg/10"
+      {expanded && (
+        <div className="mt-5 border-t border-fg/10 pt-5">
+          {verifiedAt ? (
+            <>
+              <p className="flex items-start gap-3 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
+                <span
+                  aria-hidden
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lime text-sm font-black text-black"
                 >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-              <p className="mt-2 text-sm text-fg/60">{bioHint}</p>
+                  ✓
+                </span>
+                <span>
+                  Connected as @{handle}. This profile is locked to
+                  your account — only videos from it can be
+                  submitted. To connect a different profile,
+                  disconnect this one first.
+                </span>
+              </p>
               <button
                 type="button"
-                onClick={verify}
-                disabled={busy || waitRemaining > 0}
+                onClick={disconnect}
+                disabled={busy}
+                className="mt-4 inline-block rounded-full border border-red-500/50 px-6 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+              >
+                {busy ? "Disconnecting..." : `Disconnect ${title}`}
+              </button>
+            </>
+          ) : (
+            <>
+              <label className="block text-sm font-bold text-fg">
+                Paste your {title} profile link
+                <input
+                  type="url"
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  placeholder={placeholder}
+                  className="mt-2 w-full rounded-xl border border-fg/15 bg-bg px-4 py-2.5 text-sm text-fg placeholder:text-fg/40 focus:border-lime focus:outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={getCode}
+                disabled={busy || !link.trim()}
                 className="mt-3 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
               >
                 {busy
-                  ? "Checking..."
-                  : waitRemaining > 0
-                    ? `Verify in ${formatCountdown(waitRemaining)}`
-                    : "Verify my bio"}
+                  ? "Working..."
+                  : code && !codeExpired
+                    ? "Get a new code"
+                    : "Get code for bio"}
               </button>
-              {waitRemaining > 0 && (
-                <p className="mt-2 text-xs text-fg/50">
-                  Wait for the timer — the bio needs a couple of
-                  minutes to update everywhere.
+
+              {code && !codeExpired && (
+                <div className="mt-4 rounded-xl border border-lime/30 bg-lime/5 px-4 py-3">
+                  <p className="text-sm leading-relaxed text-fg/80">
+                    Copy this code, put it in your {bioPlace}, wait
+                    2 minutes, then click Verify.
+                  </p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <code className="font-mono text-xl font-black tracking-wider text-fg">
+                      {code}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={copyCode}
+                      className="rounded-full border border-fg/20 px-3 py-1 text-xs font-bold text-fg transition hover:bg-fg/10"
+                    >
+                      {copied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-sm text-fg/60">{bioHint}</p>
+                  <button
+                    type="button"
+                    onClick={verify}
+                    disabled={busy || waitRemaining > 0}
+                    className="mt-3 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
+                  >
+                    {busy
+                      ? "Checking..."
+                      : waitRemaining > 0
+                        ? `Verify in ${formatCountdown(waitRemaining)}`
+                        : "Verify"}
+                  </button>
+                  {waitRemaining > 0 && (
+                    <p className="mt-2 text-xs text-fg/50">
+                      Wait for the timer — the bio needs a couple of
+                      minutes to update everywhere.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {code && codeExpired && (
+                <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
+                  Your code expired — get a new code and try again.
                 </p>
               )}
-            </div>
+            </>
           )}
-
-          {code && codeExpired && (
-            <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
-              Your code expired — get a new code and try again.
-            </p>
-          )}
-        </>
+        </div>
       )}
 
       {message && (

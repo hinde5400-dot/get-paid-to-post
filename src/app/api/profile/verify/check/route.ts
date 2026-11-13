@@ -118,14 +118,15 @@ export async function POST(request: Request) {
     // YouTube errors are specific (bad link, API key) — pass them
     // through. TikTok / Instagram return "unreadable" when the
     // public page did not carry a bio after 3 server-side tries:
-    // the creator waits 2 minutes and clicks Verify again.
+    // the creator waits 2 minutes and tries again, or contacts
+    // Support (the help bubble on every page). No screenshot, ever.
     if (platform === "youtube") {
       return NextResponse.json({ verified: false, error: result.error }, { status: 400 });
     }
     return NextResponse.json({
       verified: false,
       error:
-        "We couldn't read your bio yet — wait 2 minutes and click Verify again.",
+        "We couldn't find your bio — try again in 2 minutes, or contact Support.",
     });
   }
 

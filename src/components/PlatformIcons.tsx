@@ -1,21 +1,25 @@
 import type { Platform } from "@/lib/types";
+import { siInstagram, siTiktok, siYoutube } from "simple-icons";
 
-/** Inline SVG platform marks — no new dependencies, no image files. */
+/**
+ * Official platform marks (simple-icons, CC0) — the real brand
+ * glyphs, not generic shapes. Rendered with currentColor so the
+ * caller sets the brand colour (TikTok adapts to the theme,
+ * Instagram pink, YouTube red).
+ */
 
 export function TikTokIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-label="TikTok">
-      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+      <path d={siTiktok.path} />
     </svg>
   );
 }
 
 export function InstagramIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-label="Instagram">
-      <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
-      <circle cx="12" cy="12" r="4.25" />
-      <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none" />
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-label="Instagram">
+      <path d={siInstagram.path} />
     </svg>
   );
 }
@@ -23,7 +27,7 @@ export function InstagramIcon({ className = "h-4 w-4" }: { className?: string })
 export function YouTubeIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-label="YouTube">
-      <path d="M23 7.2s-.22-1.56-.9-2.25c-.86-.9-1.82-.9-2.26-.96C16.7 3.75 12 3.75 12 3.75s-4.7 0-7.84.24c-.44.05-1.4.06-2.26.96-.68.69-.9 2.25-.9 2.25S.75 9.03.75 10.87v1.7c0 1.83.25 3.67.25 3.67s.22 1.56.9 2.25c.86.9 1.99.87 2.49.97 1.8.18 7.61.24 7.61.24s4.71-.06 7.84-.3c.44-.05 1.4-.06 2.26-.96.68-.69.9-2.25.9-2.25s.25-1.83.25-3.67v-1.7c0-1.83-.25-3.67-.25-3.67zM9.75 14.85V8.65l6.07 3.1-6.07 3.1z" />
+      <path d={siYoutube.path} />
     </svg>
   );
 }
