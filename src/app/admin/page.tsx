@@ -17,7 +17,6 @@ import AdminCampaignCards, {
 import AdminMessagesList from "@/components/AdminMessagesList";
 import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/AdminWithdrawalList";
 import AdminSettingsForm from "@/components/AdminSettingsForm";
-import AdminVerifyList from "@/components/AdminVerifyList";
 import MarkRefundSentButton from "@/components/MarkRefundSentButton";
 import { truncateTxId } from "@/lib/validate";
 
@@ -594,26 +593,6 @@ export default async function AdminPage({
         </p>
         <div className="mt-4">
           <AdminSettingsForm currentWallet={adminWallet} />
-        </div>
-      </section>
-
-      {/* Bio-code verifications (migration 0046): when the server
-          cannot read a creator's bio automatically, their
-          screenshot lands here. Open the live profile, check the
-          code is in the bio, and approve — or reject. Verified
-          profiles below can be unlocked when a creator needs to
-          change profiles. */}
-      <section>
-        <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
-          Profile verifications
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
-          Bio-code checks waiting for you, plus every verified
-          profile. A verified profile is locked to its creator —
-          only videos from it can be submitted.
-        </p>
-        <div className="mt-4">
-          <AdminVerifyList />
         </div>
       </section>
 

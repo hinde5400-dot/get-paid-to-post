@@ -8,10 +8,9 @@ import { useEffect, useRef, useState } from "react";
  * unique code (GPTP-XXXXXX), writes it in their profile bio, waits
  * 2 minutes, then clicks Verify. The server fetches the PUBLIC
  * profile bio and checks the code is really there — no login, no
- * API approval. When the server cannot read the bio automatically
- * (TikTok / Instagram pages usually do not carry one for a server
- * fetch), the creator uploads a bio screenshot and the admin
- * verifies it by hand.
+ * API approval, and no screenshot/manual path: all three platforms
+ * verify AUTOMATICALLY, the same way. When the server cannot read
+ * the bio yet, the creator waits 2 minutes and clicks Verify again.
  */
 
 export type BioProfileStatus = {
@@ -20,7 +19,6 @@ export type BioProfileStatus = {
   handle: string;
   verified_at: string | null;
   verified_by: string | null;
-  proof_url: string | null;
   bio_code: string | null;
   code_expires_at: string | null;
   issued_at: string;
@@ -43,10 +41,8 @@ type ApiBody = {
   handle?: string;
   verified?: boolean;
   verified_at?: string;
-  status?: string;
   message?: string;
   error?: string;
-  auto_read_failed?: boolean;
   already_verified?: boolean;
   reused?: boolean;
   issued_at?: string;
@@ -93,11 +89,6 @@ export default function BioVerifyCard({
   const [verifiedAt, setVerifiedAt] = useState<string | null>(
     initial?.verified_at ?? null
   );
-  const [proofUrl, setProofUrl] = useState("");
-  const [manualReview, setManualReview] = useState(
-    Boolean(initial && !initial.verified_at && initial.proof_url)
-  );
-  const [showProofForm, setShowProofForm] = useState(false);
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"ok" | "err" | "info">(
     "info"
@@ -158,8 +149,6 @@ export default function BioVerifyCard({
     setExpiresAt(data.expires_at ?? null);
     setIssuedAt(data.issued_at ?? new Date().toISOString());
     setHandle(data.handle ?? null);
-    setManualReview(false);
-    setShowProofForm(false);
     setNow(Date.now());
     say(
       "info",
@@ -181,45 +170,7 @@ export default function BioVerifyCard({
       say("ok", "Verified — this profile is now locked to your account.");
       return;
     }
-    if (data.status === "manual_review") {
-      setManualReview(true);
-      say("info", data.message ?? "Your screenshot is waiting for the admin.");
-      return;
-    }
-    if (data.auto_read_failed) {
-      setShowProofForm(true);
-      say(
-        "info",
-        data.message ??
-          "We couldn't read your bio automatically — upload a screenshot of your bio showing the code instead."
-      );
-      return;
-    }
     say("err", data.error ?? "Could not verify — please try again.");
-  }
-
-  async function submitProof() {
-    if (!proofUrl.trim()) {
-      say("err", "Paste a screenshot link first.");
-      return;
-    }
-    setBusy(true);
-    setMessage("");
-    const { ok, data } = await postJson("/api/profile/verify/proof", {
-      platform,
-      proof_url: proofUrl.trim(),
-    });
-    setBusy(false);
-    if (!ok) {
-      say("err", data.error ?? "Could not save the screenshot — please try again.");
-      return;
-    }
-    setManualReview(true);
-    setShowProofForm(false);
-    say(
-      "ok",
-      data.message ?? "Screenshot saved — the admin will check your bio."
-    );
   }
 
   async function copyCode() {
@@ -309,42 +260,6 @@ export default function BioVerifyCard({
           {code && codeExpired && (
             <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
               Your code expired — get a new code and try again.
-            </p>
-          )}
-
-          {showProofForm && !manualReview && (
-            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-              <p className="text-sm font-semibold text-fg">
-                We couldn&apos;t read your bio automatically
-              </p>
-              <p className="mt-1 text-sm text-fg/60">
-                Take a screenshot of your profile showing the code in
-                your bio, upload it somewhere (Imgur, Lightshot,
-                postimages), and paste the link here. The admin will
-                check it and verify your profile.
-              </p>
-              <input
-                type="url"
-                value={proofUrl}
-                onChange={(e) => setProofUrl(e.target.value)}
-                placeholder="https://i.imgur.com/… or https://prnt.sc/…"
-                className="mt-3 w-full rounded-xl border border-fg/15 bg-bg px-4 py-2.5 text-sm text-fg placeholder:text-fg/40 focus:border-lime focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={submitProof}
-                disabled={busy || !proofUrl.trim()}
-                className="mt-3 inline-block rounded-full bg-lime px-6 py-3 text-sm font-bold text-ink transition hover:bg-limedark disabled:opacity-40"
-              >
-                {busy ? "Saving..." : "Send screenshot for review"}
-              </button>
-            </div>
-          )}
-
-          {manualReview && (
-            <p className="mt-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
-              Your screenshot is waiting for the admin to check. You
-              will see the result here once it is reviewed.
             </p>
           )}
         </>

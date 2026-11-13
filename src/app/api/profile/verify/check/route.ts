@@ -2,10 +2,11 @@
 //
 // POST { platform } → fetches the PUBLIC profile bio from the
 // server (YouTube via the Data API key; TikTok / Instagram from
-// the public page) and checks the issued code is really there.
-// A bio the server cannot read is reported as "could not read" —
-// never as "code not found" — and the creator is offered the
-// manual path (a bio screenshot for the admin) instead.
+// the public page, retried 3 times server-side) and checks the
+// issued code is really there. All three platforms verify
+// AUTOMATICALLY — there is no screenshot/manual path. A bio the
+// server cannot read is reported as "wait 2 minutes and click
+// Verify again" — never as "code not found", never as verified.
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
@@ -29,7 +30,6 @@ type VerifiedProfileRow = {
   code_expires_at: string | null;
   verified_at: string | null;
   verified_by: string | null;
-  proof_url: string | null;
 };
 
 export async function POST(request: Request) {
@@ -107,17 +107,6 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // A screenshot is already waiting for the admin — re-checking
-  // the bio would not change anything.
-  if (row.proof_url) {
-    return NextResponse.json({
-      verified: false,
-      status: "manual_review",
-      message:
-        "Your screenshot is waiting for the admin to check — you will see the result on the Connect page.",
-    });
-  }
-
   const code = row.bio_code;
   const result = await fetchProfileBio(
     platform,
@@ -128,15 +117,15 @@ export async function POST(request: Request) {
   if ("error" in result) {
     // YouTube errors are specific (bad link, API key) — pass them
     // through. TikTok / Instagram return "unreadable" when the
-    // public page did not carry a bio: offer the manual path.
+    // public page did not carry a bio after 3 server-side tries:
+    // the creator waits 2 minutes and clicks Verify again.
     if (platform === "youtube") {
       return NextResponse.json({ verified: false, error: result.error }, { status: 400 });
     }
     return NextResponse.json({
       verified: false,
-      auto_read_failed: true,
-      message:
-        "We couldn't read your bio automatically — the profile page didn't load a bio for us. Upload a screenshot of your bio showing the code and the admin will verify it.",
+      error:
+        "We couldn't read your bio yet — wait 2 minutes and click Verify again.",
     });
   }
 

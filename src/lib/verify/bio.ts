@@ -1,26 +1,32 @@
 // Bio-code profile verification — server-side PUBLIC reads.
 //
 // Turn's decision (2026-11-13, final): no API approval, no login,
-// no business registration. A creator pastes a profile link, the
-// site gives a unique code (GPTP-XXXXXX), the creator writes it in
-// their bio, waits 2 minutes, clicks Verify, and the SERVER fetches
-// the public profile page and checks the code is really there.
+// no business registration, NO screenshot/manual path at all. A
+// creator pastes a profile link, the site gives a unique code
+// (GPTP-XXXXXX), the creator writes it in their bio, waits 2
+// minutes, clicks Verify, and the SERVER fetches the public
+// profile page and checks the code is really there. All three
+// platforms verify AUTOMATICALLY, the same way.
 //
 // What actually works from a server (tested live 2026-11-13):
 // - YouTube: channels.list with the API key reads the channel
 //   description (the bio) reliably — 1 quota unit, no OAuth.
 // - TikTok: the profile page is a JS shell; the bio ("signature")
 //   sometimes rides in the __UNIVERSAL_DATA_FOR_REHYDRATION__
-//   blob, often not, from a datacenter IP. Best effort only.
+//   blob, often not, from a datacenter IP.
 // - Instagram: the profile page is a JS shell with no bio in the
 //   HTML; web_profile_info needs a warmed session and usually
-//   answers 429. Best effort only.
+//   answers 429.
 //
-// So every fetcher here is BEST EFFORT and never throws: it returns
-// { bio } or { error }. When the bio cannot be read automatically,
-// the verify route tells the creator plainly and offers the manual
-// path — a bio screenshot the admin checks. A failed read is NEVER
-// treated as "code not found", and never as verified.
+// So TikTok / Instagram fetches RETRY server-side (3 attempts,
+// short waits — Turn's order). When the bio still cannot be read,
+// the verify route tells the creator plainly to wait 2 minutes
+// and click Verify again. A failed read is NEVER treated as "code
+// not found", and never as verified.
+//
+// Retries are budgeted for the Vercel Hobby 10-second function
+// limit: 3 attempts × 2s timeout + 2 × 1s waits = 8s worst case,
+// plus ~0.5s of route overhead.
 //
 // The same rule applies to public view counts (fetchPublicPostViews):
 // try the public page first, fall back to the existing OAuth/manual
@@ -145,15 +151,27 @@ export function tiktokHandleFromVideoUrl(raw: string): string | null {
 }
 
 const FETCH_TIMEOUT_MS = 8000;
+/** Per-attempt timeout inside the bio retry loop (see the header:
+ *  the whole verify must fit the 10-second function limit). */
+const BIO_FETCH_TIMEOUT_MS = 2000;
+/** Wait between bio retry attempts. */
+const BIO_RETRY_WAIT_MS = 1000;
+/** Server-side bio read attempts per Verify click (Turn's order). */
+const BIO_MAX_ATTEMPTS = 3;
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchText(
   url: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
+  timeoutMs: number = FETCH_TIMEOUT_MS
 ): Promise<{ text: string } | { error: string }> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": BROWSER_UA, ...headers },
@@ -254,63 +272,62 @@ export async function fetchYouTubeBio(
 
 /**
  * TikTok profile bio ("signature") from the public profile page.
- * Best effort: the page is a JS shell and the signature only rides
- * in the __UNIVERSAL_DATA_FOR_REHYDRATION__ blob when the server
+ * Retries server-side (3 attempts, short waits — Turn's order):
+ * the page is a JS shell and the signature only rides in the
+ * __UNIVERSAL_DATA_FOR_REHYDRATION__ blob when the server
  * renders it — from a datacenter IP it often does not. A missing
  * bio here means "could not read", never "code not found".
  */
 export async function fetchTikTokBio(handle: string): Promise<BioResult> {
-  const got = await fetchText(`https://www.tiktok.com/@${encodeURIComponent(handle)}`, {});
-  if ("error" in got) {
-    console.warn(`TikTok bio fetch failed for @${handle}:`, got.error);
-    return { error: "unreadable" };
-  }
-  const m = got.text.match(
-    /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/
-  );
-  if (!m) {
-    console.warn(`TikTok bio fetch for @${handle}: no rehydration data in page.`);
-    return { error: "unreadable" };
-  }
-  try {
-    const data = JSON.parse(m[1]) as unknown;
-    const signature = findStringDeep(data, "signature");
-    if (signature === null) {
-      console.warn(`TikTok bio fetch for @${handle}: no signature in page data.`);
-      return { error: "unreadable" };
+  for (let attempt = 1; attempt <= BIO_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) await sleep(BIO_RETRY_WAIT_MS);
+    const got = await fetchText(
+      `https://www.tiktok.com/@${encodeURIComponent(handle)}`,
+      {},
+      BIO_FETCH_TIMEOUT_MS
+    );
+    if ("error" in got) {
+      console.warn(
+        `TikTok bio fetch failed for @${handle} (attempt ${attempt}):`,
+        got.error
+      );
+      continue;
     }
-    return { bio: signature };
-  } catch {
-    console.warn(`TikTok bio fetch for @${handle}: page data did not parse.`);
-    return { error: "unreadable" };
+    const m = got.text.match(
+      /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/
+    );
+    if (!m) {
+      console.warn(
+        `TikTok bio fetch for @${handle}: no rehydration data in page (attempt ${attempt}).`
+      );
+      continue;
+    }
+    try {
+      const data = JSON.parse(m[1]) as unknown;
+      const signature = findStringDeep(data, "signature");
+      if (signature === null) {
+        console.warn(
+          `TikTok bio fetch for @${handle}: no signature in page data (attempt ${attempt}).`
+        );
+        continue;
+      }
+      return { bio: signature };
+    } catch {
+      console.warn(
+        `TikTok bio fetch for @${handle}: page data did not parse (attempt ${attempt}).`
+      );
+      continue;
+    }
   }
+  return { error: "unreadable" };
 }
 
-/**
- * Instagram profile bio from the public profile page.
- * Best effort: the page is a JS shell with no bio in the HTML, and
- * web_profile_info usually answers 429 from a server IP. Tries the
- * page's embedded JSON first, then web_profile_info. A missing bio
- * means "could not read", never "code not found".
- */
-export async function fetchInstagramBio(handle: string): Promise<BioResult> {
-  const got = await fetchText(`https://www.instagram.com/${encodeURIComponent(handle)}/`, {});
-  if (!("error" in got)) {
-    const m = got.text.match(/"biography":"((?:\\.|[^"\\])*)"/);
-    if (m) {
-      try {
-        return { bio: JSON.parse(`"${m[1]}"`) as string };
-      } catch {
-        // Fall through to web_profile_info.
-      }
-    }
-  } else {
-    console.warn(`Instagram bio page fetch failed for @${handle}:`, got.error);
-  }
-  // Second try: the web_profile_info endpoint (needs the web app ID
-  // header; usually 429 from a server IP, but costs nothing to try).
+/** One web_profile_info attempt: the bio string, or null. */
+async function fetchInstagramWebProfileBio(
+  handle: string
+): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), BIO_FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(
       `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
@@ -322,19 +339,70 @@ export async function fetchInstagramBio(handle: string): Promise<BioResult> {
         signal: controller.signal,
       }
     );
-    if (res.ok) {
-      const data = (await res.json()) as {
-        data?: { user?: { biography?: string } };
-      };
-      const bio = data?.data?.user?.biography;
-      if (typeof bio === "string") return { bio };
-    } else {
-      console.warn(`Instagram web_profile_info for @${handle}: HTTP ${res.status}.`);
+    if (!res.ok) {
+      console.warn(
+        `Instagram web_profile_info for @${handle}: HTTP ${res.status}.`
+      );
+      return null;
     }
+    const data = (await res.json()) as {
+      data?: { user?: { biography?: string } };
+    };
+    const bio = data?.data?.user?.biography;
+    return typeof bio === "string" ? bio : null;
   } catch (err) {
     console.warn(`Instagram web_profile_info for @${handle} failed:`, err);
+    return null;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Instagram profile bio from the public profile page.
+ * Retries server-side (3 attempts, short waits — Turn's order):
+ * attempt 1 and 3 read the page's embedded JSON, attempt 2 tries
+ * web_profile_info. The page is a JS shell with no bio in the
+ * HTML, and web_profile_info usually answers 429 from a server
+ * IP — so a missing bio means "could not read", never "code not
+ * found". The creator is then told to wait 2 minutes and click
+ * Verify again.
+ */
+export async function fetchInstagramBio(handle: string): Promise<BioResult> {
+  for (let attempt = 1; attempt <= BIO_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) await sleep(BIO_RETRY_WAIT_MS);
+    if (attempt === 2) {
+      const bio = await fetchInstagramWebProfileBio(handle);
+      if (bio !== null) return { bio };
+      continue;
+    }
+    const got = await fetchText(
+      `https://www.instagram.com/${encodeURIComponent(handle)}/`,
+      {},
+      BIO_FETCH_TIMEOUT_MS
+    );
+    if ("error" in got) {
+      console.warn(
+        `Instagram bio page fetch failed for @${handle} (attempt ${attempt}):`,
+        got.error
+      );
+      continue;
+    }
+    const m = got.text.match(/"biography":"((?:\\.|[^"\\])*)"/);
+    if (!m) {
+      console.warn(
+        `Instagram bio page for @${handle}: no biography in page (attempt ${attempt}).`
+      );
+      continue;
+    }
+    try {
+      return { bio: JSON.parse(`"${m[1]}"`) as string };
+    } catch {
+      console.warn(
+        `Instagram bio page for @${handle}: biography did not parse (attempt ${attempt}).`
+      );
+      continue;
+    }
   }
   return { error: "unreadable" };
 }

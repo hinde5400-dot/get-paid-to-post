@@ -32,7 +32,6 @@ type VerifiedProfileRow = {
   code_expires_at: string | null;
   verified_at: string | null;
   verified_by: string | null;
-  proof_url: string | null;
   updated_at: string;
 };
 
@@ -48,7 +47,6 @@ function publicRow(row: VerifiedProfileRow) {
     handle: row.handle,
     verified_at: row.verified_at,
     verified_by: row.verified_by,
-    proof_url: row.proof_url,
     // The code is only shown while it is pending — a verified
     // profile has nothing left to prove.
     bio_code: pending ? row.bio_code : null,
@@ -239,7 +237,6 @@ export async function POST(request: Request) {
         code_expires_at: expiresAt,
         verified_at: null,
         verified_by: null,
-        proof_url: null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,platform" }
