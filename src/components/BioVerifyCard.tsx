@@ -60,6 +60,8 @@ type ApiBody = {
   message?: string;
   error?: string;
   retryable?: boolean;
+  pending?: boolean;
+  run_id?: string;
   already_verified?: boolean;
   reused?: boolean;
   issued_at?: string;
@@ -200,14 +202,34 @@ export default function BioVerifyCard({
   }
 
   async function verify() {
+    // Instagram has its own flow (Apify run + polling) — see below.
+    if (platform === "instagram") return verifyInstagram();
     setBusy(true);
     setMessage("");
-    // Instagram only (Turn's order): when the bio cannot be read,
-    // the check auto-retries after 30 seconds, up to 3 tries in
-    // total, before the error is shown — one click, no re-tapping.
-    // TikTok / YouTube are untouched: one shot, as before.
-    const maxAttempts = platform === "instagram" ? 3 : 1;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const { ok, data } = await postJson("/api/profile/verify/check", {
+      platform,
+    });
+    setBusy(false);
+    if (ok && data.verified) {
+      setVerifiedAt(data.verified_at ?? new Date().toISOString());
+      setHandle(data.handle ?? handle);
+      setCode(null);
+      say("ok", "Connected — this profile is now locked to your account.");
+      return;
+    }
+    say("err", data.error ?? "Could not verify — please try again.");
+  }
+
+  // Instagram only (Turn's order): the bio is read by Apify, and
+  // an Apify run takes 30–90 seconds — so one Verify click starts
+  // the run and the card polls every 10 seconds until it finishes
+  // (up to ~3 minutes). If the run fails, it retries after 30
+  // seconds, up to 3 tries in total, before the error is shown.
+  // TikTok / YouTube are untouched: one shot, as before.
+  async function verifyInstagram() {
+    setBusy(true);
+    setMessage("");
+    for (let attempt = 1; attempt <= 3; attempt++) {
       if (attempt > 1) {
         say(
           "info",
@@ -216,30 +238,40 @@ export default function BioVerifyCard({
         await new Promise((resolve) => setTimeout(resolve, 30000));
         if (!aliveRef.current) return;
       }
-      const { ok, data } = await postJson("/api/profile/verify/check", {
-        platform,
-      });
-      if (!aliveRef.current) return;
-      if (ok && data.verified) {
-        setVerifiedAt(data.verified_at ?? new Date().toISOString());
-        setHandle(data.handle ?? handle);
-        setCode(null);
+      let runId: string | undefined;
+      for (let poll = 0; poll < 18; poll++) {
+        if (poll > 0) {
+          say("info", "Checking your Instagram bio…");
+          await new Promise((resolve) => setTimeout(resolve, 10000));
+          if (!aliveRef.current) return;
+        }
+        const { ok, data } = await postJson(
+          "/api/profile/verify/check",
+          runId ? { platform, run_id: runId } : { platform }
+        );
+        if (!aliveRef.current) return;
+        if (ok && data.verified) {
+          setVerifiedAt(data.verified_at ?? new Date().toISOString());
+          setHandle(data.handle ?? handle);
+          setCode(null);
+          setBusy(false);
+          say("ok", "Connected — this profile is now locked to your account.");
+          return;
+        }
+        if (data.pending) {
+          runId = data.run_id;
+          continue;
+        }
+        if (data.retryable) break;
         setBusy(false);
-        say("ok", "Connected — this profile is now locked to your account.");
+        say("err", data.error ?? "Could not verify — please try again.");
         return;
       }
-      if (
-        platform === "instagram" &&
-        data.retryable &&
-        attempt < maxAttempts
-      ) {
-        continue;
-      }
-      setBusy(false);
-      say("err", data.error ?? "Could not verify — please try again.");
-      return;
+      // Polls ran out with the run still going — treat it as a
+      // retryable failure; the next attempt resumes the same run.
     }
     setBusy(false);
+    say("err", "Instagram is taking a moment — try Verify again in 2 minutes.");
   }
 
   async function disconnect() {
