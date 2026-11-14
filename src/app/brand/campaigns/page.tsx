@@ -47,16 +47,16 @@ function brandTab(c: Campaign): BrandTab {
 function statusChip(c: Campaign): { label: string; cls: string } {
   if (campaignStatus(c) === "live") {
     if (c.is_paused)
-      return { label: "Paused", cls: "bg-yellow-500/15 text-yellow-300" };
+      return { label: "Paused", cls: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300" };
     return { label: "Live", cls: "bg-lime/15 text-limeink" };
   }
   if (c.status === "pending") {
     if (isExpiredUnpaidPending(c))
-      return { label: "Expired", cls: "bg-red-500/15 text-red-300" };
-    return { label: "Pending", cls: "bg-yellow-500/15 text-yellow-300" };
+      return { label: "Expired", cls: "bg-red-500/15 text-red-700 dark:text-red-300" };
+    return { label: "Pending", cls: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300" };
   }
   if (c.status === "rejected")
-    return { label: "Rejected", cls: "bg-red-500/15 text-red-300" };
+    return { label: "Rejected", cls: "bg-red-500/15 text-red-700 dark:text-red-300" };
   return { label: "Ended", cls: "bg-fg/10 text-fg/60" };
 }
 
@@ -273,21 +273,21 @@ function BrandCampaignCard({
       </div>
 
       {tab === "pending" && expired && (
-        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
+        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-700 dark:text-red-300">
           <span className="font-black">Expired — create a new campaign.</span>{" "}
           This campaign was never funded within 7 days, so it expired
           and can no longer be paid for.
         </div>
       )}
       {tab === "pending" && !expired && !needsFunding && (
-        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
+        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-800 dark:text-amber-200">
           <span className="font-black">Pending — payment submitted.</span>{" "}
           The admin is verifying your payment. Your campaign goes live
           once payment is verified.
         </div>
       )}
       {tab === "pending" && needsFunding && (
-        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
+        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-800 dark:text-amber-200">
           <span className="font-black">Pending — not live yet.</span> Send
           your budget plus the 15% platform fee on the payment page —
           your campaign goes live only after the admin verifies your
@@ -301,14 +301,14 @@ function BrandCampaignCard({
         </div>
       )}
       {isLive && c.is_paused && (
-        <div className="mt-4 rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm leading-relaxed text-yellow-200">
+        <div className="mt-4 rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm leading-relaxed text-yellow-800 dark:text-yellow-200">
           <span className="font-black">Paused.</span> Hidden from
           Discover — creators cannot submit new clips until you start
           it again. Existing clips are untouched.
         </div>
       )}
       {c.status === "rejected" && (
-        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
+        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-700 dark:text-red-300">
           <span className="font-black">Rejected by the admin.</span>{" "}
           This campaign will not go live.{" "}
           {paymentSubmitted && (

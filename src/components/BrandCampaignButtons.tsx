@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 
@@ -85,16 +85,23 @@ export function BrandDeleteButton({
   const router = useRouter();
   const { showError, showSuccess } = useToast();
   const [busy, setBusy] = useState(false);
+  // Inline two-tap confirm — no window.confirm: in some browsers
+  // (and all automated ones) the native dialog never surfaces and
+  // the button then silently does nothing. First tap arms it, second
+  // tap deletes. The arm resets after 6s.
+  const [armed, setArmed] = useState(false);
+  const armTimer = useRef<number | null>(null);
 
   async function onClick() {
     if (busy) return;
-    if (
-      !window.confirm(
-        `Delete "${title}"? This permanently cancels the pending campaign. You can create a new one any time.`
-      )
-    ) {
+    if (!armed) {
+      setArmed(true);
+      if (armTimer.current) window.clearTimeout(armTimer.current);
+      armTimer.current = window.setTimeout(() => setArmed(false), 6000);
       return;
     }
+    if (armTimer.current) window.clearTimeout(armTimer.current);
+    setArmed(false);
     setBusy(true);
     try {
       const res = await fetch(`/api/brand/campaigns/${campaignId}`, {
@@ -123,9 +130,13 @@ export function BrandDeleteButton({
       type="button"
       onClick={() => void onClick()}
       disabled={busy}
-      className="rounded-full border border-red-500/40 px-4 py-2 text-xs font-bold text-red-300 transition hover:border-red-400 hover:text-red-200 disabled:opacity-40"
+      className={
+        armed
+          ? "rounded-full bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-500 disabled:opacity-40"
+          : "rounded-full border border-red-500/40 px-4 py-2 text-xs font-bold text-red-300 transition hover:border-red-400 hover:text-red-200 disabled:opacity-40"
+      }
     >
-      Delete / Cancel
+      {armed ? "Sure? Tap again to delete" : "Delete / Cancel"}
     </button>
   );
 }
