@@ -12,7 +12,7 @@ import {
   UNPAID_PENDING_EXPIRY_MS,
 } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
-import { formatUSD, platformFeeFor, totalToSend } from "@/lib/money";
+import { formatUSD, platformFeeFor, totalToSendWithNetworkFee, USDT_NETWORK_FEE_USD } from "@/lib/money";
 import type { BrandMessage } from "@/lib/types";
 import PaymentForm from "@/components/PaymentForm";
 import BrandMessageForm from "@/components/BrandMessageForm";
@@ -132,8 +132,14 @@ export default async function BrandPaymentPage({
   // stored platform_fee column is a cache, and a stale fee (e.g.
   // after a budget edit whose fee write failed) must never set
   // the amount the brand is asked to send.
-  const platformFee = platformFeeFor(campaign.budget_total);
-  const totalDue = totalToSend(campaign.budget_total);
+  // Total the brand is asked to send: budget + 15% fee + the
+  // estimated ~$3 TRC20 network fee (Turn's decision 2026-11-14)
+  // — one number, so the full budget + fee still arrives even
+  // when the sender's wallet or exchange takes the network fee
+  // out of the USDT sent. Refund/budget math elsewhere keeps
+  // using totalToSend (budget + fee, no network fee).
+  const totalDueWithNetworkFee =
+    totalToSendWithNetworkFee(campaign.budget_total);
   // Expiry clock (P1-B1): the same clock as
   // isExpiredUnpaidPending — payment_tx_submitted_at + 7d when a
   // TxID is on file, else created_at + 7d.
@@ -229,7 +235,9 @@ export default async function BrandPaymentPage({
               <>
                 You already sent{" "}
                 {formatUSD(
-                  totalToSend(paidBudget ?? campaign.budget_total)
+                  totalToSendWithNetworkFee(
+                    paidBudget ?? campaign.budget_total
+                  )
                 )}{" "}
                 (
                 {formatUSD(paidBudget ?? campaign.budget_total)} budget
@@ -237,8 +245,10 @@ export default async function BrandPaymentPage({
                 {formatUSD(
                   platformFeeFor(paidBudget ?? campaign.budget_total)
                 )}{" "}
-                platform fee). Your budget is refunded on request —
-                the 15% platform fee is not refundable.
+                platform fee +{" "}
+                {formatUSD(USDT_NETWORK_FEE_USD)} network fee). Your
+                budget is refunded on request — the 15% platform fee
+                is not refundable.
               </>
             ) : (
               <>If you already sent the budget, contact the admin on
@@ -253,7 +263,9 @@ export default async function BrandPaymentPage({
                 </p>
                 <p className="mt-1 text-sm font-black text-fg">
                   {formatUSD(
-                    totalToSend(paidBudget ?? campaign.budget_total)
+                    totalToSendWithNetworkFee(
+                      paidBudget ?? campaign.budget_total
+                    )
                   )}{" "}
                   USDT
                   <span className="ml-2 text-xs font-semibold text-fg/50">
@@ -263,7 +275,8 @@ export default async function BrandPaymentPage({
                     {formatUSD(
                       platformFeeFor(paidBudget ?? campaign.budget_total)
                     )}{" "}
-                    fee not refundable)
+                    fee not refundable ·{" "}
+                    {formatUSD(USDT_NETWORK_FEE_USD)} network fee)
                   </span>
                 </p>
                 <p className="mt-2 break-all font-mono text-xs font-bold text-fg/80">
@@ -361,9 +374,10 @@ export default async function BrandPaymentPage({
               Budget changed to {formatUSD(campaign.budget_total)}
             </span>{" "}
             — your submitted payment covered {formatUSD(paidBudget)};
-            send the extra {formatUSD(budgetDelta)} + 15% fee (
-            {formatUSD(totalToSend(budgetDelta))} total) so the
-            campaign can go live on the new budget.
+            send the extra {formatUSD(budgetDelta)} + 15% fee + ~
+            {formatUSD(USDT_NETWORK_FEE_USD)} network fee (
+            {formatUSD(totalToSendWithNetworkFee(budgetDelta))} total)
+            so the campaign can go live on the new budget.
           </div>
         )}
 
@@ -412,6 +426,21 @@ export default async function BrandPaymentPage({
               {formatUSD(platformFee)} USDT
             </span>
           </div>
+          {/* Network fee (Turn's decision 2026-11-14): the TRC20
+              transfer itself costs the sender an estimated $3 —
+              paid to the TRON network, not to us. It is part of
+              the total the brand is asked to send, so the full
+              budget + platform fee still arrives even when the
+              sender's wallet or exchange takes the fee out of the
+              USDT sent. */}
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
+            <span className="text-sm font-bold text-fg/60">
+              USDT network fee (TRC20, estimated)
+            </span>
+            <span className="text-sm font-black text-fg">
+              {formatUSD(USDT_NETWORK_FEE_USD)} USDT
+            </span>
+          </div>
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">
             <span className="text-sm font-bold text-fg/60">
               Creators pool (full budget)
@@ -425,15 +454,21 @@ export default async function BrandPaymentPage({
               Total to send
             </span>
             <span className="font-display text-lg font-black text-limeink">
-              {formatUSD(totalDue)}{" "}
+              {formatUSD(totalDueWithNetworkFee)}{" "}
               USDT
             </span>
           </div>
           <p className="text-xs leading-relaxed text-fg/50">
-            You send the total above: your campaign budget plus a 15%
-            platform fee on top. The campaign runs on the full budget
-            — creators are paid from the whole pool, per verified
-            view.
+            You send the total above: your campaign budget, plus a
+            15% platform fee on top, plus an estimated{" "}
+            {formatUSD(USDT_NETWORK_FEE_USD)} network fee. The
+            network fee goes to the TRON network, not to us — most
+            wallets charge it on top in TRX; if your wallet or
+            exchange takes it out of the USDT you send, the extra{" "}
+            {formatUSD(USDT_NETWORK_FEE_USD)} covers it so the full
+            budget + fee still arrives. The campaign runs on the
+            full budget — creators are paid from the whole pool, per
+            verified view.
           </p>
           {/* Red total notice (Turn's decision 2026-11-11): the
               full amount must jump out — the campaign goes live
@@ -442,9 +477,10 @@ export default async function BrandPaymentPage({
               address that isn't shown makes no sense. */}
           {wallet && (
             <p className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-black leading-relaxed text-red-200">
-              Send the full {formatUSD(totalDue)} USDT — your campaign
-              goes live only after the FULL amount arrives in the
-              admin wallet. Sending less will delay your launch.
+              Send the full {formatUSD(totalDueWithNetworkFee)} USDT —
+              your campaign goes live only after the FULL amount
+              arrives in the admin wallet. Sending less will delay
+              your launch.
             </p>
           )}
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-fg/5 px-4 py-3">

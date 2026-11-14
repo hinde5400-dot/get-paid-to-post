@@ -48,6 +48,39 @@ export function totalToSend(budget: number): number {
 }
 
 /**
+ * USDT TRC20 network fee (estimated, USD) — the cost of the
+ * brand's transfer on the TRON network, paid to the network, NOT
+ * to us. Turn's decision 2026-11-14: the brand is told ONE total
+ * to send — budget + 15% platform fee + this network fee — so the
+ * full budget + fee still arrives even when the sender's wallet
+ * or exchange takes the network fee out of the USDT sent.
+ *
+ * What it really costs (checked 2026-11-14, live TRON data): a
+ * TRC20 USDT transfer burns ~6.77 TRX (≈ $2.11) when the admin
+ * wallet already holds USDT, ~13.37 TRX (≈ $4.18) for a first
+ * transfer to an address that never held USDT; with staked or
+ * rented energy it can be under $1, and exchanges add their own
+ * withdrawal fee (≈ $1). $3.00 is a round estimate between the
+ * two burn cases and covers the typical transfer. It is shown as
+ * "estimated" everywhere — the exact fee depends on the sender's
+ * wallet and the live TRX price — and it is never platform
+ * revenue: platform_fee stays 15% only, and refund/budget math
+ * keeps using totalToSend (budget + fee) without it.
+ */
+export const USDT_NETWORK_FEE_USD = 3;
+
+/**
+ * Total the brand is asked to send: budget + 15% platform fee +
+ * estimated TRC20 network fee. Brand-facing payment displays
+ * ONLY (wizard summary/fund, payment page, brand payments list).
+ * Internal math — admin cards, budget edits, refunds, the
+ * platform_fee column — keeps using totalToSend.
+ */
+export function totalToSendWithNetworkFee(budget: number): number {
+  return Math.round((totalToSend(budget) + USDT_NETWORK_FEE_USD) * 100) / 100;
+}
+
+/**
  * Budget shown as % USED only — never a $ amount on public
  * cards, modals or the detail page (Turn's decision, P0 batch 2;
  * flipped from % remaining 2026-11-10: the bar now FILLS as the

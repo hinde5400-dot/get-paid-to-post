@@ -8,7 +8,7 @@ import {
   paidBudgetCoveredByPayment,
   type BudgetHistoryEntry,
 } from "@/lib/data";
-import { formatUSD, totalToSend } from "@/lib/money";
+import { formatUSD, totalToSendWithNetworkFee } from "@/lib/money";
 import { truncateTxId } from "@/lib/validate";
 import type { Campaign } from "@/lib/types";
 
@@ -82,7 +82,7 @@ export default async function BrandPaymentsPage() {
     );
     amounts.set(
       c.id,
-      totalToSend(paidBudget ?? Number(c.budget_total ?? 0))
+      totalToSendWithNetworkFee(paidBudget ?? Number(c.budget_total ?? 0))
     );
   }
   const totalPaid = [...amounts.values()].reduce((s, n) => s + n, 0);

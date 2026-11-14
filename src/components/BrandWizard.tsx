@@ -8,7 +8,7 @@ import {
   MAX_PAYOUT_MAX,
   MAX_PAYOUT_MIN,
 } from "@/lib/constants";
-import { platformFeeFor, totalToSend } from "@/lib/money";
+import { platformFeeFor, totalToSendWithNetworkFee, USDT_NETWORK_FEE_USD } from "@/lib/money";
 import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -46,14 +46,15 @@ import {
  *   min payout, max payout per post).
  * 7 Summary — a card of everything, then Save.
  * 8 Fund — after Save the campaign exists as status='pending';
- *   this screen shows budget + 15% fee + total in USDT (TRC20)
- *   and a button to the existing /brands/payment/[id] page. No
- *   payment is collected here.
+ *   this screen shows budget + 15% fee + ~$3 network fee + total
+ *   in USDT (TRC20) and a button to the existing
+ *   /brands/payment/[id] page. No payment is collected here.
  *
  * Money rules (exact, never changed): pay = views only, no base
  * pay; any budget > $0; one rate per 1,000 views; 15% platform
- * fee ON TOP of budget ($500 → $575 total, creators pool stays
- * $500); campaign goes live ONLY after the owner verifies funding
+ * fee ON TOP of budget, plus an estimated ~$3 TRC20 network fee
+ * ($500 → $578 total to send, creators pool stays $500);
+ * campaign goes live ONLY after the owner verifies funding
  * in his wallet — creation always saves status='pending'.
  * Uploads reuse the existing POST /api/campaigns/upload-image
  * (logo + thumbnail, PNG/JPG/WebP, max 2 MB, uploaded at Save).
@@ -641,7 +642,11 @@ export default function BrandWizard({
   const budgetNum = Number(budget);
   const budgetValid = Number.isFinite(budgetNum) && budgetNum > 0;
   const fee = budgetValid ? platformFeeFor(budgetNum) : 0;
-  const total = budgetValid ? totalToSend(budgetNum) : 0;
+  // Total the brand is asked to send: budget + 15% fee + the
+  // estimated ~$3 TRC20 network fee (Turn's decision 2026-11-14).
+  const totalWithNetwork = budgetValid
+    ? totalToSendWithNetworkFee(budgetNum)
+    : 0;
   const rateNum = Number(rate);
   const capNum = maxPayout.trim() === "" ? MAX_PAYOUT_DEFAULT : Number(maxPayout);
   const briefLines = linesOf(brief);
@@ -1158,8 +1163,9 @@ export default function BrandWizard({
           </span>
           {budgetValid && (
             <span className="mt-1 block rounded-xl bg-lime/10 px-3 py-2 text-xs font-bold leading-relaxed text-limeink">
-              Budget {fmt(budgetNum)} + 15% platform fee {fmt(fee)} =
-              Total to send {fmt(total)} · Creators pool (full budget):{" "}
+              Budget {fmt(budgetNum)} + 15% platform fee {fmt(fee)} +
+              ~{fmt(USDT_NETWORK_FEE_USD)} network fee = Total to send{" "}
+              {fmt(totalWithNetwork)} · Creators pool (full budget):{" "}
               {fmt(budgetNum)}
             </span>
           )}
@@ -1295,7 +1301,7 @@ export default function BrandWizard({
             ["Goal", goal || "—"],
             ["Features", features.join(", ") || "None selected"],
             ["Rate", Number.isFinite(rateNum) && rateNum > 0 ? `${fmt(rateNum)} per 1,000 views` : "—"],
-            ["Budget", budgetValid ? `${fmt(budgetNum)} + 15% fee ${fmt(fee)} = ${fmt(total)} total` : "—"],
+            ["Budget", budgetValid ? `${fmt(budgetNum)} + 15% fee ${fmt(fee)} + ~${fmt(USDT_NETWORK_FEE_USD)} network fee = ${fmt(totalWithNetwork)} total` : "—"],
             ["Min payout", minPayout.trim() === "" ? "$1.00" : fmt(Number(minPayout))],
             ["Max payout per post", fmt(capNum)],
             ["Visibility", visibility === "public" ? "Public" : "Private"],
@@ -1343,6 +1349,7 @@ export default function BrandWizard({
         <p className="mx-auto max-w-md text-sm leading-relaxed text-fg/70">
           &ldquo;{title.trim()}&rdquo; is saved. It goes live only
           after you send your budget plus the 15% platform fee and
+          the ~${USDT_NETWORK_FEE_USD.toFixed(2)} network fee, and
           the admin verifies your payment.
         </p>
         <div className="mx-auto w-full max-w-md rounded-2xl border border-fg/10 bg-ink p-4 text-left">
@@ -1354,14 +1361,20 @@ export default function BrandWizard({
             <span className="text-fg/60">Platform fee (15%)</span>
             <span className="font-bold text-fg">{budgetValid ? fmt(fee) : "—"}</span>
           </div>
+          <div className="mt-2 flex justify-between text-sm">
+            <span className="text-fg/60">USDT network fee (TRC20, estimated)</span>
+            <span className="font-bold text-fg">{budgetValid ? fmt(USDT_NETWORK_FEE_USD) : "—"}</span>
+          </div>
           <div className="mt-2 flex justify-between border-t border-fg/10 pt-2 text-sm">
             <span className="font-bold text-fg">Total to send (USDT, TRC20)</span>
-            <span className="font-black text-limeink">{budgetValid ? fmt(total) : "—"}</span>
+            <span className="font-black text-limeink">{budgetValid ? fmt(totalWithNetwork) : "—"}</span>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-fg/50">
             Send exactly this total in USDT on the TRON network
             (TRC20) from the payment page, then paste your
-            Transaction ID there.
+            Transaction ID there. The network fee goes to the TRON
+            network, not to us — it covers the transfer cost so the
+            full budget + fee arrives.
           </p>
         </div>
         <p className="mx-auto max-w-md text-xs leading-relaxed text-fg/50">
@@ -1487,8 +1500,9 @@ export default function BrandWizard({
       )}
       <p className="mt-3 text-center text-xs text-fg/40">
         No payment is taken here. After you save, send your budget
-        plus the 15% platform fee in USDT (TRC20) on the payment page
-        — your campaign goes live once the admin verifies your payment.
+        plus the 15% platform fee and the ~$3 network fee in USDT
+        (TRC20) on the payment page — your campaign goes live once
+        the admin verifies your payment.
       </p>
       <p className="mt-2 text-center text-xs text-fg/40">
         <Link href="/rules" className="font-bold text-limeink hover:underline">
