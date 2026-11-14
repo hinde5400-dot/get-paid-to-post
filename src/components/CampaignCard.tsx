@@ -98,7 +98,7 @@ export default function CampaignCard({
         badge={`Up to ${formatUSD(campaign.max_payout_per_post)} per post`}
         isLive={live}
       />
-      <div className="flex flex-1 flex-col p-5">
+      <div className="flex flex-1 flex-col p-4 md:p-5">
         {/* Brand row */}
         <div className="flex items-center gap-2.5">
           <BrandLogoTile campaign={campaign} size="sm" />
@@ -116,7 +116,7 @@ export default function CampaignCard({
         </div>
 
         {/* Title + description */}
-        <h3 className="mt-4 font-display text-lg font-black leading-snug tracking-tight text-fg group-hover:text-lime">
+        <h3 className="mt-3 font-display text-base font-black leading-snug tracking-tight text-fg group-hover:text-limeink md:mt-4 md:text-lg">
           {campaign.title}
         </h3>
         <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-fg/60">
@@ -127,7 +127,7 @@ export default function CampaignCard({
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
           <span
             className={`rounded-full px-2.5 py-1 ${
-              live ? "bg-lime/15 text-lime" : "bg-amber-400/15 text-amber-300"
+              live ? "bg-lime/15 text-limeink" : "bg-amber-400/15 text-amber-300"
             }`}
           >
             {live ? "● Live" : "● Completed"}
@@ -167,7 +167,7 @@ export default function CampaignCard({
                 Campaign Review — payouts in progress
               </span>
             ) : timeLeft ? (
-              <span className="font-bold text-lime">⏳ {timeLeft}</span>
+              <span className="font-bold text-limeink">⏳ {timeLeft}</span>
             ) : (
               <span className="font-bold text-fg/60">
                 Runs until the budget ends
@@ -183,7 +183,7 @@ export default function CampaignCard({
             </span>
           </div>
           {burnText && (
-            <p className="mt-1.5 text-xs font-bold text-lime">
+            <p className="mt-1.5 text-xs font-bold text-limeink">
               ⏳ {burnText}
             </p>
           )}
@@ -195,7 +195,7 @@ export default function CampaignCard({
             platform={campaign.platform}
             platforms={campaignPlatforms(campaign)}
           />
-          <span className="shrink-0 rounded-full bg-lime/15 px-2.5 py-1 text-[11px] font-black text-lime">
+          <span className="shrink-0 rounded-full bg-lime/15 px-2.5 py-1 text-[11px] font-black text-limeink">
             Up to {formatUSD(campaign.max_payout_per_post)} / post
           </span>
         </div>

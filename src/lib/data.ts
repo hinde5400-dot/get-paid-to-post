@@ -73,6 +73,28 @@ function mapCampaign(row: Record<string, unknown>): Campaign {
       row.duration_days == null ? null : Number(row.duration_days),
     started_at: (row.started_at as string | null) ?? null,
     ends_at: (row.ends_at as string | null) ?? null,
+    // Brand wizard (migration 0050) — defaults keep rows written
+    // before the migration mapping cleanly.
+    goal: (row.goal as string | null) ?? null,
+    features: Array.isArray(row.features)
+      ? (row.features as unknown[]).map(String)
+      : [],
+    types: Array.isArray(row.types)
+      ? (row.types as unknown[]).map(String)
+      : [],
+    brief_lines: Array.isArray(row.brief_lines)
+      ? (row.brief_lines as unknown[]).map(String)
+      : [],
+    require_link_in_bio: Boolean(row.require_link_in_bio ?? false),
+    required_sound_tiktok: (row.required_sound_tiktok as string | null) ?? null,
+    required_sound_instagram:
+      (row.required_sound_instagram as string | null) ?? null,
+    reference_links: Array.isArray(row.reference_links)
+      ? (row.reference_links as unknown[]).map(String)
+      : [],
+    visibility: String(row.visibility ?? "public"),
+    show_on_discover: Boolean(row.show_on_discover ?? true),
+    access_type: String(row.access_type ?? "open"),
   };
   // TxID submission time (migration 0038) — the Campaign type in
   // lib/types.ts does not declare it yet (another file's change),
@@ -289,7 +311,18 @@ export async function getDiscoverCampaigns(): Promise<Campaign[]> {
     // is_paused column does not exist before 0049 runs, and a
     // query filter on a missing column would break Discover.
     // mapCampaign already maps a missing column to false.
-    return rows.map(mapCampaign).filter((c) => !c.is_paused);
+    // Same for the wizard's visibility / show_on_discover
+    // (migration 0050): a Private campaign, or one with Discover
+    // switched off, never appears on Discover — the brand chose
+    // that, and Discover must honour it.
+    return rows
+      .map(mapCampaign)
+      .filter(
+        (c) =>
+          !c.is_paused &&
+          c.visibility !== "private" &&
+          c.show_on_discover !== false
+      );
   }
   return [];
 }

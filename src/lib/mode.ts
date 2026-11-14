@@ -7,23 +7,29 @@ import type { UserProfile } from "./types";
 import type { User } from "@supabase/supabase-js";
 
 /**
- * Creator / Brand mode split (Turn's final structure, 2026-11-13).
+ * Creator / Brand mode split (Turn's final structure, 2026-11-13,
+ * switch relaxed 2026-11-14).
  *
  * A signed-in user sees ONE navigation, never both:
  * - creator mode: Discover | My Posts | Earnings | More
  * - brand mode:   My Campaigns | Launch Campaign | Payments | Brand Profile
  *
- * Default mode is the user's users.role. A user is brand-capable
- * when role = "brand" OR they own >= 1 campaign; creator-capable
- * when role = "creator" OR they have >= 1 submission. A user who
- * is capable of BOTH can switch (ModeSwitch writes the cookie);
- * anyone else sees no switch and stays in their one mode.
+ * Default mode is the user's users.role. ANY signed-in user can
+ * switch modes, one click, either way (Turn's order 2026-11-14:
+ * the switch must work creator -> brand and brand -> creator):
+ * a creator who switches to brand mode lands on brand pages and
+ * can launch a campaign (that makes them a brand); a brand who
+ * switches to creator mode lands on Discover and can post clips.
+ * The pages themselves enforce the split — brand pages are open
+ * to any signed-in user, creator pages redirect brand-mode users
+ * to /brand/campaigns — so the cookie alone never leaks one
+ * mode's content into the other.
  *
  * The mode lives in a cookie (MODE_COOKIE) so the server layout
  * can render the right nav on first paint — BottomNav is a client
  * component rendered from the server layout, and localStorage is
- * invisible to the server. An invalid or incapable cookie value
- * falls back to the role default, never to the other mode.
+ * invisible to the server. An invalid cookie value falls back to
+ * the role default, never to the other mode.
  *
  * Cached per request: layout, Navbar and pages all call this and
  * share one computation (one auth + profile + two capability
@@ -79,8 +85,12 @@ export const getModeContext = cache(async (): Promise<ModeContext> => {
 
   let mode: UserMode = role === "brand" ? "brand" : "creator";
   const wanted = cookies().get(MODE_COOKIE)?.value;
-  if (wanted === "brand" && brandCapable) mode = "brand";
-  if (wanted === "creator" && creatorCapable) mode = "creator";
+  // Any signed-in user may sit in either mode (Turn 2026-11-14:
+  // the switch works both ways, one click). The pages enforce the
+  // split, so a mode the user has no content for yet shows that
+  // mode's honest empty state, never the other mode's content.
+  if (wanted === "brand") mode = "brand";
+  if (wanted === "creator") mode = "creator";
 
   return {
     user,
@@ -90,6 +100,8 @@ export const getModeContext = cache(async (): Promise<ModeContext> => {
     mode,
     brandCapable,
     creatorCapable,
-    canSwitch: brandCapable && creatorCapable,
+    // Any signed-in user can switch — the switch is shown to
+    // every logged-in user, in both modes.
+    canSwitch: true,
   };
 });

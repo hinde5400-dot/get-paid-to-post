@@ -109,7 +109,7 @@ export default function CampaignModal({
         </div>
 
         <div className="p-6">
-          <p className="text-xs font-bold uppercase tracking-wider text-lime">
+          <p className="text-xs font-bold uppercase tracking-wider text-limeink">
             {campaign.brand_name} · {campaign.category}
           </p>
           <h2 className="mt-1 font-display text-2xl font-black leading-tight tracking-tight text-fg">
@@ -153,7 +153,7 @@ export default function CampaignModal({
               <p className="text-[11px] font-bold uppercase tracking-wider text-fg/50">
                 Max per post
               </p>
-              <p className="mt-1 font-display text-lg font-black text-lime">
+              <p className="mt-1 font-display text-lg font-black text-limeink">
                 {formatUSD(campaign.max_payout_per_post)}
               </p>
             </div>
@@ -180,7 +180,7 @@ export default function CampaignModal({
             <span
               className={`rounded-full px-2.5 py-1 text-xs font-bold ${
                 live
-                  ? "bg-lime/15 text-lime"
+                  ? "bg-lime/15 text-limeink"
                   : "bg-amber-400/15 text-amber-300"
               }`}
             >
@@ -200,7 +200,7 @@ export default function CampaignModal({
             />
             {approvalPct !== null && (
               <span className="text-sm font-bold text-fg">
-                <span className="text-lime">{approvalPct}%</span> approved
+                <span className="text-limeink">{approvalPct}%</span> approved
                 <span className="ml-1 text-xs font-medium text-fg/50">
                   ({stats!.approved} of {stats!.total})
                 </span>
@@ -227,7 +227,7 @@ export default function CampaignModal({
             ) : (
               <>
                 {timeLeft ? (
-                  <span className="font-bold text-lime">⏳ {timeLeft}</span>
+                  <span className="font-bold text-limeink">⏳ {timeLeft}</span>
                 ) : (
                   "Runs until the budget ends"
                 )}
@@ -245,7 +245,7 @@ export default function CampaignModal({
             )}
           </p>
           {burnText && (
-            <p className="mt-1.5 text-xs font-bold text-lime">
+            <p className="mt-1.5 text-xs font-bold text-limeink">
               ⏳ {burnText}
             </p>
           )}
@@ -264,7 +264,7 @@ export default function CampaignModal({
           )}
           <Link
             href={`/campaign/${campaign.id}`}
-            className="mt-3 block rounded-full border border-fg/20 py-3 text-center text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            className="mt-3 block rounded-full border border-fg/20 py-3 text-center text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
           >
             View campaign
           </Link>

@@ -67,7 +67,7 @@ export default function ProfileMenu({
         onClick={() => setOpen((o) => !o)}
         aria-label="Profile menu"
         aria-expanded={open}
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-fg/15 bg-card text-fg transition hover:border-lime hover:text-lime"
+        className="flex h-10 w-10 items-center justify-center rounded-full border border-fg/15 bg-card text-fg transition hover:border-lime hover:text-limeink"
       >
         {initial ? (
           <span className="font-display text-base font-black">{initial}</span>
@@ -81,7 +81,7 @@ export default function ProfileMenu({
       {open && (
         <div className="animate-fade-in absolute right-0 top-12 z-50 w-64 rounded-2xl border border-fg/10 bg-card p-2 shadow-2xl">
           <div className="flex items-center gap-3 border-b border-fg/10 px-3 py-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-lime/15 font-display text-base font-black text-lime">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-lime/15 font-display text-base font-black text-limeink">
               {initial ?? "G"}
             </span>
             <span className="min-w-0">

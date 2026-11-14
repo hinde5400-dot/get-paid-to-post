@@ -150,7 +150,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
         </div>
         <p className="mt-6 text-center text-sm text-fg/60">
           Already have an account?{" "}
-          <Link href="/login" className="font-bold text-lime hover:underline">
+          <Link href="/login" className="font-bold text-limeink hover:underline">
             Log in
           </Link>
         </p>
@@ -178,7 +178,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
           : "Post clips, get paid per view. Sign up with email and password."}
       </p>
       <p className="mt-3 text-center text-sm">
-        <Link href="/signup" className="font-bold text-lime hover:underline">
+        <Link href="/signup" className="font-bold text-limeink hover:underline">
           ← Back to roles
         </Link>
       </p>
@@ -193,7 +193,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
         per person.
       </p>
       {!isSupabaseConfigured && (
-        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
+        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-limeink">
           Supabase is not configured yet — add NEXT_PUBLIC_SUPABASE_URL and
           NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local (see README).
         </p>
@@ -204,7 +204,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
           <button
             type="button"
             onClick={() => void signOutFirst()}
-            className="font-bold text-lime underline hover:no-underline"
+            className="font-bold text-limeink underline hover:no-underline"
           >
             sign out
           </button>{" "}
@@ -271,11 +271,11 @@ export default function SignupForm({ role }: { role: Role | null }) {
           />
           <span>
             I agree to the{" "}
-            <Link href="/terms" className="font-bold text-lime hover:underline">
+            <Link href="/terms" className="font-bold text-limeink hover:underline">
               Terms of Service
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="font-bold text-lime hover:underline">
+            <Link href="/privacy" className="font-bold text-limeink hover:underline">
               Privacy Policy
             </Link>
           </span>
@@ -300,7 +300,7 @@ export default function SignupForm({ role }: { role: Role | null }) {
         </button>
         <p className="mt-4 text-center text-sm text-fg/60">
           Already have an account?{" "}
-          <Link href="/login" className="font-bold text-lime hover:underline">
+          <Link href="/login" className="font-bold text-limeink hover:underline">
             Log in
           </Link>
         </p>

@@ -23,8 +23,8 @@ export const metadata: Metadata = {
 export default async function BrandProfilePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const { brandCapable, canSwitch } = await getModeContext();
-  if (!brandCapable) redirect("/campaigns");
+  // Open to any signed-in user — see My Campaigns for why.
+  const { canSwitch } = await getModeContext();
 
   const profile = await getProfile(user.id);
   const metaName = user.user_metadata?.full_name;
@@ -61,7 +61,7 @@ export default async function BrandProfilePage() {
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
         ) : (
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-lime">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-limeink">
             {displayName[0].toUpperCase()}
           </span>
         )}
@@ -96,7 +96,7 @@ export default async function BrandProfilePage() {
           href="/brand/campaigns"
           className="flex items-center gap-4 border-b border-fg/5 px-5 py-4 transition last:border-0 hover:bg-fg/5"
         >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-lime">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-limeink">
             🏢
           </span>
           <span>
@@ -111,7 +111,7 @@ export default async function BrandProfilePage() {
           href="/brand/payments"
           className="flex items-center gap-4 border-b border-fg/5 px-5 py-4 transition last:border-0 hover:bg-fg/5"
         >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-lime">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-limeink">
             $
           </span>
           <span>
@@ -126,7 +126,7 @@ export default async function BrandProfilePage() {
           href="/support"
           className="flex items-center gap-4 border-b border-fg/5 px-5 py-4 transition last:border-0 hover:bg-fg/5"
         >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-lime">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-limeink">
             💬
           </span>
           <span>
@@ -138,13 +138,13 @@ export default async function BrandProfilePage() {
       </div>
 
       <div className="text-center text-xs leading-relaxed text-fg/40">
-        <Link href="/terms" className="hover:text-lime">Terms</Link>
+        <Link href="/terms" className="hover:text-limeink">Terms</Link>
         {" · "}
-        <Link href="/rules" className="hover:text-lime">Rules</Link>
+        <Link href="/rules" className="hover:text-limeink">Rules</Link>
         {" · "}
-        <Link href="/privacy" className="hover:text-lime">Privacy</Link>
+        <Link href="/privacy" className="hover:text-limeink">Privacy</Link>
         {" · "}
-        <Link href="/how-it-works" className="hover:text-lime">How It Works</Link>
+        <Link href="/how-it-works" className="hover:text-limeink">How It Works</Link>
       </div>
     </div>
   );

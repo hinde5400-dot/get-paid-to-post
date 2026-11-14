@@ -115,7 +115,7 @@ export default function WithdrawModal({
             </p>
             <p className="mt-2 text-sm text-fg/60">
               Requested{" "}
-              <span className="font-bold text-lime">{formatUSD(final)}</span>{" "}
+              <span className="font-bold text-limeink">{formatUSD(final)}</span>{" "}
               in USDT (pending admin approval) — you&apos;ll receive it if
               approved.
             </p>
@@ -130,7 +130,7 @@ export default function WithdrawModal({
           <>
             <p className="mt-2 text-sm text-fg/60">
               Withdrawable balance:{" "}
-              <span className="font-bold text-lime">{formatUSD(available)}</span>
+              <span className="font-bold text-limeink">{formatUSD(available)}</span>
             </p>
             <label className="mt-4 block text-sm font-bold text-fg">
               <span className="flex items-center justify-between gap-2">
@@ -139,7 +139,7 @@ export default function WithdrawModal({
                   type="button"
                   onClick={fillMax}
                   disabled={available <= 0}
-                  className="rounded-full bg-lime/15 px-2.5 py-0.5 text-xs font-black text-lime transition hover:bg-lime/25 disabled:opacity-40"
+                  className="rounded-full bg-lime/15 px-2.5 py-0.5 text-xs font-black text-limeink transition hover:bg-lime/25 disabled:opacity-40"
                 >
                   Max {formatUSD(available)}
                 </button>
@@ -203,7 +203,7 @@ export default function WithdrawModal({
                 </div>
                 <div className="mt-2 flex justify-between border-t border-fg/10 pt-2 text-base">
                   <span className="font-bold text-fg">You receive</span>
-                  <span className="font-black text-lime">{formatUSD(final)}</span>
+                  <span className="font-black text-limeink">{formatUSD(final)}</span>
                 </div>
                 <p className="mt-2 text-xs text-fg/50">
                   The 5% fee is rounded to the nearest cent — you receive

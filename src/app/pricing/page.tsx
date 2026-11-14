@@ -92,7 +92,7 @@ export default function PricingPage() {
           </Link>
           <Link
             href="/rules#brands"
-            className="rounded-full border border-fg/20 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            className="rounded-full border border-fg/20 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
           >
             Rules for brands
           </Link>
@@ -146,7 +146,7 @@ export default function PricingPage() {
           last hold matures. If no creators posted, nothing was spent
           — any budget left unspent stays yours and is refunded on
           request, per the{" "}
-          <Link href="/refund" className="font-bold text-lime hover:underline">
+          <Link href="/refund" className="font-bold text-limeink hover:underline">
             Refund Policy
           </Link>
           . You never pay for views that were not verified.

@@ -881,15 +881,21 @@ function AdminCampaignCard({
             </button>
           </>
         )}
+        {/* Edit budget — its own full-width row, impossible to
+            miss: Turn adjusts a campaign's budget from here
+            (raise when a brand tops up, lower to refund the
+            remainder). The panel below has quick −/+ amounts. */}
         <button
           type="button"
           onClick={() => {
             setEditOpen((v) => !v);
             if (!editOpen) setEditTotal(String(c.budget_total));
           }}
-          className="flex flex-1 items-center justify-center rounded-full border border-fg/15 py-2.5 text-sm font-bold text-fg transition hover:bg-fg/5"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-neutral-600 py-3 text-sm font-black text-white transition hover:bg-neutral-500"
         >
-          {editOpen ? "Close budget edit" : "Edit budget"}
+          {editOpen
+            ? "✕ Close budget edit"
+            : "✎ Edit budget — raise or lower the total"}
         </button>
         {/* Pause / Start (admin tabs): freeze a live campaign so
             no new clips come in and it hides from Discover, or
@@ -902,7 +908,7 @@ function AdminCampaignCard({
             disabled={pauseBusy}
             className={`flex flex-1 items-center justify-center rounded-full border py-2.5 text-sm font-bold transition disabled:opacity-40 ${
               isPaused
-                ? "border-lime-500/50 text-lime-300 hover:bg-lime-500/10"
+                ? "border-lime-500/50 text-limeink hover:bg-lime-500/10"
                 : "border-amber-500/50 text-amber-300 hover:bg-amber-500/10"
             }`}
           >
@@ -1075,6 +1081,28 @@ function AdminCampaignCard({
               className="mt-1 w-full rounded-xl border border-fg/15 bg-ink px-4 py-2.5 text-sm text-fg outline-none placeholder:text-fg/30 focus:border-red-500"
             />
           </label>
+          {/* Quick adjust — tap to raise or lower the total by a
+              fixed amount instead of typing. */}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {[-100, -50, -10, 10, 50, 100].map((delta) => (
+              <button
+                key={delta}
+                type="button"
+                onClick={() => {
+                  const current = Number(editTotal);
+                  const base = Number.isFinite(current)
+                    ? current
+                    : c.budget_total;
+                  setEditTotal(
+                    String(Math.max(0, Math.round((base + delta) * 100) / 100))
+                  );
+                }}
+                className="rounded-full border border-fg/15 px-3 py-1.5 text-xs font-black text-fg transition hover:border-red-400/60 hover:text-red-300"
+              >
+                {delta > 0 ? `+$${delta}` : `−$${Math.abs(delta)}`}
+              </button>
+            ))}
+          </div>
           {newLeftPreview !== null && (
             <p
               className={`mt-2 text-xs font-bold ${

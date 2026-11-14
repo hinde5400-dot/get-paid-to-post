@@ -2,19 +2,19 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "gptp-theme";
+const STORAGE_KEY = "gptp-theme-v2";
 
 /**
  * Light / Dark mode toggle.
  * Flips data-theme on <html> (see globals.css for the variables) and
- * persists the choice in localStorage. Default is dark.
+ * persists the choice in localStorage. Default is light (grey).
  */
 export default function ThemeToggle({
   className = "",
 }: {
   className?: string;
 }) {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
 
   useEffect(() => {
     const t = document.documentElement.getAttribute("data-theme");

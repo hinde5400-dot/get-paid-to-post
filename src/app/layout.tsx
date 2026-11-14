@@ -55,13 +55,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#C6FF00",
+  themeColor: "#E9EAED",
 };
 
 // Runs before first paint so the saved theme applies without a flash:
-// reads localStorage ("gptp-theme", "dark" | "light") and sets
-// data-theme on <html>. Default is dark.
-const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("gptp-theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`;
+// reads localStorage ("gptp-theme-v2", "dark" | "light") and sets
+// data-theme on <html>. Default is light (light grey background).
+// The key is v2 so every browser picks up the new light default
+// once; an explicit toggle after that is respected.
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("gptp-theme-v2");if(t!=="light"&&t!=="dark")t="light";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","light");}})();`;
 
 export default async function RootLayout({
   children,
@@ -75,7 +77,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      data-theme="dark"
+      data-theme="light"
       className={`${archivo.variable} ${inter.variable}`}
     >
       <body className="min-h-screen bg-ink font-sans text-fg antialiased">
@@ -83,7 +85,7 @@ export default async function RootLayout({
         <ToastProvider>
           <NavigationLoader />
           <Navbar />
-          <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-24 pt-6 md:pb-10">
+          <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-24 pt-4 md:pb-10 md:pt-6">
             {children}
           </main>
           <Footer mode={user === null ? null : mode} />

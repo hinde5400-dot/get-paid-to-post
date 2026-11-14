@@ -3,33 +3,38 @@
 @tailwind utilities;
 
 /* Get Paid To Post — brand theme.
-   Dark (default): pure black #0A0A0A background, cards #1A1A1A,
-   white text, lime green #C6FF00 accent.
-   Light: white #FFFFFF background, cards #F4F4F5, near-black text,
+   Light (default): LIGHT GREY background #E9EAED, white cards,
+   near-black text, lime green #C6FF00 accent for fills (buttons,
+   chips) and a darker readable green for text accents.
+   Dark: dark grey #1C1C1E background, grey cards, white text,
    same lime accent. The theme flips with data-theme on <html>
    (see ThemeToggle) — every themed utility below reads these vars,
    so all pages follow the toggle.
+   Text accents use --limeink (lime in dark, dark green in light)
+   because bright lime text is unreadable on a light grey page.
    Headings use Archivo (font-display), body uses Inter.
    Fonts come from next/font/google (bundled + self-hosted at build
    time) — there is intentionally no runtime fetch to Google Fonts, so
    first paint is never blocked. */
 
-/* Default (dark) theme variables. */
+/* Default (light) theme variables — light grey background. */
 :root,
-[data-theme="dark"] {
-  --bg: 10 10 10;
-  --card: 26 26 26;
-  --cardlight: 34 34 34;
-  --fg: 255 255 255;
-  color-scheme: dark;
+[data-theme="light"] {
+  --bg: 233 234 237;
+  --card: 255 255 255;
+  --cardlight: 244 245 247;
+  --fg: 17 17 19;
+  --limeink: 63 98 18;
+  color-scheme: light;
 }
 
-[data-theme="light"] {
-  --bg: 255 255 255;
-  --card: 244 244 245;
-  --cardlight: 232 232 236;
-  --fg: 10 10 10;
-  color-scheme: light;
+[data-theme="dark"] {
+  --bg: 28 28 30;
+  --card: 44 44 46;
+  --cardlight: 58 58 60;
+  --fg: 255 255 255;
+  --limeink: 198 255 0;
+  color-scheme: dark;
 }
 
 html {

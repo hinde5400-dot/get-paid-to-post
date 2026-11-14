@@ -352,7 +352,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <p className="text-center text-xs font-black uppercase tracking-widest text-lime">
+      <p className="text-center text-xs font-black uppercase tracking-widest text-limeink">
         Step 2 of 2 · Connect your profiles
       </p>
       <h1 className="mt-2 text-center font-display text-4xl font-black uppercase leading-none tracking-tight text-fg">
@@ -366,13 +366,13 @@ export default function OnboardingPage() {
       <p className="mx-auto mt-3 max-w-md rounded-xl bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold leading-relaxed text-amber-200">
         Pasting a link only saves it — it does not verify your
         account. TikTok and YouTube need a real login on the{" "}
-        <Link href="/connect" className="font-bold text-lime underline">
+        <Link href="/connect" className="font-bold text-limeink underline">
           My accounts page
         </Link>
         .
       </p>
       <p className="mt-4 text-center text-sm font-bold text-fg">
-        <span className="text-lime">
+        <span className="text-limeink">
           {connectedCount < 1
             ? "No account connected yet"
             : `${connectedCount} account${connectedCount === 1 ? "" : "s"} connected`}
@@ -383,7 +383,7 @@ export default function OnboardingPage() {
           Your {unconfirmedPlatforms.join(" / ")} login couldn&apos;t be
           confirmed — it doesn&apos;t count toward Continue yet.
           Reconnect it on the{" "}
-          <Link href="/connect" className="font-bold text-lime underline">
+          <Link href="/connect" className="font-bold text-limeink underline">
             My accounts page
           </Link>{" "}
           before continuing, or your clips may not match to you at
@@ -484,7 +484,7 @@ export default function OnboardingPage() {
                     className={`ml-auto shrink-0 rounded-full px-3 py-1 text-xs font-black ${
                       unconfirmed
                         ? "bg-amber-400/20 text-amber-200"
-                        : "bg-lime/15 text-lime"
+                        : "bg-lime/15 text-limeink"
                     }`}
                   >
                     {unconfirmed ? "Saved — reconnect" : "Connected"}
@@ -494,7 +494,7 @@ export default function OnboardingPage() {
               {oauthName ? (
                 <Link
                   href="/connect"
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-lime/50 py-3 text-sm font-black text-lime transition hover:bg-lime/10"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-lime/50 py-3 text-sm font-black text-limeink transition hover:bg-lime/10"
                 >
                   Manage on My accounts →
                 </Link>
@@ -541,7 +541,7 @@ export default function OnboardingPage() {
           router.push("/campaigns");
         }}
         disabled={leaving}
-        className="mt-3 flex w-full items-center justify-center gap-2 text-sm font-bold text-fg/60 transition hover:text-lime disabled:opacity-40"
+        className="mt-3 flex w-full items-center justify-center gap-2 text-sm font-bold text-fg/60 transition hover:text-limeink disabled:opacity-40"
       >
         {leaving ? (
           <>

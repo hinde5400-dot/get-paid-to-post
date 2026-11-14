@@ -144,7 +144,7 @@ export default function VideoPreview({
           href={url}
           target="_blank"
           rel="noreferrer"
-          className="text-xs font-bold text-lime underline underline-offset-2 hover:text-lime/80"
+          className="text-xs font-bold text-limeink underline underline-offset-2 hover:text-limeink/80"
         >
           Open video ↗
         </a>

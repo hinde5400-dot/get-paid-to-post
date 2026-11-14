@@ -275,7 +275,7 @@ export default function SubmitBundleForm({
             href={campaign.brief_url}
             target="_blank"
             rel="noreferrer"
-            className="font-bold text-lime hover:underline"
+            className="font-bold text-limeink hover:underline"
           >
             Open the brief (Google Drive) ↗
           </a>
@@ -311,7 +311,7 @@ export default function SubmitBundleForm({
           {Array.from(cooldowns.entries()).map(([p, ms]) => (
             <p
               key={p}
-              className="rounded-xl bg-lime/10 px-4 py-2.5 text-sm font-semibold text-lime"
+              className="rounded-xl bg-lime/10 px-4 py-2.5 text-sm font-semibold text-limeink"
             >
               ⏳ {PLATFORM_LABELS[p]}: next submit in {formatRemaining(ms)} —
               one clip per platform every 2 hours, across all campaigns
@@ -357,7 +357,7 @@ export default function SubmitBundleForm({
               {p === "tiktok" && tiktokConnected !== true && (
                 <span className="mt-1 block font-medium text-fg/50">
                   Only videos from your connected TikTok account count —{" "}
-                  <Link href="/connect" className="font-bold text-lime hover:underline">
+                  <Link href="/connect" className="font-bold text-limeink hover:underline">
                     connect your account
                   </Link>{" "}
                   first.
@@ -374,7 +374,7 @@ export default function SubmitBundleForm({
               {p === "youtube" && youtubeConnected !== true && (
                 <span className="mt-1 block font-medium text-fg/50">
                   Only videos from your connected YouTube channel count —{" "}
-                  <Link href="/connect" className="font-bold text-lime hover:underline">
+                  <Link href="/connect" className="font-bold text-limeink hover:underline">
                     connect your channel
                   </Link>{" "}
                   first.
@@ -425,7 +425,7 @@ export default function SubmitBundleForm({
             <button
               type="button"
               onClick={() => setProof((prev) => [...prev, ""])}
-              className="mt-2 text-sm font-bold text-lime hover:underline"
+              className="mt-2 text-sm font-bold text-limeink hover:underline"
             >
               + Add another proof link
             </button>

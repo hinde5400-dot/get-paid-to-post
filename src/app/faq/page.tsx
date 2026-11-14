@@ -82,7 +82,7 @@ export default function FaqPage() {
       <p className="text-center text-sm">
         <Link
           href="/support"
-          className="font-bold text-lime hover:underline"
+          className="font-bold text-limeink hover:underline"
         >
           Still stuck? Get support →
         </Link>

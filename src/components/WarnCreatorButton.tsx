@@ -69,7 +69,7 @@ export default function WarnCreatorButton({
         onChange={(e) => setReason(e.target.value)}
         placeholder="Warning reason (required)"
         aria-label={`Warning reason for ${email}`}
-        className="w-44 rounded-lg border border-fg/15 bg-bg px-2 py-1.5 text-xs text-fg placeholder:text-fg/40 focus:border-amber-400 focus:outline-none"
+        className="w-44 rounded-lg border border-fg/15 bg-ink px-2 py-1.5 text-xs text-fg placeholder:text-fg/40 focus:border-amber-400 focus:outline-none"
       />
       <button
         type="button"

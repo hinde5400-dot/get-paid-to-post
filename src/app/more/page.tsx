@@ -46,7 +46,7 @@ export default async function MorePage() {
       {/* Profile — name + avatar + logout for logged-in users. */}
       {user && (
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-fg/10 bg-card p-5">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-lime">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-limeink">
             {displayName[0].toUpperCase()}
           </span>
           <div className="min-w-0 flex-1">
@@ -59,8 +59,8 @@ export default async function MorePage() {
         </div>
       )}
 
-      {/* Mode switch — only when this account is both a creator
-          and a brand (owns campaigns and has submissions). */}
+      {/* Mode switch — every signed-in user can switch modes,
+          either way, one click (Turn 2026-11-14). */}
       {user && canSwitch && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fg/10 bg-card p-5">
           <div>
@@ -121,7 +121,7 @@ export default async function MorePage() {
               href={l.href}
               className="flex items-center gap-4 border-b border-fg/5 px-5 py-4 transition last:border-0 hover:bg-fg/5"
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-lime">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-limeink">
                 {l.icon}
               </span>
               <span>
@@ -142,20 +142,20 @@ export default async function MorePage() {
         </p>
         <Link
           href="/how-it-works"
-          className="mt-3 inline-block text-sm font-bold text-lime hover:underline"
+          className="mt-3 inline-block text-sm font-bold text-limeink hover:underline"
         >
           How it works →
         </Link>
       </div>
 
       <div className="text-center text-xs leading-relaxed text-fg/40">
-        <Link href="/terms" className="hover:text-lime">Terms</Link>
+        <Link href="/terms" className="hover:text-limeink">Terms</Link>
         {" · "}
-        <Link href="/rules" className="hover:text-lime">Rules</Link>
+        <Link href="/rules" className="hover:text-limeink">Rules</Link>
         {" · "}
-        <Link href="/privacy" className="hover:text-lime">Privacy</Link>
+        <Link href="/privacy" className="hover:text-limeink">Privacy</Link>
         {" · "}
-        <Link href="/how-it-works" className="hover:text-lime">How It Works</Link>
+        <Link href="/how-it-works" className="hover:text-limeink">How It Works</Link>
       </div>
     </div>
   );

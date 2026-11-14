@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/client";
+import { MODE_COOKIE } from "@/lib/constants";
 import BioVerifyCard, {
   type BioProfileStatus,
 } from "@/components/BioVerifyCard";
@@ -33,6 +34,20 @@ export default function ConnectPage() {
 
   useEffect(() => {
     async function load() {
+      // Brand mode never sees creator account-connect — brands live
+      // in My Campaigns. The mode cookie is readable client-side.
+      try {
+        const modeCookie = document.cookie
+          .split("; ")
+          .find((c) => c.startsWith(`${MODE_COOKIE}=`))
+          ?.split("=")[1];
+        if (modeCookie === "brand") {
+          router.replace("/brand/campaigns");
+          return;
+        }
+      } catch {
+        // Cookie unreadable — fall through to the normal load.
+      }
       const supabase = getBrowserClient();
       if (!supabase) {
         setLoading(false);

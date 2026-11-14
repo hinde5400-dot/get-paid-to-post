@@ -215,6 +215,28 @@ export interface Campaign {
   started_at?: string | null;
   /** started_at + duration_days; null when duration is open-ended. */
   ends_at?: string | null;
+  // Brand wizard (migration 0050, /brands multi-step flow).
+  /** Step 2 goal: 'Brand awareness' | 'Drive sales' | 'UGC library' | 'Grow a community'. */
+  goal?: string | null;
+  /** Step 3 features, informational only (Campaigns, Creators, Payouts, Analytics, Submissions, Discover, Retainers, Drafts). */
+  features?: string[];
+  /** Step 4 campaign types, multi-select: 'Clipping', 'UGC (With Face)'. */
+  types?: string[];
+  /** Step 5 brief — one rule per line. `rules` keeps the same lines joined with newlines. */
+  brief_lines?: string[];
+  /** Step 5: ask creators to add a link in bio. */
+  require_link_in_bio?: boolean;
+  /** Step 5, optional: required TikTok sound URL / Instagram Reel URL. */
+  required_sound_tiktok?: string | null;
+  required_sound_instagram?: string | null;
+  /** Step 4 reference-material links (Docs / Drive / Notion). */
+  reference_links?: string[];
+  /** Step 6: 'public' | 'private'. */
+  visibility?: string;
+  /** Step 6: show on Discover (default on). */
+  show_on_discover?: boolean;
+  /** Step 6: 'open' | 'application'. */
+  access_type?: string;
 }
 
 /**
@@ -395,6 +417,10 @@ export interface UserProfile {
   role?: "creator" | "brand" | null;
   /** Brand display name for brand accounts (migration 0008). */
   brand_name?: string | null;
+  /** Brand website, set in wizard step 1 (migration 0050). */
+  website?: string | null;
+  /** Short brand description, set in wizard step 1 (migration 0050). */
+  brand_description?: string | null;
   tiktok_url: string | null;
   instagram_url: string | null;
   youtube_url: string | null;

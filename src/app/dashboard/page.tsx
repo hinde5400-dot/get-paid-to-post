@@ -3,17 +3,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getModeContext } from "@/lib/mode";
 import {
-  campaignStatus,
-  getBrandCampaigns,
-  getBrandCampaignStats,
-  getCampaignBudgetHistory,
-  getCampaignRejectionReason,
   getUserNotifications,
   getUserSubmissions,
   getWallet,
-  isExpiredUnpaidPending,
-  paidBudgetCoveredByPayment,
-  type BrandCampaignStats,
 } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -21,13 +13,10 @@ import MyPostsList, {
   type CampaignHistoryRow,
 } from "@/components/MyPostsList";
 import NotificationsPanel from "@/components/NotificationsPanel";
-import RefundRequestButton from "@/components/RefundRequestButton";
 import CopyButton from "@/components/CopyButton";
 import SignOutButton from "@/components/SignOutButton";
 import { SITE_URL } from "@/lib/constants";
-import { budgetBarClass, budgetUsedPct, formatUSD } from "@/lib/money";
-import type { User } from "@supabase/supabase-js";
-import { type Campaign, type UserProfile } from "@/lib/types";
+import { formatUSD } from "@/lib/money";
 
 export default async function DashboardPage() {
   if (!isSupabaseConfigured) {
@@ -36,9 +25,9 @@ export default async function DashboardPage() {
         <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">Dashboard</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg/60">
           Supabase is not configured yet. Add{" "}
-          <code className="text-lime">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code className="text-lime">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
-          <code className="text-lime">.env.local</code> and restart the server —
+          <code className="text-limeink">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+          <code className="text-limeink">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
+          <code className="text-limeink">.env.local</code> and restart the server —
           see the README for the exact steps.
         </p>
       </div>
@@ -55,14 +44,13 @@ export default async function DashboardPage() {
   const { mode, profile } = await getModeContext();
   if (mode === "brand") redirect("/brand/campaigns");
 
-  // Brands never see the creator dashboard: they get their own
-  // campaigns (with a Create button) and no earnings cards.
-  // public.users.role is the single source of truth (see the
-  // brands page) — auth metadata is user-writable and never
-  // decides a role.
-  if ((profile?.role ?? "creator") === "brand") {
-    return <BrandDashboard user={user} profile={profile} />;
-  }
+  // Strict mode separation (Turn 2026-11-14): creator mode ALWAYS
+  // shows the creator dashboard — earnings, views and the user's
+  // own posts. A brand-role user who switched to creator mode sees
+  // their creator side (possibly empty); their brand side lives in
+  // My Campaigns (/brand/campaigns) in brand mode. The old
+  // BrandDashboard that used to render here is gone — it duplicated
+  // /brand/campaigns and leaked brand content into creator mode.
 
   const wallet = await getWallet(user.id);
   // Forms #26: a failed load renders an honest error state, never
@@ -142,7 +130,7 @@ export default async function DashboardPage() {
 
       {/* Profile — the creator's name and a way out. */}
       <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-fg/10 bg-card p-5">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-lime">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-limeink">
           {displayName[0].toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
@@ -176,7 +164,7 @@ export default async function DashboardPage() {
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
           <p className="text-xs text-fg/50">Withdrawable Balance</p>
-          <p className="mt-1 text-2xl font-black text-lime">
+          <p className="mt-1 text-2xl font-black text-limeink">
             {formatUSD(wallet?.available_balance ?? 0)}
           </p>
         </div>
@@ -197,13 +185,13 @@ export default async function DashboardPage() {
         </Link>
         <Link
           href="/earnings"
-          className="rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-lime"
+          className="rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-limeink"
         >
           Earnings &amp; withdrawals
         </Link>
         <Link
           href="/connect"
-          className="rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-lime"
+          className="rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-limeink"
         >
           My accounts
         </Link>
@@ -230,7 +218,7 @@ export default async function DashboardPage() {
             Know a creator who should get paid for their clips? Share the
             site link with them.
           </p>
-          <p className="mt-2 truncate rounded-lg bg-ink px-3 py-2 text-sm font-bold text-lime">
+          <p className="mt-2 truncate rounded-lg bg-ink px-3 py-2 text-sm font-bold text-limeink">
             {SITE_URL}
           </p>
         </div>
@@ -285,580 +273,3 @@ async function getUserCampaignHistory(
   }));
 }
 
-/**
- * Brand dashboard — a brand's own campaigns, never creator
- * earnings. Status is Pending (waiting on admin review / payment),
- * Live (funded and running) or Ended (budget spent or duration
- * over, still in its settlement window). Budget is shown as % used
- * with the $ budget total — this is the brand's own private view
- * of its own money, not a public card. Views show "—" while the
- * total cannot be read for a brand (see getBrandCampaignStats).
- */
-async function BrandDashboard({
-  user,
-  profile,
-}: {
-  user: User;
-  profile: UserProfile | null;
-}) {
-  // Forms #26: a failed load renders an honest error state, never
-  // an empty campaign list. getBrandCampaigns THROWS on DB error;
-  // getBrandCampaignStats returns null when it cannot compute.
-  let campaigns: Campaign[] = [];
-  let statsList: (BrandCampaignStats | null)[] = [];
-  let loadError = false;
-  try {
-    campaigns = await getBrandCampaigns(user.id);
-    statsList = await Promise.all(
-      campaigns.map((c) => getBrandCampaignStats(c.id))
-    );
-  } catch {
-    loadError = true;
-  }
-  if (loadError) {
-    return (
-      <div className="mx-auto max-w-lg rounded-3xl border border-red-500/40 bg-card p-8 text-center">
-        <h1 className="font-display text-2xl font-black uppercase tracking-tight text-fg">
-          Couldn&apos;t load the dashboard
-        </h1>
-        <p className="mt-3 text-sm leading-relaxed text-fg/60">
-          Your campaigns could not be loaded — please try again. Your
-          data is safe; this is a loading problem, not an empty
-          dashboard.
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
-        >
-          Try again
-        </Link>
-      </div>
-    );
-  }
-  const statsById = new Map<string, BrandCampaignStats | null>(
-    campaigns.map((c, i) => [c.id, statsList[i]])
-  );
-  // Rejection reasons for rejected campaigns, read back from
-  // each campaign's brand chat thread (the admin posts the reason
-  // there on reject — there is no rejection_reason column on
-  // campaigns). Only rejected campaigns are looked up.
-  const rejectionReasons = new Map<string, string>();
-  for (const c of campaigns) {
-    if (c.status !== "rejected") continue;
-    const reason = await getCampaignRejectionReason(c.id);
-    if (reason) rejectionReasons.set(c.id, reason);
-  }
-  // Unread admin replies (round-3 P1-8, fixed in round-4 P2-B6,
-  // split in round-5 P2): the badge counts admin-sent rows the
-  // BRAND has not read yet (brand_read=false, migration 0043) —
-  // never is_read, which is the ADMIN's read state: the admin
-  // opening a thread in /admin used to clear this badge before
-  // the brand read the reply. The brand marks admin messages
-  // read by opening the chat (BrandMessageForm PATCHes the
-  // messages route on load), so reading the reply clears the
-  // badge. Bounded to the newest 1,000 unread admin rows, and
-  // filtered server-side to admin-sent unread rows only, so a
-  // long thread cannot swallow the badge. Before 0043 is applied
-  // the brand_read column does not exist and the query falls back
-  // to the old is_read check. Best-effort: a failed chat read
-  // shows no badge rather than breaking the dashboard.
-  const unreadAdminReplyById = new Map<string, boolean>();
-  if (campaigns.length > 0) {
-    try {
-      const supabase = getServerClient();
-      if (supabase) {
-        const campaignIds = campaigns.map((c) => c.id);
-        let chatRows: { campaign_id: string }[] | null = null;
-        const withBrandRead = await supabase
-          .from("brand_messages")
-          .select("campaign_id, sender, is_read, brand_read")
-          .in("campaign_id", campaignIds)
-          .eq("sender", "admin")
-          .eq("brand_read", false)
-          .order("created_at", { ascending: false })
-          .limit(1000);
-        if (!withBrandRead.error) {
-          chatRows = (withBrandRead.data ?? []) as { campaign_id: string }[];
-        } else {
-          // Pre-migration 0043 — brand_read does not exist yet.
-          const legacy = await supabase
-            .from("brand_messages")
-            .select("campaign_id, sender, is_read")
-            .in("campaign_id", campaignIds)
-            .eq("sender", "admin")
-            .eq("is_read", false)
-            .order("created_at", { ascending: false })
-            .limit(1000);
-          if (!legacy.error) {
-            chatRows = (legacy.data ?? []) as { campaign_id: string }[];
-          }
-        }
-        for (const row of chatRows ?? []) {
-          unreadAdminReplyById.set(row.campaign_id, true);
-        }
-      }
-    } catch {
-      // No badge — the dashboard still loads.
-    }
-  }
-  // Refund requests (P2-B5): an open request per rejected campaign
-  // with a payment on file. Best-effort — a missing table (or a
-  // blocked read) just means "no request known"; the button still
-  // works (the API answers 503 honestly when the table is missing).
-  const refundRequestedById = new Map<string, boolean>();
-  const rejectedWithPayment = campaigns.filter(
-    (c) => c.status === "rejected" && Boolean(c.payment_tx_id?.trim())
-  );
-  if (rejectedWithPayment.length > 0) {
-    try {
-      const supabase = getServerClient();
-      if (supabase) {
-        const { data: refundRows } = await supabase
-          .from("refund_requests")
-          .select("campaign_id")
-          .in(
-            "campaign_id",
-            rejectedWithPayment.map((c) => c.id)
-          )
-          .eq("status", "requested");
-        for (const row of (refundRows ?? []) as {
-          campaign_id: string;
-        }[]) {
-          refundRequestedById.set(row.campaign_id, true);
-        }
-      }
-    } catch {
-      // No refund state — the dashboard still loads.
-    }
-  }
-  // Overpayment refunds (Round-5 P2): a pending/live campaign
-  // whose budget was LOWERED after the brand paid — the brand
-  // overpaid the difference (paid budget minus current budget;
-  // the 15% fee is not refundable, so the amount is budget-only).
-  // The paid budget comes from the budget history, server-side,
-  // with the same earliest-post-payment-edit logic as the B2
-  // banner — never a client-sent number. "Already requested" is
-  // any open request on a pending/live campaign: a rejected
-  // refund cannot exist there, so it must be an overpayment one
-  // (no kind column is needed for the check, so it works before
-  // migration 0043 too). Best-effort — the dashboard still loads
-  // when the history read fails; the button then hides until the
-  // read works.
-  const overpaymentById = new Map<string, number>();
-  const overpaymentRequestedById = new Map<string, boolean>();
-  const paidCampaigns = campaigns.filter(
-    (c) =>
-      (c.status === "pending" || c.status === "live") &&
-      Boolean(c.payment_tx_id?.trim())
-  );
-  if (paidCampaigns.length > 0) {
-    try {
-      const historyById = await getCampaignBudgetHistory(
-        paidCampaigns.map((c) => c.id)
-      );
-      for (const c of paidCampaigns) {
-        const paidBudget = paidBudgetCoveredByPayment(
-          historyById[c.id] ?? [],
-          (
-            c as unknown as { payment_tx_submitted_at?: string | null }
-          ).payment_tx_submitted_at ?? null,
-          c.created_at ?? null
-        );
-        if (paidBudget == null) continue;
-        const overpaid =
-          Math.round((paidBudget - Number(c.budget_total ?? 0)) * 100) / 100;
-        if (overpaid > 0) overpaymentById.set(c.id, overpaid);
-      }
-      const supabase = getServerClient();
-      if (supabase) {
-        const { data: refundRows } = await supabase
-          .from("refund_requests")
-          .select("campaign_id")
-          .in(
-            "campaign_id",
-            paidCampaigns.map((c) => c.id)
-          )
-          .eq("status", "requested");
-        for (const row of (refundRows ?? []) as {
-          campaign_id: string;
-        }[]) {
-          overpaymentRequestedById.set(row.campaign_id, true);
-        }
-      }
-    } catch {
-      // No overpayment state — the dashboard still loads.
-    }
-  }
-  // Round-4 P2-B8: warn when the brand already has an unpaid
-  // pending campaign — fund it first instead of stacking new
-  // ones. "Unpaid" = pending with no TxID on file and not expired
-  // (an expired one can no longer be funded).
-  const unpaidPending = campaigns.find(
-    (c) =>
-      c.status === "pending" &&
-      !c.payment_tx_id?.trim() &&
-      !isExpiredUnpaidPending(c)
-  );
-
-  const metaName = user.user_metadata?.full_name;
-  const displayName =
-    profile?.brand_name ??
-    profile?.full_name ??
-    (typeof metaName === "string" && metaName.trim() ? metaName : null) ??
-    user.email ??
-    "Brand";
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Dashboard</h1>
-        <p className="mt-1 text-sm text-fg/60">Welcome back, {displayName}</p>
-      </div>
-
-      {/* Profile — the brand's name and a way out. */}
-      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-fg/10 bg-card p-5">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-lime/15 font-display text-xl font-black text-lime">
-          {displayName[0].toUpperCase()}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-xl font-black text-fg">
-            {displayName}
-          </p>
-          <p className="truncate text-sm text-fg/60">{user.email}</p>
-        </div>
-        <SignOutButton />
-      </div>
-
-      <div>
-        <Link
-          href="/brands"
-          className="inline-block rounded-full bg-lime px-6 py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-limedark"
-        >
-          + Create a campaign
-        </Link>
-      </div>
-
-      {unpaidPending && (
-        <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm leading-relaxed text-amber-200">
-          <span className="font-black">
-            You already have a pending campaign — fund it first.
-          </span>{" "}
-          <Link
-            href={`/brands/payment/${unpaidPending.id}`}
-            className="font-bold text-lime hover:underline"
-          >
-            &ldquo;{unpaidPending.title}&rdquo; is still waiting for
-            payment →
-          </Link>
-        </div>
-      )}
-
-      <section>
-        <h2 className="mb-4 text-xl font-extrabold text-fg">My Campaigns</h2>
-        {campaigns.length === 0 ? (
-          <div className="rounded-2xl border border-fg/10 bg-card p-8 text-center">
-            <p className="text-4xl" aria-hidden>
-              🏢
-            </p>
-            <h3 className="mt-3 text-lg font-black text-fg">
-              You haven&apos;t launched a campaign yet
-            </h3>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
-              Fund a budget and pay only for verified views. Your campaign
-              goes live once payment is verified.
-            </p>
-            <Link
-              href="/brands"
-              className="mt-5 inline-block rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
-            >
-              Create your first campaign
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {campaigns.map((c) => (
-              <BrandCampaignCard
-                key={c.id}
-                campaign={c}
-                stats={statsById.get(c.id) ?? null}
-                rejectionReason={rejectionReasons.get(c.id) ?? null}
-                hasUnreadAdminReply={unreadAdminReplyById.get(c.id) ?? false}
-                refundRequested={refundRequestedById.get(c.id) ?? false}
-                overpaymentAmount={overpaymentById.get(c.id) ?? 0}
-                overpaymentRequested={
-                  overpaymentRequestedById.get(c.id) ?? false
-                }
-              />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function brandStatus(c: Campaign): { label: string; cls: string } {
-  const s = campaignStatus(c);
-  if (s === "live")
-    return { label: "Live", cls: "bg-lime/15 text-lime" };
-  if (s === "settling")
-    return { label: "Ended", cls: "bg-fg/10 text-fg/60" };
-  if (c.status === "rejected")
-    return { label: "Rejected", cls: "bg-red-500/15 text-red-300" };
-  return { label: "Pending", cls: "bg-yellow-500/15 text-yellow-300" };
-}
-
-function BrandCampaignCard({
-  campaign: c,
-  stats,
-  rejectionReason,
-  hasUnreadAdminReply = false,
-  refundRequested = false,
-  overpaymentAmount = 0,
-  overpaymentRequested = false,
-}: {
-  campaign: Campaign;
-  stats: BrandCampaignStats | null;
-  rejectionReason?: string | null;
-  hasUnreadAdminReply?: boolean;
-  refundRequested?: boolean;
-  /** Overpaid budget (paid budget minus current budget_total),
-   *  > 0 only when the budget was lowered after payment. */
-  overpaymentAmount?: number;
-  overpaymentRequested?: boolean;
-}) {
-  const status = brandStatus(c);
-  const usedPct = Math.round(budgetUsedPct(c.budget_total, c.budget_left));
-  // SAME thresholds as the public card (item 28): <50% lime,
-  // 50–75% yellow, 75–90% red, >90% dark red.
-  const barCls = budgetBarClass(usedPct);
-  const rate = c.view_bonus_per_1k;
-  // Round-4 P1-B3: explicit $ spent / $ remaining — spent is
-  // budget_total − budget_left, remaining is budget_left.
-  const spent = Math.max(0, c.budget_total - c.budget_left);
-  const remaining = Math.max(0, c.budget_left);
-  // "Payment submitted" keys off payment_tx_id, NOT is_funded:
-  // is_funded only becomes true at approve time, so keying off it
-  // made "payment submitted" unreachable and kept showing the
-  // "Fund this campaign" button after the brand already paid. A
-  // non-empty TxID means the payment was submitted and the admin
-  // is verifying it.
-  const paymentSubmitted = Boolean(c.payment_tx_id?.trim());
-  // Round-3 P1-6: an expired unpaid pending (7+ days, no TxID)
-  // no longer invites payment — no Fund button, expired state.
-  const expired = isExpiredUnpaidPending(c);
-  const needsFunding = c.status === "pending" && !paymentSubmitted && !expired;
-
-  return (
-    <div className="rounded-2xl border border-fg/10 bg-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate font-display text-lg font-black text-fg">
-              {c.title}
-            </h3>
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-black ${status.cls}`}
-            >
-              {status.label}
-            </span>
-            {hasUnreadAdminReply && (
-              <span className="rounded-full bg-red-500 px-2.5 py-0.5 text-xs font-black text-white">
-                New reply from admin
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-fg/60">
-            {formatUSD(rate)} per 1k views
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {needsFunding && (
-            <Link
-              href={`/brands/payment/${c.id}`}
-              className="rounded-full bg-lime px-4 py-2 text-xs font-black uppercase tracking-wide text-black transition hover:bg-limedark"
-            >
-              Fund this campaign
-            </Link>
-          )}
-          {/* Round-3 P2-11: the admin chat lives on the payment
-              page for every status — a live or rejected campaign
-              used to have no link to it at all. */}
-          <Link
-            href={`/brands/payment/${c.id}#brand-chat`}
-            className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
-          >
-            Chat with admin
-            {hasUnreadAdminReply ? " •" : ""}
-          </Link>
-          {/* Round-4 P1-B4: fix a typo'd rate, brief or Drive link
-              while the campaign is still pending. */}
-          {c.status === "pending" && (
-            <Link
-              href={`/brands/payment/${c.id}#edit-campaign`}
-              className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
-            >
-              Edit details
-            </Link>
-          )}
-          <Link
-            href={`/campaign/${c.id}`}
-            className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
-          >
-            View campaign
-          </Link>
-        </div>
-      </div>
-
-      {/* Status banner: the brand always sees clearly where its
-          campaign stands and what happens next. */}
-      {c.status === "pending" && expired && (
-        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
-          <span className="font-black">Expired — create a new campaign.</span>{" "}
-          This campaign was never funded within 7 days, so it expired
-          and can no longer be paid for. Create a new campaign to
-          start again.
-        </div>
-      )}
-      {c.status === "pending" && !expired && (
-        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
-          <span className="font-black">Pending — not live yet.</span>{" "}
-          {needsFunding ? (
-            <>
-              Send your budget plus the 15% platform fee on the payment
-              page — your campaign goes live only after the admin
-              verifies your payment. Unpaid pending campaigns expire
-              after 7 days; chatting alone does not count as payment.
-            </>
-          ) : (
-            <>
-              Your payment was submitted — the admin is verifying it.
-              Your campaign goes live once payment is verified.
-            </>
-          )}
-        </div>
-      )}
-      {c.status === "rejected" && (
-        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
-          <span className="font-black">Rejected by the admin.</span>{" "}
-          {rejectionReason ? (
-            <>
-              Reason: <span className="font-bold">{rejectionReason}</span>{" "}
-            </>
-          ) : (
-            <>This campaign will not go live. </>
-          )}
-          {paymentSubmitted ? (
-            <>
-              Your budget is refunded on request — the 15% platform
-              fee is not refundable.
-            </>
-          ) : (
-            <>
-              If you already sent the budget, contact the admin on
-              Discord about your refund.
-            </>
-          )}
-          {paymentSubmitted && (
-            <div className="mt-3">
-              <RefundRequestButton
-                campaignId={c.id}
-                amount={c.budget_total}
-                alreadyRequested={refundRequested}
-              />
-            </div>
-          )}
-        </div>
-      )}
-      {campaignStatus(c) === "live" && (
-        <div className="mt-4 rounded-xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm leading-relaxed text-lime">
-          <span className="font-black">Live.</span> Creators can now
-          submit clips for this campaign.
-        </div>
-      )}
-      {campaignStatus(c) === "settling" && (
-        <div className="mt-4 rounded-xl border border-fg/10 bg-fg/5 px-4 py-3 text-sm leading-relaxed text-fg/70">
-          <span className="font-black text-fg">Ended — payouts in progress.</span>{" "}
-          Approved earnings enter a 72-hour hold as soon as they are
-          approved — even while the campaign is still running. After
-          the campaign ends there is a 3-day re-check window, then
-          payouts are made manually (about 1 week after the campaign
-          ends in total). The campaign, its proofs and its chat are
-          deleted 1 day after the last hold matures, never earlier
-          than 7 days after the campaign ends. Wallet and withdrawal
-          records are never deleted.
-        </div>
-      )}
-      {/* Overpayment (Round-5 P2): the budget was lowered after
-          this campaign was paid, so the brand overpaid the
-          difference — request it back in-app. The amount is
-          computed server-side from the budget history, never
-          trusted from the client. */}
-      {overpaymentAmount > 0 &&
-        (c.status === "pending" || c.status === "live") && (
-          <div className="mt-4 rounded-xl border border-sky-400/40 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed text-sky-200">
-            <span className="font-black">
-              You overpaid {formatUSD(overpaymentAmount)}.
-            </span>{" "}
-            Your payment covered a bigger budget than this campaign
-            has now — the budget was lowered after you paid. Request
-            the overpaid budget back; the 15% platform fee is not
-            refundable.
-            <div className="mt-3">
-              <RefundRequestButton
-                campaignId={c.id}
-                amount={overpaymentAmount}
-                alreadyRequested={overpaymentRequested}
-                kind="overpayment"
-              />
-            </div>
-          </div>
-        )}
-
-      {/* Budget — % used bar (same rule as public cards) plus the
-          $ total, because this is the brand's own money. Spent and
-          remaining are explicit (P1-B3): spent = budget_total −
-          budget_left. */}
-      <div className="mt-4">
-        <div className="flex justify-between text-xs text-fg/60">
-          <span>
-            Budget: {formatUSD(c.budget_total)}
-          </span>
-          <span className="font-bold text-fg">{usedPct}% used</span>
-        </div>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-fg/10">
-          <div
-            className={`h-full rounded-full ${barCls}`}
-            style={{ width: `${Math.min(100, Math.max(0, usedPct))}%` }}
-          />
-        </div>
-        <p className="mt-2 text-xs font-semibold text-fg/60">
-          Spent {formatUSD(spent)} · Remaining {formatUSD(remaining)}
-        </p>
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-        <div className="rounded-xl bg-fg/5 px-2 py-3">
-          <p className="text-lg font-black text-fg">
-            {stats?.total_views == null
-              ? "—"
-              : stats.total_views.toLocaleString()}
-          </p>
-          <p className="mt-0.5 text-xs text-fg/50">Views</p>
-        </div>
-        <div className="rounded-xl bg-fg/5 px-2 py-3">
-          <p className="text-lg font-black text-fg">
-            {stats ? stats.total : "—"}
-          </p>
-          <p className="mt-0.5 text-xs text-fg/50">Submissions</p>
-        </div>
-        <div className="rounded-xl bg-fg/5 px-2 py-3">
-          <p className="text-lg font-black text-fg">
-            {stats ? stats.approved : "—"}
-          </p>
-          <p className="mt-0.5 text-xs text-fg/50">Approved</p>
-        </div>
-      </div>
-    </div>
-  );
-}

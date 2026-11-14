@@ -273,7 +273,7 @@ export default async function BrandPaymentPage({
                   href={`https://tronscan.org/#/transaction/${campaign.payment_tx_id}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1 inline-block text-xs font-bold text-lime hover:underline"
+                  className="mt-1 inline-block text-xs font-bold text-limeink hover:underline"
                 >
                   Verify on Tronscan ↗
                 </a>
@@ -424,7 +424,7 @@ export default async function BrandPaymentPage({
             <span className="text-sm font-bold text-fg/60">
               Total to send
             </span>
-            <span className="font-display text-lg font-black text-lime">
+            <span className="font-display text-lg font-black text-limeink">
               {formatUSD(totalDue)}{" "}
               USDT
             </span>

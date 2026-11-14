@@ -52,7 +52,7 @@ export default async function WinBoard({
                 key={`${e.name}-${i}`}
                 className="flex flex-wrap items-center gap-3 rounded-2xl bg-fg/5 px-4 py-3"
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/15 text-base font-black text-lime">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/15 text-base font-black text-limeink">
                   {medals[i] ?? `${i + 1}`}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -64,7 +64,7 @@ export default async function WinBoard({
                     {e.views.toLocaleString()} views
                   </span>
                 </span>
-                <span className="font-display text-lg font-black text-lime">
+                <span className="font-display text-lg font-black text-limeink">
                   {formatUSD(e.earned)}
                 </span>
               </li>
@@ -73,7 +73,7 @@ export default async function WinBoard({
           {totalPaid !== null && (
             <p className="mt-4 text-sm font-bold text-fg/50">
               Total paid out so far:{" "}
-              <span className="text-lime">{formatUSD(totalPaid)}</span>
+              <span className="text-limeink">{formatUSD(totalPaid)}</span>
             </p>
           )}
         </>
@@ -105,7 +105,7 @@ export default async function WinBoard({
           </p>
           <p className="mt-4 text-sm font-bold text-fg/50">
             Total paid out so far:{" "}
-            <span className="text-lime">{formatUSD(0)}</span>
+            <span className="text-limeink">{formatUSD(0)}</span>
           </p>
         </div>
       ) : (
@@ -123,7 +123,7 @@ export default async function WinBoard({
           </p>
           <p className="mt-4 text-sm font-bold text-fg/50">
             Total paid out so far:{" "}
-            <span className="text-lime">{formatUSD(totalPaid)}</span>
+            <span className="text-limeink">{formatUSD(totalPaid)}</span>
           </p>
         </div>
       )}

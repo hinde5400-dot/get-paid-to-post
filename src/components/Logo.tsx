@@ -17,7 +17,7 @@ export function LogoMark({
 }) {
   return (
     <span
-      className={`flex shrink-0 items-center justify-center rounded-xl border border-fg/20 bg-black font-display font-black leading-none text-lime ${className} ${textClassName}`}
+      className={`flex shrink-0 items-center justify-center rounded-xl border border-fg/20 bg-black font-display font-black leading-none text-limeink ${className} ${textClassName}`}
       aria-hidden
     >
       G

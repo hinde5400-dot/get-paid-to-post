@@ -6,11 +6,12 @@ import { MODE_COOKIE } from "@/lib/constants";
 import type { UserMode } from "@/lib/mode";
 
 /**
- * Mode switch (creator <-> brand), shown only when the user is
- * capable of BOTH modes (getModeContext().canSwitch): in More for
- * creator mode and in Brand Profile for brand mode. Writes the
- * mode cookie, then goes to the other mode's home and refreshes
- * so the server layout re-renders the right navigation.
+ * Mode switch (creator <-> brand), shown to every signed-in user
+ * (getModeContext().canSwitch is true for any logged-in user):
+ * in More for creator mode and in Brand Profile for brand mode,
+ * and in the drawer. Writes the mode cookie, then goes to the
+ * other mode's home and refreshes so the server layout re-renders
+ * the right navigation. One click, either way.
  */
 export default function ModeSwitch({
   mode,
@@ -42,7 +43,7 @@ export default function ModeSwitch({
       type="button"
       onClick={onClick}
       disabled={busy}
-      className={`rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime disabled:opacity-40 ${className}`}
+      className={`rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink disabled:opacity-40 ${className}`}
     >
       {label}
     </button>

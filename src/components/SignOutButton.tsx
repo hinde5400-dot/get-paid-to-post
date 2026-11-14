@@ -24,7 +24,7 @@ export default function SignOutButton({
     <button
       onClick={signOut}
       disabled={busy}
-      className={`inline-flex items-center justify-center gap-2 rounded-full border border-fg/20 px-4 py-2 text-sm font-semibold text-fg/80 transition hover:border-lime hover:text-lime disabled:opacity-40 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full border border-fg/20 px-4 py-2 text-sm font-semibold text-fg/80 transition hover:border-lime hover:text-limeink disabled:opacity-40 ${className}`}
     >
       {busy ? (
         <>

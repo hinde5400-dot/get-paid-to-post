@@ -7,7 +7,8 @@ import {
   getCampaignStatsMap,
   isCampaignLive,
 } from "@/lib/data";
-import { getCurrentUser, getProfile } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { getModeContext } from "@/lib/mode";
 import { DISCORD_URL } from "@/lib/constants";
 import CampaignGrid from "@/components/CampaignGrid";
 
@@ -110,7 +111,7 @@ async function BrandHome({
   } catch {
     return (
       <div className="space-y-10">
-        <section className="pt-6 text-center md:pt-10">
+        <section className="pt-4 text-center md:pt-10">
           <div className="rounded-3xl border border-red-500/40 bg-card p-10 text-center">
             <p className="font-display text-2xl font-black uppercase tracking-tight text-fg">
               Couldn&apos;t load your campaigns
@@ -145,12 +146,12 @@ async function BrandHome({
 
   return (
     <div className="space-y-10">
-      <section className="pt-6 text-center md:pt-10">
+      <section className="pt-4 text-center md:pt-10">
         <p className="inline-block rounded-full bg-lime px-4 py-1.5 text-xs font-black uppercase tracking-widest text-black">
           For Brands
         </p>
-        <h1 className="mx-auto mt-5 max-w-3xl font-display text-5xl font-black uppercase leading-[0.95] tracking-tight text-fg md:text-7xl">
-          Launch a campaign. <span className="bg-lime px-2 text-black">Get clips made.</span>
+        <h1 className="mx-auto mt-5 max-w-3xl font-display text-[2.1rem] font-black uppercase leading-[1.05] tracking-tight text-fg md:text-7xl">
+          Launch a campaign. <span className="text-limeink">Get clips made.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-fg/70 md:text-lg">
           Welcome back, {displayName}. Fund a budget, set your rate,
@@ -166,13 +167,13 @@ async function BrandHome({
           </Link>
           <Link
             href="/pricing"
-            className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
           >
             See pricing
           </Link>
         </div>
         <p className="mt-8 text-sm font-bold text-fg/50">
-          <span className="font-black text-lime">
+          <span className="font-black text-limeink">
             {campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}
           </span>
           {" · "}
@@ -193,7 +194,7 @@ async function BrandHome({
           Your campaigns
         </h2>
         {campaigns.length === 0 ? (
-          <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">
+          <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center md:p-10">
             <p className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-lime/15 text-3xl">
               🏢
             </p>
@@ -218,7 +219,7 @@ async function BrandHome({
               const usedPct = budgetUsedPct(c.budget_total, c.budget_left);
               const pill =
                 status === "live"
-                  ? "bg-lime/15 text-lime"
+                  ? "bg-lime/15 text-limeink"
                   : status === "settling"
                     ? "bg-fg/10 text-fg/60"
                     : c.status === "rejected"
@@ -276,7 +277,7 @@ async function BrandHome({
                       )}
                       <Link
                         href={`/campaign/${c.id}`}
-                        className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
+                        className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-limeink"
                       >
                         View campaign
                       </Link>
@@ -301,13 +302,13 @@ async function BrandHome({
         <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/pricing"
-            className="text-sm font-bold text-lime hover:underline"
+            className="text-sm font-bold text-limeink hover:underline"
           >
             See full pricing →
           </Link>
           <Link
             href="/rules#brands"
-            className="text-sm font-bold text-lime hover:underline"
+            className="text-sm font-bold text-limeink hover:underline"
           >
             Rules for brands →
           </Link>
@@ -319,10 +320,14 @@ async function BrandHome({
 
 export default async function HomePage() {
   const user = await getCurrentUser();
-  const profile = user ? await getProfile(user.id) : null;
+  // Mode (not role) decides the home: a creator who switched to
+  // brand mode gets the brand home, and a brand who switched to
+  // creator mode gets the creator home — strict mode separation
+  // (Turn 2026-11-14). Guests always get the creator home.
+  const { mode, profile } = await getModeContext();
   // Brands get their own home: their campaigns and funding status —
   // never an earning pitch. A brand does not come here to earn.
-  if (user && profile?.role === "brand") {
+  if (user && mode === "brand" && profile) {
     return <BrandHome user={user} profile={profile} />;
   }
   // Forms #26: getDiscoverCampaigns THROWS on DB error — a failed load
@@ -339,7 +344,7 @@ export default async function HomePage() {
   } catch {
     return (
       <div className="space-y-14">
-        <section className="pt-6 text-center md:pt-10">
+        <section className="pt-4 text-center md:pt-10">
           <div className="rounded-3xl border border-red-500/40 bg-card p-10 text-center">
             <p className="font-display text-2xl font-black uppercase tracking-tight text-fg">
               Couldn&apos;t load campaigns
@@ -365,17 +370,17 @@ export default async function HomePage() {
   const settlingCount = campaigns.length - liveCount;
 
   return (
-    <div className="space-y-14">
+    <div className="space-y-10 md:space-y-14">
       {/* Hero */}
-      <section className="pt-6 text-center md:pt-10">
+      <section className="pt-4 text-center md:pt-10">
         <p className="inline-block rounded-full bg-lime px-4 py-1.5 text-xs font-black uppercase tracking-widest text-black">
           TikTok · Instagram · YouTube
         </p>
         <div className="mt-4 flex justify-center">
           <DiscordButton compact />
         </div>
-        <h1 className="mx-auto mt-5 max-w-3xl font-display text-5xl font-black uppercase leading-[0.95] tracking-tight text-fg md:text-7xl">
-          Post Clips. <span className="bg-lime px-2 text-black">Get Paid Per View.</span>
+        <h1 className="mx-auto mt-5 max-w-3xl font-display text-[2.1rem] font-black uppercase leading-[1.05] tracking-tight text-fg md:text-7xl">
+          Post Clips. <span className="text-limeink">Get Paid Per View.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-fg/70 md:text-lg">
           Post short clips, get paid per view. No follower minimum — a great
@@ -392,7 +397,7 @@ export default async function HomePage() {
               </Link>
               <Link
                 href="/dashboard"
-                className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+                className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
               >
                 Go to Dashboard
               </Link>
@@ -400,7 +405,7 @@ export default async function HomePage() {
           ) : (
             <Link
               href="/campaigns"
-              className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+              className="rounded-full border border-fg/25 px-7 py-3.5 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
             >
               Browse campaigns
             </Link>
@@ -414,7 +419,7 @@ export default async function HomePage() {
           </div>
         )}
         <p className="mt-8 text-sm font-bold text-fg/50">
-          <span className="font-black text-lime">
+          <span className="font-black text-limeink">
             {liveCount} live campaign{liveCount === 1 ? "" : "s"}
           </span>
           {settlingCount > 0 && (
@@ -436,7 +441,7 @@ export default async function HomePage() {
             </h2>
             <Link
               href="/campaigns"
-              className="text-sm font-bold text-lime hover:underline"
+              className="text-sm font-bold text-limeink hover:underline"
             >
               View all →
             </Link>
@@ -457,7 +462,7 @@ export default async function HomePage() {
               <div className="mt-5 flex flex-wrap items-center gap-6">
                 <div>
                   <p className="text-xs text-fg/50">Earn up to</p>
-                  <p className="font-display text-3xl font-black text-lime">
+                  <p className="font-display text-3xl font-black text-limeink">
                     {formatUSD(featured.max_payout_per_post)}
                     <span className="text-base font-semibold text-fg/60"> / post</span>
                   </p>
@@ -486,7 +491,7 @@ export default async function HomePage() {
           Active campaigns
         </h2>
         {campaigns.length === 0 ? (
-          <div className="rounded-3xl border border-fg/10 bg-card p-10 text-center">
+          <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center md:p-10">
             <p className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-lime/15 text-3xl">
               📣
             </p>
@@ -510,13 +515,13 @@ export default async function HomePage() {
                 href={DISCORD_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+                className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
               >
                 Join Discord for announcements
               </a>
               <Link
                 href="/how-it-works"
-                className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+                className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
               >
                 How it works
               </Link>
@@ -602,7 +607,7 @@ export default async function HomePage() {
         <p className="mt-5 text-center text-sm">
           <Link
             href="/rules"
-            className="font-bold text-lime hover:underline"
+            className="font-bold text-limeink hover:underline"
           >
             Read the full rules →
           </Link>

@@ -225,7 +225,7 @@ export default function BrandMessageForm({
           type="button"
           onClick={() => void refresh()}
           disabled={refreshing}
-          className="rounded-full border border-fg/20 px-3 py-1 text-xs font-bold text-fg hover:border-lime hover:text-lime disabled:opacity-40"
+          className="rounded-full border border-fg/20 px-3 py-1 text-xs font-bold text-fg hover:border-lime hover:text-limeink disabled:opacity-40"
         >
           {refreshing ? "Refreshing..." : "↻ Refresh chat"}
         </button>
@@ -302,7 +302,7 @@ export default function BrandMessageForm({
                       />
                       <span
                         className={`mt-1 block text-xs font-bold underline ${
-                          own ? "text-black/70" : "text-lime"
+                          own ? "text-black/70" : "text-limeink"
                         }`}
                       >
                         Open proof ↗

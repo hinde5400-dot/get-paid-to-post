@@ -12,13 +12,17 @@ const config: Config = {
         // TryShoot-style theme. Accent is lime green #C6FF00.
         // bg / card / fg are CSS variables (defined in globals.css) so
         // the Light Mode toggle (data-theme on <html>) flips the whole
-        // palette: dark is pure black #0A0A0A / cards #1A1A1A, light is
-        // white #FFFFFF / cards #F4F4F5. Lime stays the accent in both.
+        // palette: light is grey #E9EAED / white cards, dark is dark
+        // grey #1C1C1E / grey cards. Lime stays the accent in both.
+        // limeink is the TEXT accent: bright lime in dark mode, dark
+        // green in light mode — bright lime text is unreadable on a
+        // light grey page, so text-lime is never used directly.
         ink: "rgb(var(--bg) / <alpha-value>)",
         card: "rgb(var(--card) / <alpha-value>)",
         cardlight: "rgb(var(--cardlight) / <alpha-value>)",
         lime: "#C6FF00",
         limedark: "#A8D400",
+        limeink: "rgb(var(--limeink) / <alpha-value>)",
         fg: "rgb(var(--fg) / <alpha-value>)",
       },
       fontFamily: {

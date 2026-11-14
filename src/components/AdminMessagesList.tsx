@@ -208,7 +208,7 @@ export default function AdminMessagesList({
               {last ? (
                 last.sender === "admin" ? (
                   <span
-                    className="shrink-0 rounded-full bg-lime/15 px-3 py-1 text-xs font-black text-lime"
+                    className="shrink-0 rounded-full bg-lime/15 px-3 py-1 text-xs font-black text-limeink"
                     title={`You replied ${new Date(last.created_at).toLocaleString("en-US")}`}
                   >
                     ✓ Replied

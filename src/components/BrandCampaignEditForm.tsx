@@ -125,7 +125,7 @@ export default function BrandCampaignEditForm({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
+          className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-limeink"
         >
           {open ? "Close" : "Edit details"}
         </button>

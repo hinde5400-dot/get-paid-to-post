@@ -354,7 +354,7 @@ export default function BioVerifyCard({
           </span>
         </span>
         {verifiedAt ? (
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-lime/15 px-3 py-1.5 text-xs font-black text-lime">
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-lime/15 px-3 py-1.5 text-xs font-black text-limeink">
             <span aria-hidden>✓</span> Connected
           </span>
         ) : (
@@ -371,7 +371,7 @@ export default function BioVerifyCard({
         <div className="mt-5 border-t border-fg/10 pt-5">
           {verifiedAt ? (
             <>
-              <p className="flex items-start gap-3 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
+              <p className="flex items-start gap-3 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-limeink">
                 <span
                   aria-hidden
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lime text-sm font-black text-black"
@@ -403,7 +403,7 @@ export default function BioVerifyCard({
                   value={link}
                   onChange={(e) => setLink(e.target.value)}
                   placeholder={placeholder}
-                  className="mt-2 w-full rounded-xl border border-fg/15 bg-bg px-4 py-2.5 text-sm text-fg placeholder:text-fg/40 focus:border-lime focus:outline-none"
+                  className="mt-2 w-full rounded-xl border border-fg/15 bg-ink px-4 py-2.5 text-sm text-fg placeholder:text-fg/40 focus:border-lime focus:outline-none"
                 />
               </label>
               <button
@@ -473,7 +473,7 @@ export default function BioVerifyCard({
         <p
           className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold ${
             messageKind === "ok"
-              ? "bg-lime/15 text-lime"
+              ? "bg-lime/15 text-limeink"
               : messageKind === "err"
                 ? "bg-red-500/15 text-red-300"
                 : "bg-fg/5 text-fg/70"

@@ -94,7 +94,7 @@ export default function PaymentForm({
           href={`https://tronscan.org/#/transaction/${txId.trim()}`}
           target="_blank"
           rel="noreferrer"
-          className="mt-2 inline-block text-sm font-bold text-lime hover:underline"
+          className="mt-2 inline-block text-sm font-bold text-limeink hover:underline"
         >
           Verify on Tronscan ↗
         </a>
@@ -114,7 +114,7 @@ export default function PaymentForm({
             href={`https://tronscan.org/#/transaction/${existingTxId}`}
             target="_blank"
             rel="noreferrer"
-            className="font-bold text-lime hover:underline"
+            className="font-bold text-limeink hover:underline"
           >
             Verify on Tronscan ↗
           </a>

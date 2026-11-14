@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getCurrentUser, getProfile, isOwner } from "@/lib/auth";
 import { getBrandCampaigns, isExpiredUnpaidPending } from "@/lib/data";
-import BrandForm from "@/components/BrandForm";
+import BrandWizard from "@/components/BrandWizard";
 
 export const metadata: Metadata = {
   title: "For Brands",
@@ -38,6 +38,8 @@ export default async function BrandsPage() {
   const canLaunch = !user ? false : owner || role !== "creator";
   const initialBrandName =
     profile?.brand_name ?? profile?.full_name ?? null;
+  const initialWebsite = profile?.website ?? null;
+  const initialBrandDescription = profile?.brand_description ?? null;
 
   // A logged-in brand goes straight to the campaign form — no
   // "I am a Brand / I am a Creator" choice cards. Logged-out
@@ -121,7 +123,7 @@ export default async function BrandsPage() {
             </Link>
           )}
           <p className="mt-3 text-sm">
-            <Link href="/pricing" className="font-bold text-lime hover:underline">
+            <Link href="/pricing" className="font-bold text-limeink hover:underline">
               See full pricing →
             </Link>
           </p>
@@ -129,7 +131,7 @@ export default async function BrandsPage() {
         <div className="rounded-3xl border border-fg/10 bg-card p-6 text-left">
           <Link href="/campaigns" className="block">
             {creatorCardInner}
-            <span className="mt-4 inline-block rounded-full border border-fg/25 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-lime">
+            <span className="mt-4 inline-block rounded-full border border-fg/25 px-5 py-2.5 text-sm font-bold text-fg hover:border-lime hover:text-limeink">
               Browse campaigns
             </span>
           </Link>
@@ -220,14 +222,14 @@ export default async function BrandsPage() {
         ].map((badge) => (
           <span
             key={badge}
-            className="rounded-full border border-lime/40 bg-lime/10 px-4 py-2 text-xs font-black text-lime"
+            className="rounded-full border border-lime/40 bg-lime/10 px-4 py-2 text-xs font-black text-limeink"
           >
             {badge}
           </span>
         ))}
       </div>
       <p className="mt-5 text-sm">
-        <Link href="/pricing" className="font-bold text-lime hover:underline">
+        <Link href="/pricing" className="font-bold text-limeink hover:underline">
           See full pricing — 15% fee, $500 budget → $575 total →
         </Link>
       </p>
@@ -246,7 +248,7 @@ export default async function BrandsPage() {
         last hold matures. If no creators posted, nothing was spent
         — any budget left unspent stays yours and is refunded on
         request, per the{" "}
-        <Link href="/refund" className="font-bold text-lime hover:underline">
+        <Link href="/refund" className="font-bold text-limeink hover:underline">
           Refund Policy
         </Link>
         . You never pay for views that were not verified.
@@ -276,7 +278,7 @@ export default async function BrandsPage() {
           </Link>
           <p className="mt-3 text-sm text-fg/60">
             Already have an account?{" "}
-            <Link href="/login" className="font-bold text-lime hover:underline">
+            <Link href="/login" className="font-bold text-limeink hover:underline">
               Log in
             </Link>
           </p>
@@ -302,7 +304,12 @@ export default async function BrandsPage() {
           </Link>
         </div>
       ) : (
-        <BrandForm isLoggedIn initialBrandName={initialBrandName} />
+        <BrandWizard
+          isLoggedIn
+          initialBrandName={initialBrandName}
+          initialWebsite={initialWebsite}
+          initialBrandDescription={initialBrandDescription}
+        />
       )}
     </section>
   );
@@ -326,7 +333,7 @@ export default async function BrandsPage() {
             </span>{" "}
             <Link
               href={`/brands/payment/${unpaidPending.id}`}
-              className="font-bold text-lime hover:underline"
+              className="font-bold text-limeink hover:underline"
             >
               &ldquo;{unpaidPending.title}&rdquo; is still waiting for
               payment →

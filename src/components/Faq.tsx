@@ -21,7 +21,7 @@ export default function Faq({ items }: { items: FaqItem[] }) {
             className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-bold text-fg"
           >
             {item.q}
-            <span className="text-lime">{open === i ? "−" : "+"}</span>
+            <span className="text-limeink">{open === i ? "−" : "+"}</span>
           </button>
           {open === i && (
             <p className="px-5 pb-5 text-sm leading-relaxed text-fg/70">

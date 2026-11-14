@@ -70,13 +70,13 @@ export default function RulesPage() {
       <p className="text-sm leading-relaxed text-fg/70">
         Every rule on {BRAND_NAME} in one place — for creators and for
         brands. Nothing here is new: it is the same rules already in the{" "}
-        <Link href="/terms" className="font-bold text-lime hover:underline">
+        <Link href="/terms" className="font-bold text-limeink hover:underline">
           Terms of Service
         </Link>
         ,{" "}
         <Link
           href="/how-it-works"
-          className="font-bold text-lime hover:underline"
+          className="font-bold text-limeink hover:underline"
         >
           How It Works
         </Link>{" "}
@@ -93,7 +93,7 @@ export default function RulesPage() {
             <li key={s.id}>
               <a
                 href={`#${s.id}`}
-                className="inline-block rounded-full border border-fg/15 px-3 py-1.5 text-xs font-bold text-fg/70 transition hover:border-lime hover:text-lime"
+                className="inline-block rounded-full border border-fg/15 px-3 py-1.5 text-xs font-bold text-fg/70 transition hover:border-lime hover:text-limeink"
               >
                 {i + 1}. {s.label}
               </a>
@@ -382,7 +382,7 @@ export default function RulesPage() {
           {CATEGORIES.map((c) => (
             <li
               key={c}
-              className="rounded-full bg-lime/15 px-3 py-1.5 text-xs font-black text-lime"
+              className="rounded-full bg-lime/15 px-3 py-1.5 text-xs font-black text-limeink"
             >
               {c}
             </li>
@@ -409,7 +409,7 @@ export default function RulesPage() {
           </Link>
           <Link
             href="/terms"
-            className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+            className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
           >
             Terms of Service →
           </Link>

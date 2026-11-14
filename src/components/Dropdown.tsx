@@ -82,14 +82,14 @@ export default function Dropdown({
                 }}
                 className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition ${
                   active
-                    ? "bg-lime/15 text-lime"
+                    ? "bg-lime/15 text-limeink"
                     : "text-white/80 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 {o.icon}
                 <span className="flex-1">{o.label}</span>
                 {active && (
-                  <span className="font-black text-lime" aria-hidden>
+                  <span className="font-black text-limeink" aria-hidden>
                     ✓
                   </span>
                 )}

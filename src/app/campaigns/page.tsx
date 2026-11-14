@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   getDiscoverCampaigns,
@@ -8,6 +9,7 @@ import {
   getUserSubmissions,
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
+import { getModeContext } from "@/lib/mode";
 import { DISCORD_URL } from "@/lib/constants";
 import CampaignGrid from "@/components/CampaignGrid";
 import CampaignFilters from "@/components/CampaignFilters";
@@ -90,6 +92,10 @@ export default async function CampaignsPage({
     null;
   const tab = searchParams.tab === "joined" ? "joined" : "explore";
   const user = await getCurrentUser();
+  // Brand mode never sees Discover — brands live in My Campaigns.
+  // Guests still see Discover (it is the public campaign list).
+  const { mode } = await getModeContext();
+  if (user && mode === "brand") redirect("/brand/campaigns");
   try {
     all = await getDiscoverCampaigns();
     if (tab === "joined" && user) {
@@ -158,7 +164,7 @@ export default async function CampaignsPage({
       {/* Shown when a logged-in user lands on /login or /signup and is
           bounced here by the middleware. */}
       {searchParams.message === "already-logged-in" && (
-        <p className="rounded-xl bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime">
+        <p className="rounded-xl bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-limeink">
           You are already logged in.
         </p>
       )}
@@ -172,6 +178,14 @@ export default async function CampaignsPage({
           needs at least 1,000 views to earn — a brand may set a higher
           minimum, shown on the campaign.
         </p>
+      </div>
+
+      {/* Beginner friendly — short, honest, no fake numbers. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-lime/30 bg-card px-4 py-3 text-xs font-bold">
+        <span className="text-limeink">● Beginner friendly</span>
+        <span className="text-fg/70">Paid from 1.0K views</span>
+        <span className="text-fg/70">No follower minimum</span>
+        <span className="text-fg/50">Creators are paid only for real verified views</span>
       </div>
 
       {/* Explore / Joined toggle pills */}
@@ -232,13 +246,13 @@ export default async function CampaignsPage({
               href={DISCORD_URL}
               target="_blank"
               rel="noreferrer"
-              className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+              className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
             >
               Join Discord for announcements
             </a>
             <Link
               href="/how-it-works"
-              className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-lime"
+              className="rounded-full border border-fg/25 px-6 py-3 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink"
             >
               How it works
             </Link>

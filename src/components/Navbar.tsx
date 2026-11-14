@@ -14,7 +14,7 @@ export default async function Navbar() {
   // Mode + user + profile (creator / brand navigation split) —
   // cached per request, so this shares the auth/profile reads
   // with the layout and the pages.
-  const { user, profile, isAdmin, mode } = await getModeContext();
+  const { user, profile, isAdmin, mode, canSwitch } = await getModeContext();
 
   // The creator's name, never "Guest" for a logged-in user: the
   // profile row (migration 0005) first, then the signup metadata
@@ -59,6 +59,7 @@ export default async function Navbar() {
           isAdmin={isAdmin}
           joined={joined}
           mode={mode}
+          canSwitch={canSwitch}
         />
 
         {/* Centered logo. */}

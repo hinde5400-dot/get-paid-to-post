@@ -58,7 +58,7 @@ export default function RefundRequestButton({
 
   if (requested) {
     return (
-      <div className="rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm leading-relaxed text-lime">
+      <div className="rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm leading-relaxed text-limeink">
         <span className="font-black">
           {kind === "overpayment"
             ? "Overpayment refund requested."

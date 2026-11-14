@@ -110,7 +110,7 @@ export default function AdminUsersDirectory({
                               }
                               className={`rounded-full px-2 py-0.5 font-bold ${
                                 row
-                                  ? "bg-lime/15 text-lime"
+                                  ? "bg-lime/15 text-limeink"
                                   : pendingRow
                                     ? "bg-amber-500/15 text-amber-300"
                                     : "bg-fg/10 text-fg/50"

@@ -32,13 +32,13 @@ export default async function Footer({ mode = null }: { mode?: UserMode | null }
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             {mode !== "brand" && (
               <>
-                <li><Link href="/campaigns" className="hover:text-lime">Campaigns</Link></li>
-                <li><Link href="/earnings" className="hover:text-lime">Earnings</Link></li>
+                <li><Link href="/campaigns" className="hover:text-limeink">Campaigns</Link></li>
+                <li><Link href="/earnings" className="hover:text-limeink">Earnings</Link></li>
               </>
             )}
-            <li><Link href="/how-it-works" className="hover:text-lime">How It Works</Link></li>
+            <li><Link href="/how-it-works" className="hover:text-limeink">How It Works</Link></li>
             {!user && (
-              <li><Link href="/signup" className="hover:text-lime">Sign up free</Link></li>
+              <li><Link href="/signup" className="hover:text-limeink">Sign up free</Link></li>
             )}
           </ul>
         </div>
@@ -46,19 +46,19 @@ export default async function Footer({ mode = null }: { mode?: UserMode | null }
           <p className="text-sm font-bold text-fg">Brands</p>
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
             {mode !== "creator" && (
-              <li><Link href="/brands" className="hover:text-lime">For Brands</Link></li>
+              <li><Link href="/brands" className="hover:text-limeink">For Brands</Link></li>
             )}
-            <li><Link href="/pricing" className="hover:text-lime">Pricing</Link></li>
-            <li><Link href="/support" className="hover:text-lime">Contact Support</Link></li>
+            <li><Link href="/pricing" className="hover:text-limeink">Pricing</Link></li>
+            <li><Link href="/support" className="hover:text-limeink">Contact Support</Link></li>
           </ul>
         </div>
         <div>
           <p className="text-sm font-bold text-fg">Legal</p>
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
-            <li><Link href="/terms" className="hover:text-lime">Terms of Service</Link></li>
-            <li><Link href="/rules" className="hover:text-lime">Rules</Link></li>
-            <li><Link href="/privacy" className="hover:text-lime">Privacy Policy</Link></li>
-            <li><Link href="/refund" className="hover:text-lime">Refund Policy</Link></li>
+            <li><Link href="/terms" className="hover:text-limeink">Terms of Service</Link></li>
+            <li><Link href="/rules" className="hover:text-limeink">Rules</Link></li>
+            <li><Link href="/privacy" className="hover:text-limeink">Privacy Policy</Link></li>
+            <li><Link href="/refund" className="hover:text-limeink">Refund Policy</Link></li>
           </ul>
         </div>
       </div>

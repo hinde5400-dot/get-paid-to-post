@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { getModeContext } from "@/lib/mode";
 import { getUserSubmissions } from "@/lib/data";
 import { getServerClient } from "@/lib/supabase/server";
 import MyPostsList, { type CampaignHistoryRow } from "@/components/MyPostsList";
@@ -60,6 +61,9 @@ async function getUserCampaignHistory(
 export default async function MyPostsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // Brand mode never sees creator posts — brands live in My Campaigns.
+  const { mode } = await getModeContext();
+  if (mode === "brand") redirect("/brand/campaigns");
 
   // Forms #26: a failed load renders an honest error state, never
   // the empty "no posts" state. getUserSubmissions THROWS on DB

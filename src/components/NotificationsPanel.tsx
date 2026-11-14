@@ -62,7 +62,7 @@ export default function NotificationsPanel({
             type="button"
             onClick={markAllRead}
             disabled={busy}
-            className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg transition hover:border-lime hover:text-lime disabled:opacity-50"
+            className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg transition hover:border-lime hover:text-limeink disabled:opacity-50"
           >
             {busy ? "Marking…" : "Mark all read"}
           </button>
@@ -88,7 +88,7 @@ export default function NotificationsPanel({
             {n.link && (
               <Link
                 href={n.link}
-                className="mt-2 inline-block text-sm font-bold text-lime underline underline-offset-2 hover:text-lime/80"
+                className="mt-2 inline-block text-sm font-bold text-limeink underline underline-offset-2 hover:text-limeink/80"
               >
                 View →
               </Link>

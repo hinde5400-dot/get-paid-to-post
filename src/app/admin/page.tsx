@@ -19,6 +19,8 @@ import AdminWithdrawalList, { type WithdrawalWithCreator } from "@/components/Ad
 import AdminSettingsForm from "@/components/AdminSettingsForm";
 import AdminTabs from "@/components/AdminTabs";
 import AdminUsersDirectory from "@/components/AdminUsersDirectory";
+import AdminNotesPanel from "@/components/AdminNotesPanel";
+import { getAdminNotes, getAdminReminders } from "@/lib/admin-notes";
 import MarkRefundSentButton from "@/components/MarkRefundSentButton";
 import { truncateTxId } from "@/lib/validate";
 
@@ -80,8 +82,8 @@ export default async function AdminPage({
   const userFilter = searchParams?.userFilter ?? "all";
   // Admin tabs (Turn's final spec): the active tab comes from
   // ?tab= (Review | Campaigns | Fraud | Brand Messages |
-  // Withdrawals | Creators | Recheck); an unknown value falls
-  // back to Review. Tab clicks do NOT reload — the shell only
+  // Withdrawals | Creators | Recheck | My Notes); an unknown value
+  // falls back to Review. Tab clicks do NOT reload — the shell only
   // syncs ?tab= via history.replaceState.
   const tab = searchParams?.tab ?? "review";
   // Review search + status filter (admin tabs): server-side, so
@@ -196,6 +198,20 @@ export default async function AdminPage({
   }
   if (loadError) {
     return <AdminLoadError />;
+  }
+
+  // Admin notes & reminders (migration 0051, Turn 2026-11-14):
+  // owner-only, best-effort like storage — a failed load must
+  // never break the admin page; the tab then shows "not set up
+  // yet". Loaded outside the main try for that reason.
+  let adminNotes: Awaited<ReturnType<typeof getAdminNotes>> = [];
+  let adminReminders: Awaited<ReturnType<typeof getAdminReminders>> = [];
+  try {
+    adminNotes = await getAdminNotes();
+    adminReminders = await getAdminReminders();
+  } catch {
+    adminNotes = [];
+    adminReminders = [];
   }
 
   // Storage usage (P2-A9c): best-effort only — a failure here
@@ -606,7 +622,7 @@ export default async function AdminPage({
   // actionable count — Review (pending submissions), Campaigns
   // (waiting for review), Fraud (creators in fraud watch),
   // Messages (unread), Withdrawals (pending), Creators (all
-  // users), Recheck (clips to re-check).
+  // users), Recheck (clips to re-check), My Notes (open reminders).
   const tabCounts = {
     review: statusCounts.pending,
     campaigns: pendingCampaigns.length,
@@ -615,7 +631,21 @@ export default async function AdminPage({
     withdrawals: pendingWithdrawals,
     creators: allUsers.length,
     recheck: recheckItems.length,
+    notes: adminReminders.filter((r) => !r.done).length,
   };
+
+  // Note targets (My Notes tab): campaigns (live + pending +
+  // rejected), brands and creators from the users directory.
+  // Labels are what Turn recognises — brand + title, email.
+  const noteCampaigns = [...cardCampaigns, ...rejectedCampaigns]
+    .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i)
+    .map((c) => ({ id: c.id, label: `${c.brand_name} — ${c.title}` }));
+  const noteBrands = allUsers
+    .filter((u) => u.role === "brand")
+    .map((u) => ({ id: u.id, label: u.email }));
+  const noteCreators = allUsers
+    .filter((u) => u.role === "creator")
+    .map((u) => ({ id: u.id, label: u.email }));
 
   // Review search/filter params the pagination links must keep
   // (admin tabs): tab=review + the active search/status, so
@@ -713,11 +743,12 @@ export default async function AdminPage({
         </div>
       </div>
 
-      {/* Admin tabs (Turn's final spec, 2026-11-13): ONE page,
-          seven tabs, no reload on switch. Payouts live inside
-          Withdrawals, Users inside Creators, the rejected-
-          campaign refund queue inside Campaigns, and Settings +
-          Storage behind the gear in the tab bar (not an 8th tab). */}
+      {/* Admin tabs (Turn's final spec, 2026-11-13 + My Notes,
+          2026-11-14): ONE page, eight tabs, no reload on switch.
+          Payouts live inside Withdrawals, Users inside Creators,
+          the rejected-campaign refund queue inside Campaigns, and
+          Settings + Storage behind the gear in the tab bar (not
+          a 9th tab). */}
       <AdminTabs
         defaultTab={tab}
         settings={
@@ -1317,6 +1348,39 @@ export default async function AdminPage({
                   ) : (
                     <AdminRecheckList submissions={recheckItems} />
                   )}
+                </div>
+              </section>
+            ),
+          },
+          {
+            id: "notes",
+            label: "My Notes",
+            count: tabCounts.notes,
+            content: (
+              <section>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="font-display text-xl font-black uppercase tracking-tight text-fg">
+                    My notes &amp; reminders
+                  </h2>
+                  <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-bold text-red-300">
+                    {tabCounts.notes} reminder
+                    {tabCounts.notes === 1 ? "" : "s"} open
+                  </span>
+                </div>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg/60">
+                  Private — only you see this tab. Your notes and
+                  flags on campaigns, brands and creators, plus your
+                  own reminders. None of it is shown to brands or
+                  creators anywhere on the site.
+                </p>
+                <div className="mt-4">
+                  <AdminNotesPanel
+                    notes={adminNotes}
+                    reminders={adminReminders}
+                    campaigns={noteCampaigns}
+                    brands={noteBrands}
+                    creators={noteCreators}
+                  />
                 </div>
               </section>
             ),

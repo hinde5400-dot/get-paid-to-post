@@ -29,8 +29,10 @@ export default async function BrandClipsPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const { brandCapable, isAdmin } = await getModeContext();
-  if (!brandCapable) redirect("/campaigns");
+  // Open to any signed-in user — see My Campaigns for why. The
+  // ownership check below still applies: only the owning brand
+  // (or the owner) may see these clips.
+  const { isAdmin } = await getModeContext();
 
   const campaign = await getCampaign(params.id);
   if (!campaign) redirect("/brand/campaigns");
@@ -86,7 +88,7 @@ export default async function BrandClipsPage({
       <div>
         <Link
           href="/brand/campaigns"
-          className="text-sm font-bold text-lime hover:underline"
+          className="text-sm font-bold text-limeink hover:underline"
         >
           ← My Campaigns
         </Link>
@@ -135,7 +137,7 @@ export default async function BrandClipsPage({
               key={s.id}
               className="flex flex-wrap items-center gap-4 rounded-2xl border border-fg/10 bg-card p-4"
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-lime">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime/15 font-display text-lg font-black text-limeink">
                 {s.platform === "tiktok"
                   ? "♪"
                   : s.platform === "instagram"
@@ -168,7 +170,7 @@ export default async function BrandClipsPage({
               <span
                 className={`rounded-full px-2.5 py-0.5 text-xs font-black ${
                   s.status === "approved"
-                    ? "bg-lime/15 text-lime"
+                    ? "bg-lime/15 text-limeink"
                     : s.status === "rejected"
                       ? "bg-red-500/15 text-red-300"
                       : "bg-yellow-500/15 text-yellow-300"
@@ -184,7 +186,7 @@ export default async function BrandClipsPage({
                 href={s.post_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg transition hover:border-lime hover:text-lime"
+                className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg transition hover:border-lime hover:text-limeink"
               >
                 Open clip ↗
               </a>

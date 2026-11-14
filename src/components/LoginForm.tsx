@@ -201,13 +201,13 @@ function LoginForm() {
         Log in to your Get Paid To Post account.
       </p>
       {!isSupabaseConfigured && (
-        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-lime">
+        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold text-limeink">
           Supabase is not configured yet — add NEXT_PUBLIC_SUPABASE_URL and
           NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local (see README).
         </p>
       )}
       {notice && (
-        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-lime">
+        <p className="mt-4 rounded-xl bg-lime/10 px-4 py-3 text-center text-sm font-semibold text-limeink">
           {notice}
         </p>
       )}
@@ -240,7 +240,7 @@ function LoginForm() {
         <div className="mt-3 text-right">
           <Link
             href="/forgot-password"
-            className="text-sm font-bold text-lime hover:underline"
+            className="text-sm font-bold text-limeink hover:underline"
           >
             Forgot Password?
           </Link>
@@ -268,7 +268,7 @@ function LoginForm() {
         )}
         <p className="mt-4 text-center text-sm text-fg/60">
           No account yet?{" "}
-          <Link href="/signup" className="font-bold text-lime hover:underline">
+          <Link href="/signup" className="font-bold text-limeink hover:underline">
             Sign up free
           </Link>
         </p>

@@ -116,7 +116,7 @@ export default function AdminCreatorsList({
                           }
                           className={`rounded-full px-2 py-0.5 font-bold ${
                             row
-                              ? "bg-lime/15 text-lime"
+                              ? "bg-lime/15 text-limeink"
                               : "bg-fg/10 text-fg/50"
                           }`}
                         >

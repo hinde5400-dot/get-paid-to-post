@@ -68,7 +68,7 @@ export function BrandPauseButton({
       type="button"
       onClick={() => void onClick()}
       disabled={busy}
-      className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg transition hover:border-lime hover:text-lime disabled:opacity-40"
+      className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg transition hover:border-lime hover:text-limeink disabled:opacity-40"
     >
       {isPaused ? "Resume Campaign" : "Pause Campaign"}
     </button>

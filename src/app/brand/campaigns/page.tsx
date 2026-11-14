@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getModeContext } from "@/lib/mode";
 import {
   campaignStatus,
   getBrandCampaigns,
@@ -49,7 +48,7 @@ function statusChip(c: Campaign): { label: string; cls: string } {
   if (campaignStatus(c) === "live") {
     if (c.is_paused)
       return { label: "Paused", cls: "bg-yellow-500/15 text-yellow-300" };
-    return { label: "Live", cls: "bg-lime/15 text-lime" };
+    return { label: "Live", cls: "bg-lime/15 text-limeink" };
   }
   if (c.status === "pending") {
     if (isExpiredUnpaidPending(c))
@@ -68,10 +67,11 @@ export default async function BrandCampaignsPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  // Brand pages are for brand-capable accounts only — a
-  // creator-only account typing the URL goes to Discover.
-  const { brandCapable } = await getModeContext();
-  if (!brandCapable) redirect("/campaigns");
+  // Brand pages are open to ANY signed-in user (Turn 2026-11-14:
+  // the mode switch works both ways, one click). A creator who
+  // switches to brand mode sees their own campaigns — an empty
+  // list with a Launch button when they have none — never
+  // another brand's campaigns (getBrandCampaigns filters by owner).
 
   const tab: BrandTab =
     searchParams?.tab === "pending" || searchParams?.tab === "ended"
@@ -144,7 +144,7 @@ export default async function BrandCampaignsPage({
             className={`rounded-full px-5 py-2.5 text-sm font-bold transition ${
               tab === t.key
                 ? "bg-lime text-black"
-                : "border border-fg/20 text-fg hover:border-lime hover:text-lime"
+                : "border border-fg/20 text-fg hover:border-lime hover:text-limeink"
             }`}
           >
             {t.label} ({counts[t.key]})
@@ -261,7 +261,7 @@ function BrandCampaignCard({
           {tab === "ended" && (
             <Link
               href={`/brand/campaigns/${c.id}/clips`}
-              className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-lime"
+              className="rounded-full border border-fg/20 px-4 py-2 text-xs font-bold text-fg hover:border-lime hover:text-limeink"
             >
               View Clips
             </Link>
@@ -295,7 +295,7 @@ function BrandCampaignCard({
         </div>
       )}
       {isLive && !c.is_paused && (
-        <div className="mt-4 rounded-xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm leading-relaxed text-lime">
+        <div className="mt-4 rounded-xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm leading-relaxed text-limeink">
           <span className="font-black">Live.</span> Creators can now
           submit clips for this campaign.
         </div>
@@ -314,7 +314,7 @@ function BrandCampaignCard({
           {paymentSubmitted && (
             <Link
               href={`/brands/payment/${c.id}`}
-              className="font-bold text-lime hover:underline"
+              className="font-bold text-limeink hover:underline"
             >
               View payment / request a refund →
             </Link>
@@ -375,14 +375,14 @@ function BrandCampaignCard({
         <div className="mt-4 flex flex-wrap gap-4 text-sm font-bold">
           <Link
             href={`/brands/payment/${c.id}#brand-chat`}
-            className="text-lime hover:underline"
+            className="text-limeink hover:underline"
           >
             Chat with admin →
           </Link>
           {c.status === "pending" && (
             <Link
               href={`/brands/payment/${c.id}#edit-campaign`}
-              className="text-fg/70 hover:text-lime"
+              className="text-fg/70 hover:text-limeink"
             >
               Edit details →
             </Link>

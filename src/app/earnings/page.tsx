@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { getModeContext } from "@/lib/mode";
 import { getWallet, getWithdrawals, getUserSubmissions } from "@/lib/data";
 import WithdrawButton from "@/components/WithdrawButton";
 import { formatUSD } from "@/lib/money";
@@ -16,13 +17,16 @@ export const metadata: Metadata = {
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-300",
   approved: "bg-sky-500/15 text-sky-300",
-  paid: "bg-lime/15 text-lime",
+  paid: "bg-lime/15 text-limeink",
   rejected: "bg-red-500/15 text-red-300",
 };
 
 export default async function EarningsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // Brand mode never sees creator earnings — brands live in My Campaigns.
+  const { mode } = await getModeContext();
+  if (mode === "brand") redirect("/brand/campaigns");
   const wallet = await getWallet(user.id);
   // Forms #26: getWithdrawals THROWS on DB error — a failed load
   // renders an honest error state, never an empty "no withdrawals"
@@ -91,7 +95,7 @@ export default async function EarningsPage() {
           Approved earnings sit in a {HOLD_HOURS}-hour hold, then become
           available to withdraw. Payouts are USDT only.
         </p>
-        <p className="mt-2 max-w-2xl rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-lime">
+        <p className="mt-2 max-w-2xl rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-limeink">
           Approved earnings go into a 72-hour hold as soon as they are approved, then become Withdrawable. You can withdraw anytime when Withdrawable is $15 or more.
         </p>
       </div>
@@ -115,7 +119,7 @@ export default async function EarningsPage() {
         </div>
         <div className="rounded-2xl border border-fg/10 bg-card p-5">
           <p className="text-xs text-fg/50">Withdrawable Balance</p>
-          <p className="mt-1 text-3xl font-black text-lime">
+          <p className="mt-1 text-3xl font-black text-limeink">
             {formatUSD(available)}
           </p>
           <div className="mt-4">
@@ -141,7 +145,7 @@ export default async function EarningsPage() {
           paused while flagged and excluded from the release schedule:
           it will not become withdrawable until the admin resolves the
           flag. The totals above are unchanged.{" "}
-          <Link href="/my-posts" className="font-bold text-lime underline">
+          <Link href="/my-posts" className="font-bold text-limeink underline">
             See the flagged clips on My Posts →
           </Link>
         </p>
@@ -216,7 +220,7 @@ export default async function EarningsPage() {
           </div>
         )}
         <p className="mt-4 text-sm">
-          <Link href="/my-posts" className="font-bold text-lime hover:underline">
+          <Link href="/my-posts" className="font-bold text-limeink hover:underline">
             View My Posts →
           </Link>
         </p>

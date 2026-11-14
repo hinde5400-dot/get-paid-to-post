@@ -99,7 +99,7 @@ export default async function HowItWorksPage() {
       <div className="text-center">
         <Link
           href="/rules"
-          className="text-sm font-bold text-lime hover:underline"
+          className="text-sm font-bold text-limeink hover:underline"
         >
           Read the full rules →
         </Link>

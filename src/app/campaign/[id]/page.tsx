@@ -108,6 +108,18 @@ export default async function CampaignDetailPage({
   const live = isCampaignLive(campaign);
   const settling = isCampaignSettling(campaign);
   const isBrandOwner = user !== null && campaign.user_id === user.id;
+  // Visibility (wizard, migration 0050): a Private campaign, or
+  // one with Discover switched off, is hidden from everyone except
+  // its owning brand and the site owner — even while live.
+  if (live && !settling) {
+    const hidden =
+      campaign.visibility === "private" ||
+      campaign.show_on_discover === false;
+    if (hidden) {
+      const profile = user ? await getProfile(user.id) : null;
+      if (!isOwner(profile) && !isBrandOwner) notFound();
+    }
+  }
   if (!live && !settling) {
     const profile = user ? await getProfile(user.id) : null;
     // The site owner can preview any campaign; the brand that owns
@@ -242,7 +254,7 @@ export default async function CampaignDetailPage({
     <div className="space-y-6 pb-20 md:pb-16">
       <Link
         href="/campaigns"
-        className="text-sm font-bold text-lime hover:underline"
+        className="text-sm font-bold text-limeink hover:underline"
       >
         ← Back to campaigns
       </Link>
@@ -346,7 +358,7 @@ export default async function CampaignDetailPage({
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-2xl bg-fg/5 p-4">
               <p className="text-xs text-fg/50">Earn up to</p>
-              <p className="mt-1 text-2xl font-black text-lime">
+              <p className="mt-1 text-2xl font-black text-limeink">
                 {formatUSD(campaign.max_payout_per_post)}
                 <span className="text-sm font-semibold text-fg/60"> / post</span>
               </p>
@@ -392,7 +404,7 @@ export default async function CampaignDetailPage({
                   👥 {stats.members} creator{stats.members === 1 ? "" : "s"}
                 </span>
               )}
-              <span className="font-bold text-lime">
+              <span className="font-bold text-limeink">
                 {settling
                   ? "Campaign Review — payouts in progress"
                   : timeLeft
@@ -436,7 +448,7 @@ export default async function CampaignDetailPage({
                       href={campaign.brief_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm font-bold text-lime hover:underline"
+                      className="text-sm font-bold text-limeink hover:underline"
                     >
                       Open the campaign brief (Google Drive) ↗
                     </a>
@@ -591,7 +603,7 @@ export default async function CampaignDetailPage({
                   href={campaign.brief_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm font-bold text-lime hover:underline"
+                  className="text-sm font-bold text-limeink hover:underline"
                 >
                   Open the campaign brief (Google Drive) ↗
                 </a>

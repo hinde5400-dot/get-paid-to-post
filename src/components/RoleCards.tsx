@@ -34,7 +34,7 @@ export default function RoleCards() {
       </Link>
       <Link
         href="/signup?role=brand"
-        className="block rounded-3xl border border-fg/10 bg-card p-6 text-left transition hover:border-red-400"
+        className="block rounded-3xl border border-fg/10 bg-card p-6 text-left transition hover:border-fg/30"
       >
         <p className="text-3xl" aria-hidden>
           🏢
@@ -45,7 +45,7 @@ export default function RoleCards() {
         <p className="mt-1 text-sm leading-relaxed text-fg/60">
           Launch a campaign, get real creators posting your clips.
         </p>
-        <span className="mt-4 inline-block rounded-full bg-red-500 px-5 py-2.5 text-sm font-black text-white transition hover:bg-red-600">
+        <span className="mt-4 inline-block rounded-full bg-neutral-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-neutral-500">
           Launch Campaign
         </span>
       </Link>

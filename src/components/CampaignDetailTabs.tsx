@@ -135,7 +135,7 @@ export default function CampaignDetailTabs({
                       rel="noreferrer"
                       className="flex items-center gap-3 rounded-2xl bg-fg/5 p-4 transition hover:bg-fg/10"
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lime/15 text-lime">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lime/15 text-limeink">
                         <site.Icon className="h-5 w-5" />
                       </span>
                       <span>
@@ -182,7 +182,7 @@ export default function CampaignDetailTabs({
                           <span
                             className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
                               clip.status === "approved"
-                                ? "bg-lime/15 text-lime"
+                                ? "bg-lime/15 text-limeink"
                                 : clip.status === "rejected"
                                   ? "bg-fg/10 text-fg/50"
                                   : "bg-amber-500/15 text-amber-300"
@@ -194,7 +194,7 @@ export default function CampaignDetailTabs({
                             href={clip.post_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="ml-auto text-xs font-bold text-lime underline"
+                            className="ml-auto text-xs font-bold text-limeink underline"
                           >
                             Open clip ↗
                           </a>
@@ -234,7 +234,7 @@ export default function CampaignDetailTabs({
             </div>
             <Link
               href="/support"
-              className="mt-4 inline-block text-sm font-bold text-lime hover:underline"
+              className="mt-4 inline-block text-sm font-bold text-limeink hover:underline"
             >
               Contact Support →
             </Link>

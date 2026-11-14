@@ -193,13 +193,13 @@ export default function MyPostsList({
               )}
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-lime">
+                  <p className="text-xs font-bold uppercase tracking-wider text-limeink">
                     {PLATFORM_LABELS[s.platform]}
                   </p>
                   <h3 className="mt-1 font-bold text-fg">
                     <Link
                       href={`/campaign/${s.campaign_id}`}
-                      className="hover:text-lime hover:underline"
+                      className="hover:text-limeink hover:underline"
                     >
                       {s.campaign_title ?? "Campaign"}
                     </Link>
@@ -238,7 +238,7 @@ export default function MyPostsList({
                     href={DISCORD_URL}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-bold text-lime underline"
+                    className="font-bold text-limeink underline"
                   >
                     Discord support
                   </a>{" "}
@@ -283,7 +283,7 @@ export default function MyPostsList({
                   <p className="text-xs text-fg/50">Comments</p>
                 </div>
                 <div className="rounded-xl bg-fg/5 py-2">
-                  <p className="text-lg font-black text-lime">
+                  <p className="text-lg font-black text-limeink">
                     {formatUSD(s.earnings)}
                   </p>
                   <p className="text-xs text-fg/50">Earned</p>
@@ -309,7 +309,7 @@ export default function MyPostsList({
                     <p
                       className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold leading-relaxed ${
                         ok
-                          ? "bg-lime/10 text-lime"
+                          ? "bg-lime/10 text-limeink"
                           : "bg-red-500/15 text-red-300"
                       }`}
                     >
@@ -425,7 +425,7 @@ export default function MyPostsList({
                 </span>
                 <button
                   onClick={() => copyId(s.submission_code || s.id)}
-                  className="rounded-full border border-fg/20 px-3 py-1 font-bold text-fg transition hover:border-lime hover:text-lime"
+                  className="rounded-full border border-fg/20 px-3 py-1 font-bold text-fg transition hover:border-lime hover:text-limeink"
                 >
                   {copied === (s.submission_code || s.id)
                     ? "Copied ✓"
@@ -497,7 +497,7 @@ export default function MyPostsList({
                         </div>
                       )}
                     </div>
-                    <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-lime">
+                    <span className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-limeink">
                       {h.status === "ended"
                         ? "Ended"
                         : h.status === "completed"
@@ -519,7 +519,7 @@ export default function MyPostsList({
                       <p className="text-xs text-fg/50">Views</p>
                     </div>
                     <div className="rounded-xl bg-fg/5 py-2">
-                      <p className="text-lg font-black text-lime">
+                      <p className="text-lg font-black text-limeink">
                         {formatUSD(h.total_earned)}
                       </p>
                       <p className="text-xs text-fg/50">Earned</p>

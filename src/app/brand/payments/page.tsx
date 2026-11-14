@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getModeContext } from "@/lib/mode";
 import {
   getBrandCampaigns,
   getCampaignBudgetHistory,
@@ -33,8 +32,8 @@ export const metadata: Metadata = {
 export default async function BrandPaymentsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const { brandCapable } = await getModeContext();
-  if (!brandCapable) redirect("/campaigns");
+  // Open to any signed-in user — see My Campaigns for why: a
+  // creator in brand mode sees only their own (empty) payments.
 
   let campaigns: Campaign[] = [];
   let loadError = false;
@@ -167,7 +166,7 @@ export default async function BrandPaymentsPage() {
                     <span
                       className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-black ${
                         verified
-                          ? "bg-lime/15 text-lime"
+                          ? "bg-lime/15 text-limeink"
                           : "bg-yellow-500/15 text-yellow-300"
                       }`}
                     >
@@ -180,13 +179,13 @@ export default async function BrandPaymentsPage() {
                     href={`https://tronscan.org/#/transaction/${c.payment_tx_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-bold text-lime hover:underline"
+                    className="font-bold text-limeink hover:underline"
                   >
                     TxID: {truncateTxId(c.payment_tx_id ?? "")} ↗
                   </a>
                   <Link
                     href={`/brands/payment/${c.id}`}
-                    className="font-bold text-fg/70 hover:text-lime"
+                    className="font-bold text-fg/70 hover:text-limeink"
                   >
                     View payment →
                   </Link>

@@ -31,10 +31,15 @@ const PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
  * 0012) with the legacy platform column kept in sync: "all" when
  * all three are chosen, otherwise the first chosen. `min_views`
  * (site-wide floor of 1,000 views per clip — missing means 1,000,
- * below 1,000 is rejected) and the REQUIRED Google Drive link
- * (`brief_url`, item 6) are brand-set. There is NO per-creator
- * payout cap (item 4): the `max_payout_per_creator` column is left
- * unused, never written.
+ * below 1,000 is rejected) and the reference materials (step 4):
+ * at least one reference link OR a Google Drive folder link
+ * (`brief_url`) are brand-set. There is NO per-creator payout cap
+ * (item 4): the `max_payout_per_creator` column is left unused,
+ * never written. Wizard fields (migration 0050: goal, features,
+ * types, brief_lines, link-in-bio, required sounds,
+ * reference_links, visibility, show_on_discover, access_type) are
+ * validated allow-list style and stored on the row; status stays
+ * 'pending'.
  */
 export async function POST(request: Request) {
   const supabase = getServerClient();
@@ -104,6 +109,20 @@ export async function POST(request: Request) {
     briefUrl?: string | null;
     thumbnailUrl?: string | null;
     durationDays?: number | null;
+    /** Brand wizard (migration 0050). */
+    goal?: string;
+    features?: string[];
+    types?: string[];
+    /** Step 5 brief lines (one rule per line); falls back to `requirements`. */
+    briefLines?: string[];
+    requireLinkInBio?: boolean;
+    requiredSoundTiktok?: string | null;
+    requiredSoundInstagram?: string | null;
+    referenceLinks?: string[];
+    visibility?: string;
+    showOnDiscover?: boolean;
+    accessType?: string;
+    minPayout?: number | string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -119,7 +138,17 @@ export async function POST(request: Request) {
   const brandName = String(body.brandName ?? "").trim();
   const title = String(body.title ?? "").trim();
   const description = String(body.description ?? "").trim();
-  const requirements = String(body.requirements ?? "").trim();
+  // Step 5 brief: one rule per line. The wizard sends `briefLines`
+  // (string[]); older clients send `requirements` text — either
+  // way the lines are stored in `brief_lines` and joined into the
+  // legacy `rules` column. At least one non-empty rule is required.
+  const briefLines = Array.isArray(body.briefLines)
+    ? body.briefLines.map((l) => String(l).trim()).filter(Boolean)
+    : String(body.requirements ?? "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+  const requirements = briefLines.join("\n");
   if (!brandName) {
     return NextResponse.json(
       { error: "This field is required: Brand name." },
@@ -360,6 +389,122 @@ export async function POST(request: Request) {
   // The Google Drive link (item 6) is REQUIRED — and it must be a
   // Drive FOLDER link (drive.google.com/drive/folders/…): a single
   // file or video link is rejected (friend's brand test, 2026-11-11).
+  // Brand wizard fields (migration 0050) — validated here, stored
+  // in the insert below. Goal is exactly one of the four wizard
+  // options when sent; features/types are allow-listed; visibility
+  // is public/private; access is open/application.
+  const GOALS = ["Brand awareness", "Drive sales", "UGC library", "Grow a community"] as const;
+  const FEATURES = ["Campaigns", "Creators", "Payouts", "Analytics", "Submissions", "Discover", "Retainers", "Drafts"] as const;
+  const TYPES = ["Clipping", "UGC (With Face)"] as const;
+  const goal = String(body.goal ?? "").trim();
+  if (goal && !(GOALS as readonly string[]).includes(goal)) {
+    return NextResponse.json(
+      { error: `Error: Goal must be one of ${GOALS.join(", ")}.` },
+      { status: 400 }
+    );
+  }
+  const features = Array.isArray(body.features)
+    ? [...new Set(body.features.map((f) => String(f).trim()))].filter((f) =>
+        (FEATURES as readonly string[]).includes(f)
+      )
+    : [];
+  if (Array.isArray(body.features) && features.length !== body.features.length) {
+    return NextResponse.json(
+      { error: `Error: Features must be chosen from ${FEATURES.join(", ")}.` },
+      { status: 400 }
+    );
+  }
+  const types = Array.isArray(body.types)
+    ? [...new Set(body.types.map((t) => String(t).trim()))].filter((t) =>
+        (TYPES as readonly string[]).includes(t)
+      )
+    : [];
+  if (types.length === 0) {
+    return NextResponse.json(
+      { error: "Select at least one campaign type — Clipping or UGC (With Face)." },
+      { status: 400 }
+    );
+  }
+  const visibility = String(body.visibility ?? "public").trim();
+  if (!["public", "private"].includes(visibility)) {
+    return NextResponse.json(
+      { error: "Error: Visibility must be Public or Private." },
+      { status: 400 }
+    );
+  }
+  const accessType = String(body.accessType ?? "open").trim();
+  if (!["open", "application"].includes(accessType)) {
+    return NextResponse.json(
+      { error: "Error: Access must be Open to public or Application only." },
+      { status: 400 }
+    );
+  }
+  const showOnDiscover = body.showOnDiscover !== false;
+  const requireLinkInBio = body.requireLinkInBio === true;
+  const soundTiktok = String(body.requiredSoundTiktok ?? "").trim();
+  const soundInstagram = String(body.requiredSoundInstagram ?? "").trim();
+  for (const [label, url] of [
+    ["TikTok sound link", soundTiktok],
+    ["Instagram Reel link", soundInstagram],
+  ] as const) {
+    if (url && !/^https?:\/\/.+\..+/.test(url)) {
+      return NextResponse.json(
+        { error: `Error: ${label} must be a valid link starting with http:// or https://.` },
+        { status: 400 }
+      );
+    }
+    if (url.length > 2000) {
+      return NextResponse.json(
+        { error: `Error: ${label} is too long.` },
+        { status: 400 }
+      );
+    }
+  }
+  // Min payout per post (step 6 pricing): blank = the $1 column
+  // default; a filled value must be $0–$200 and never above the
+  // max payout per post.
+  const minPayoutRaw = body.minPayout;
+  const minPayout =
+    minPayoutRaw === null || minPayoutRaw === undefined || minPayoutRaw === ""
+      ? null
+      : Number(minPayoutRaw);
+  if (
+    minPayout !== null &&
+    (!Number.isFinite(minPayout) || minPayout < 0 || minPayout > MAX_PAYOUT_MAX)
+  ) {
+    return NextResponse.json(
+      { error: `Error: Min payout must be between $0 and $${MAX_PAYOUT_MAX}` },
+      { status: 400 }
+    );
+  }
+  if (minPayout !== null && minPayout > cap) {
+    return NextResponse.json(
+      { error: "Error: Min payout cannot be more than Max payout per post." },
+      { status: 400 }
+    );
+  }
+  // Reference materials (step 4): at least one reference link OR
+  // a Google Drive folder link. The old form required the Drive
+  // folder alone; the wizard accepts Docs / Drive / Notion links
+  // instead — a Drive folder, when given, must still be a folder
+  // link (drive.google.com/drive/folders/…).
+  const referenceLinks = Array.isArray(body.referenceLinks)
+    ? [...new Set(body.referenceLinks.map((l) => String(l).trim()))].filter(Boolean)
+    : [];
+  if (referenceLinks.length > 10) {
+    return NextResponse.json(
+      { error: "Error: Add at most 10 reference links." },
+      { status: 400 }
+    );
+  }
+  for (const link of referenceLinks) {
+    if (!/^https?:\/\/.+\..+/.test(link) || link.length > 2000) {
+      return NextResponse.json(
+        { error: "Error: Every reference link must be a valid link starting with http:// or https://." },
+        { status: 400 }
+      );
+    }
+  }
   const briefUrl = String(body.briefUrl ?? "").trim();
   const logoUrl = String(body.logoUrl ?? "").trim();
   const thumbnailUrl = String(body.thumbnailUrl ?? "").trim();
@@ -367,13 +512,13 @@ export async function POST(request: Request) {
     body.durationDays === null || body.durationDays === undefined
       ? null
       : Number(body.durationDays);
-  if (!briefUrl) {
+  if (!briefUrl && referenceLinks.length === 0) {
     return NextResponse.json(
-      { error: "This field is required: Google Drive Link." },
+      { error: "Add at least one reference link, or a Google Drive folder link." },
       { status: 400 }
     );
   }
-  if (!isDriveFolderUrl(briefUrl)) {
+  if (briefUrl && !isDriveFolderUrl(briefUrl)) {
     return NextResponse.json(
       { error: `Error: ${DRIVE_FOLDER_ERROR}` },
       { status: 400 }
@@ -491,6 +636,23 @@ export async function POST(request: Request) {
   if (briefUrl) insertRow.brief_url = briefUrl;
   insertRow.thumbnail_url = thumbnailUrl;
   if (durationDays !== null) insertRow.duration_days = durationDays;
+  if (minPayout !== null) insertRow.min_payout = minPayout;
+  // Brand wizard (migration 0050): goal, features, types, brief
+  // lines, link-in-bio, required sounds, reference links,
+  // visibility / Discover / access. Status stays 'pending' and
+  // is_funded stays false — nothing goes live until the owner
+  // verifies funding in his wallet.
+  if (goal) insertRow.goal = goal;
+  insertRow.features = features;
+  insertRow.types = types;
+  insertRow.brief_lines = briefLines;
+  insertRow.require_link_in_bio = requireLinkInBio;
+  if (soundTiktok) insertRow.required_sound_tiktok = soundTiktok;
+  if (soundInstagram) insertRow.required_sound_instagram = soundInstagram;
+  insertRow.reference_links = referenceLinks;
+  insertRow.visibility = visibility;
+  insertRow.show_on_discover = showOnDiscover;
+  insertRow.access_type = accessType;
 
   // Round-4 P2-B8: warn when the brand already has an unpaid
   // pending campaign — the response names it (id + title) so the
