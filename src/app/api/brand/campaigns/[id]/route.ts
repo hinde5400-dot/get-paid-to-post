@@ -83,15 +83,28 @@ export async function DELETE(
     );
   }
 
-  const { error: deleteError } = await supabase
+  // Verify the row is actually gone: without a matching DELETE
+  // policy this call succeeds with 0 rows affected (RLS silently
+  // denies it) — never report success unless a row was deleted.
+  const { data: deleted, error: deleteError } = await supabase
     .from("campaigns")
     .delete()
     .eq("id", campaignId)
     .eq("user_id", auth.user.id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id");
   if (deleteError) {
     return NextResponse.json(
       { error: deleteError.message },
+      { status: 500 }
+    );
+  }
+  if (!deleted || deleted.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Could not delete the campaign — please try again or contact support.",
+      },
       { status: 500 }
     );
   }
