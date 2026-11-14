@@ -9,7 +9,6 @@ import {
   MAX_PAYOUT_MIN,
 } from "@/lib/constants";
 import { platformFeeFor, totalToSend } from "@/lib/money";
-import { DRIVE_FOLDER_ERROR, isDriveFolderUrl } from "@/lib/validate";
 import type { Platform } from "@/lib/types";
 import { CAMPAIGN_CATEGORIES, isCampaignCategory } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -37,7 +36,7 @@ import {
  * 4 Details — campaign name, description (300 chars), types
  *   (Clipping, UGC (With Face)), category, thumbnail 16:9 file
  *   upload (REQUIRED), reference links (Docs / Drive / Notion —
- *   at least one link OR a Drive folder link), logo file upload
+ *   at least one link), logo file upload
  *   (REQUIRED, as before).
  * 5 Requirements — brief, one rule per line; link-in-bio toggle;
  *   required sound — TikTok sound URL + Instagram Reel URL
@@ -139,7 +138,11 @@ export default function BrandWizard({
   const [types, setTypes] = useState<string[]>([]);
   const [category, setCategory] = useState<string>("UGC");
   const [referenceLinks, setReferenceLinks] = useState("");
-  const [driveUrl, setDriveUrl] = useState("");
+  // Links (Step 4) — Content-Rewards-style "Add links": tap the
+  // button, paste a link, tap Add. A Drive link is just one kind of
+  // link — there is no separate Drive field any more.
+  const [linkInput, setLinkInput] = useState("");
+  const [showLinkInput, setShowLinkInput] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
@@ -208,6 +211,43 @@ export default function BrandWizard({
     });
   }
 
+  // Links (Step 4) — add one pasted link at a time; links are
+  // stored one per line in `referenceLinks` (the payload shape is
+  // unchanged — POST /api/campaigns takes referenceLinks[]).
+  function addLink() {
+    const link = linkInput.trim();
+    if (!link) {
+      fail("referenceLinks", "Paste a link first, then tap Add.");
+      return;
+    }
+    if (!isHttpUrl(link)) {
+      fail("referenceLinks", "Link must start with http:// or https://");
+      return;
+    }
+    const links = linesOf(referenceLinks);
+    if (links.includes(link)) {
+      fail("referenceLinks", "This link is already added.");
+      return;
+    }
+    if (links.length >= 10) {
+      fail("referenceLinks", "Add at most 10 reference links");
+      return;
+    }
+    setReferenceLinks([...links, link].join("\n"));
+    setLinkInput("");
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next.referenceLinks;
+      return next;
+    });
+  }
+
+  function removeLink(link: string) {
+    setReferenceLinks(
+      linesOf(referenceLinks).filter((l) => l !== link).join("\n")
+    );
+  }
+
   // Per-step validation. Returns true when the step is good to
   // leave; on failure it shows the error and highlights the field.
   function validateStep(s: number): boolean {
@@ -265,6 +305,13 @@ export default function BrandWizard({
         return false;
       }
       const links = linesOf(referenceLinks);
+      if (links.length === 0) {
+        fail(
+          "referenceLinks",
+          "Add at least one link — Google Docs, Drive, YouTube, Spotify, TikTok, Notion, or any link for creators to reference"
+        );
+        return false;
+      }
       if (links.length > 10) {
         fail("referenceLinks", "Add at most 10 reference links");
         return false;
@@ -274,14 +321,6 @@ export default function BrandWizard({
           fail("referenceLinks", `Reference link must start with http:// or https:// — "${link.slice(0, 60)}"`);
           return false;
         }
-      }
-      if (driveUrl.trim() && !isDriveFolderUrl(driveUrl)) {
-        fail("driveUrl", DRIVE_FOLDER_ERROR);
-        return false;
-      }
-      if (links.length === 0 && !driveUrl.trim()) {
-        fail("referenceLinks", "Add at least one reference link, or a Google Drive folder link");
-        return false;
       }
       if (!logoFile) {
         fail("logoUrl", "Brand Logo is required — upload your logo image.");
@@ -476,7 +515,7 @@ export default function BrandWizard({
     if (m.includes("minimum views")) return "minViews";
     if (m.includes("rate")) return "rate";
     if (m.includes("budget")) return "budget";
-    if (m.includes("reference link") || m.includes("google drive")) return "referenceLinks";
+    if (m.includes("reference link")) return "referenceLinks";
     if (m.includes("thumbnail")) return "thumbnailUrl";
     if (m.includes("goal")) return "goal";
     return null;
@@ -534,7 +573,6 @@ export default function BrandWizard({
           description: description.trim(),
           requirements: briefLines.join("\n"),
           briefLines,
-          briefUrl: driveUrl.trim() || null,
           referenceLinks: linesOf(referenceLinks),
           thumbnailUrl,
           durationDays: durationDays === "" ? null : Number(durationDays),
@@ -839,42 +877,89 @@ export default function BrandWizard({
           <span className={helpCls}>Creators browse campaigns by category.</span>
           {fieldErrors.category && <span className={errCls}>{fieldErrors.category}</span>}
         </label>
-        <label id="field-referenceLinks" className={labelCls}>
-          Reference materials *
+        <div id="field-referenceLinks" className={labelCls}>
+          Links *
           <span className={helpCls}>
-            One link per line — Google Docs, Drive, Notion, or any
-            page with your assets and examples. At least one link, or
-            a Drive folder link below.
+            Add links (Google Docs, Drive, YouTube, Spotify, TikTok,
+            Notion, or any link) for creators to reference. At least
+            one link is required — a Drive link on its own is not
+            needed, any link works.
           </span>
-          <textarea
-            rows={3}
-            value={referenceLinks}
-            onChange={(e) => setReferenceLinks(e.target.value)}
-            placeholder={"https://docs.google.com/...\nhttps://drive.google.com/drive/folders/..."}
-            inputMode="url"
-            className={`${inputCls} resize-none`}
-          />
+          <div className="mt-2 grid gap-2">
+            {referenceLines.map((link) => (
+              <div
+                key={link}
+                className="flex items-center gap-2 rounded-xl border border-fg/15 bg-fg/5 px-3 py-2"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+                  {link}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeLink(link)}
+                  disabled={busy}
+                  aria-label={`Remove ${link}`}
+                  className="shrink-0 rounded-full border border-fg/20 px-2 py-1 text-xs font-bold text-fg/70 hover:text-fg disabled:opacity-40"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {showLinkInput ? (
+              <div className="flex gap-2">
+                <input
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addLink();
+                    }
+                  }}
+                  placeholder="https:// — paste a link, then tap Add"
+                  inputMode="url"
+                  className={`${inputCls} min-w-0 flex-1`}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={addLink}
+                  disabled={busy}
+                  className="shrink-0 rounded-full bg-lime px-4 py-2 text-sm font-bold text-black transition hover:opacity-90 disabled:opacity-40"
+                >
+                  Add
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowLinkInput(true)}
+                disabled={busy}
+                className="flex items-center gap-3 rounded-xl border border-fg/15 bg-fg/5 px-4 py-3 text-left transition hover:border-fg/30 disabled:opacity-40"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fg/10 text-base font-black text-fg">
+                  🔗
+                </span>
+                <span>
+                  <span className="block text-sm font-bold text-fg">
+                    Add links
+                  </span>
+                  <span className="block text-xs font-medium text-fg/50">
+                    Google Docs, Drive, Notion, and other links
+                  </span>
+                </span>
+              </button>
+            )}
+            <span className="text-xs font-medium text-fg/50">
+              {referenceLines.length > 0
+                ? `${referenceLines.length} link${referenceLines.length === 1 ? "" : "s"} added`
+                : "No links yet — add at least one."}
+            </span>
+          </div>
           {fieldErrors.referenceLinks && (
             <span className={errCls}>{fieldErrors.referenceLinks}</span>
           )}
-        </label>
-        <label id="field-driveUrl" className={labelCls}>
-          Google Drive folder link{" "}
-          <span className="font-medium text-fg/50">(or one reference link above)</span>
-          <span className={helpCls}>
-            Your Drive FOLDER with videos, logos and assets
-            (drive.google.com/drive/folders/…). A single file or
-            video link is not accepted.
-          </span>
-          <input
-            value={driveUrl}
-            onChange={(e) => setDriveUrl(e.target.value)}
-            placeholder="https://drive.google.com/drive/folders/..."
-            inputMode="url"
-            className={inputCls}
-          />
-          {fieldErrors.driveUrl && <span className={errCls}>{fieldErrors.driveUrl}</span>}
-        </label>
+        </div>
         <ImageUploadField
           fieldId="field-logoUrl"
           label="Brand Logo"
@@ -1219,7 +1304,7 @@ export default function BrandWizard({
             ["Platforms", platforms.map(platformName).join(", ")],
             ["Rules", `${briefLines.length} rule${briefLines.length === 1 ? "" : "s"}`],
             ["Link in bio", requireLinkInBio ? "Yes — creators add your link" : "No"],
-            ["Reference links", `${referenceLines.length} link${referenceLines.length === 1 ? "" : "s"}${driveUrl.trim() ? " + Drive folder" : ""}`],
+            ["Reference links", `${referenceLines.length} link${referenceLines.length === 1 ? "" : "s"}`],
           ] as const
         ).map(([label, value]) => (
           <div
