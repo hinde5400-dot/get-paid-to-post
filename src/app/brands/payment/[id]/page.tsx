@@ -138,6 +138,7 @@ export default async function BrandPaymentPage({
   // when the sender's wallet or exchange takes the network fee
   // out of the USDT sent. Refund/budget math elsewhere keeps
   // using totalToSend (budget + fee, no network fee).
+  const platformFee = platformFeeFor(campaign.budget_total);
   const totalDueWithNetworkFee =
     totalToSendWithNetworkFee(campaign.budget_total);
   // Expiry clock (P1-B1): the same clock as
