@@ -92,8 +92,7 @@ export default async function EarningsPage() {
       <div>
         <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Earnings</h1>
         <p className="mt-2 text-sm text-fg/60">
-          Approved earnings sit in a {HOLD_HOURS}-hour hold, then become
-          available to withdraw. Payouts are USDT only.
+          {`Approved earnings sit in a ${HOLD_HOURS}-hour hold, then become available to withdraw. Payouts are USDT only.`}
         </p>
         <p className="mt-2 max-w-2xl rounded-xl bg-lime/10 px-4 py-3 text-sm font-semibold leading-relaxed text-limeink">
           Approved earnings go into a 72-hour hold as soon as they are approved, then become Withdrawable. You can withdraw anytime when Withdrawable is $15 or more.

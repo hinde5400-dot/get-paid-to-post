@@ -45,7 +45,7 @@ export default function ModeSwitch({
       disabled={busy}
       className={`rounded-full border border-fg/20 px-5 py-2.5 text-sm font-bold text-fg transition hover:border-lime hover:text-limeink disabled:opacity-40 ${className}`}
     >
-      {label}
+      {busy ? "Switching…" : label}
     </button>
   );
 }

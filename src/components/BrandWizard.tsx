@@ -1327,7 +1327,7 @@ export default function BrandWizard({
         </div>
         <div className="rounded-xl border border-fg/10 bg-ink px-4 py-3">
           <p className="text-xs font-bold text-fg/50">Rules</p>
-          <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-sm text-fg/80">
+          <ol className="mt-1 list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-fg/80">
             {briefLines.map((line, i) => (
               <li key={i}>{line}</li>
             ))}
