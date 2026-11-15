@@ -7,6 +7,7 @@ import {
   getCampaignStatsMap,
   getTopClippers,
   getUserSubmissions,
+  hasVerifiedProfile,
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
 import { getModeContext } from "@/lib/mode";
@@ -92,6 +93,10 @@ export default async function CampaignsPage({
     null;
   const tab = searchParams.tab === "joined" ? "joined" : "explore";
   const user = await getCurrentUser();
+  // "Connect your accounts first" shows only when the user has
+  // ZERO verified profiles (Turn, 2026-11-15) — once even one
+  // profile is connected the nudge disappears.
+  const hasConnected = user ? await hasVerifiedProfile() : false;
   // Brand mode never sees Discover — brands live in My Campaigns.
   // Guests still see Discover (it is the public campaign list).
   const { mode } = await getModeContext();
@@ -236,12 +241,14 @@ export default async function CampaignsPage({
           {/* P1-C5: a zero-campaign Discover is not a dead end —
               give a day-one creator the next actions. */}
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/connect"
-              className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
-            >
-              Connect your accounts first
-            </Link>
+            {!hasConnected && (
+              <Link
+                href="/connect"
+                className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+              >
+                Connect your accounts first
+              </Link>
+            )}
             <a
               href={DISCORD_URL}
               target="_blank"

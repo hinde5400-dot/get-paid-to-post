@@ -5,6 +5,7 @@ import {
   getBrandCampaigns,
   getDiscoverCampaigns,
   getCampaignStatsMap,
+  hasVerifiedProfile,
   isCampaignLive,
 } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
@@ -320,6 +321,10 @@ async function BrandHome({
 
 export default async function HomePage() {
   const user = await getCurrentUser();
+  // "Connect your accounts first" shows only when the user has
+  // ZERO verified profiles (Turn, 2026-11-15) — once even one
+  // profile is connected the nudge disappears.
+  const hasConnected = user ? await hasVerifiedProfile() : false;
   // Mode (not role) decides the home: a creator who switched to
   // brand mode gets the brand home, and a brand who switched to
   // creator mode gets the creator home — strict mode separation
@@ -505,12 +510,14 @@ export default async function HomePage() {
             {/* Same three next actions as Discover's empty state —
                 a zero-campaign home is not a dead end. */}
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                href="/connect"
-                className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
-              >
-                Connect your accounts first
-              </Link>
+              {!hasConnected && (
+                <Link
+                  href="/connect"
+                  className="rounded-full bg-lime px-6 py-3 text-sm font-black text-black transition hover:bg-limedark"
+                >
+                  Connect your accounts first
+                </Link>
+              )}
               <a
                 href={DISCORD_URL}
                 target="_blank"

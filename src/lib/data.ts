@@ -776,6 +776,32 @@ export async function getUserNotifications(
 }
 
 /**
+ * Does the CURRENT user have at least one bio-code VERIFIED
+ * profile? Hides the "Connect your accounts first" nudge once a
+ * creator has connected any profile (Turn, 2026-11-15: show the
+ * nudge only when ZERO profiles are connected). Best-effort: any
+ * error returns false so the nudge still shows (safe default).
+ */
+export async function hasVerifiedProfile(): Promise<boolean> {
+  const supabase = getServerClient();
+  if (!supabase) return false;
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) return false;
+    const { data, error } = await supabase
+      .from("verified_profiles")
+      .select("id")
+      .eq("user_id", auth.user.id)
+      .not("verified_at", "is", null)
+      .limit(1);
+    if (error) return false;
+    return (data ?? []).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Verified (bio-code) profiles for the admin Creators tab:
  * user id → their verified profiles (platform, handle,
  * verified_at). Best-effort: a missing table returns an empty
