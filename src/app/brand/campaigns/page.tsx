@@ -63,10 +63,14 @@ function statusChip(c: Campaign): { label: string; cls: string } {
 export default async function BrandCampaignsPage({
   searchParams,
 }: {
-  searchParams?: { tab?: string };
+  searchParams?: { tab?: string; notice?: string };
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // Logged-out guests are caught by the middleware first
+  // (message + next); this is the backstop with the same
+  // parameters so the login page can explain the redirect.
+  if (!user)
+    redirect("/login?message=login-required&next=%2Fbrand%2Fcampaigns");
   // Brand pages are open to ANY signed-in user (Turn 2026-11-14:
   // the mode switch works both ways, one click). A creator who
   // switches to brand mode sees their own campaigns — an empty
@@ -118,6 +122,23 @@ export default async function BrandCampaignsPage({
 
   return (
     <div className="space-y-8">
+      {/* P0-1 (2026-11-16): a brand-mode user who opens Discover
+          (/campaigns) is redirected here — say so plainly instead
+          of landing them silently. Discover is the creator list;
+          brands manage their campaigns here, and can switch to
+          Creator Mode from Brand Profile to browse it. */}
+      {searchParams?.notice === "discover" && (
+        <div className="rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm leading-relaxed text-limeink">
+          <span className="font-black">Discover is for creators.</span>{" "}
+          You&apos;re in Brand Mode, so you were taken to My Campaigns
+          instead — this is where your campaigns live. To browse
+          campaigns as a creator, switch to Creator Mode from{" "}
+          <Link href="/brand/profile" className="font-bold underline">
+            Brand Profile
+          </Link>
+          .
+        </div>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">

@@ -1,17 +1,19 @@
 import Link from "next/link";
 import { BRAND_NAME, SITE_DOMAIN } from "@/lib/constants";
 import { getCurrentUser } from "@/lib/auth";
-import type { UserMode } from "@/lib/mode";
 import Logo from "./Logo";
 import DiscordButton from "./DiscordButton";
 
 /**
- * Site footer. Mode-gated so the two navigations never leak into
- * each other: creator mode hides the "For Brands" entry point,
- * brand mode hides the creator links (Campaigns, Earnings).
- * Guests (mode null) see everything (public marketing).
+ * Site footer. 2026-11-16 (P2): the link sets used to differ by
+ * mode — brand mode hid Campaigns/Earnings, creator mode hid
+ * "For Brands" — so the footer looked different depending on
+ * where you stood. The footer now shows the same links in both
+ * modes: it is a sitemap, not navigation, and the pages
+ * themselves enforce the mode split (a brand user opening
+ * /campaigns is redirected to My Campaigns with an explanation).
  */
-export default async function Footer({ mode = null }: { mode?: UserMode | null }) {
+export default async function Footer() {
   const user = await getCurrentUser();
 
   return (
@@ -30,12 +32,8 @@ export default async function Footer({ mode = null }: { mode?: UserMode | null }
         <div>
           <p className="text-sm font-bold text-fg">Creators</p>
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
-            {mode !== "brand" && (
-              <>
-                <li><Link href="/campaigns" className="hover:text-limeink">Campaigns</Link></li>
-                <li><Link href="/earnings" className="hover:text-limeink">Earnings</Link></li>
-              </>
-            )}
+            <li><Link href="/campaigns" className="hover:text-limeink">Campaigns</Link></li>
+            <li><Link href="/earnings" className="hover:text-limeink">Earnings</Link></li>
             <li><Link href="/how-it-works" className="hover:text-limeink">How It Works</Link></li>
             {!user && (
               <li><Link href="/signup" className="hover:text-limeink">Sign up free</Link></li>
@@ -45,9 +43,7 @@ export default async function Footer({ mode = null }: { mode?: UserMode | null }
         <div>
           <p className="text-sm font-bold text-fg">Brands</p>
           <ul className="mt-3 space-y-2 text-sm text-fg/60">
-            {mode !== "creator" && (
-              <li><Link href="/brands" className="hover:text-limeink">For Brands</Link></li>
-            )}
+            <li><Link href="/brands" className="hover:text-limeink">For Brands</Link></li>
             <li><Link href="/pricing" className="hover:text-limeink">Pricing</Link></li>
             <li><Link href="/support" className="hover:text-limeink">Contact Support</Link></li>
           </ul>

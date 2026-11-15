@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import BottomNav from "@/components/BottomNav";
 import HelpBubble from "@/components/HelpBubble";
 import NavigationLoader from "@/components/NavigationLoader";
+import ScrollToTop from "@/components/ScrollToTop";
 import ToastProvider from "@/components/Toast";
 import { BRAND_NAME, SITE_URL } from "@/lib/constants";
 import { getModeContext } from "@/lib/mode";
@@ -84,11 +85,12 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <ToastProvider>
           <NavigationLoader />
+          <ScrollToTop />
           <Navbar />
-          <main className="mx-auto min-h-[60vh] w-full max-w-6xl px-4 pb-24 pt-4 md:pb-10 md:pt-6">
+          <main className="mx-auto min-h-[60vh] w-full max-w-6xl scroll-mt-20 px-4 pb-24 pt-4 md:pb-10 md:pt-6">
             {children}
           </main>
-          <Footer mode={user === null ? null : mode} />
+          <Footer />
           <BottomNav mode={mode} isGuest={user === null} />
           <HelpBubble />
         </ToastProvider>

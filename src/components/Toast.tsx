@@ -34,6 +34,10 @@ interface ToastItem {
 interface ToastApi {
   showError: (message: string) => void;
   showSuccess: (message: string) => void;
+  /** Dismiss every visible toast at once (2026-11-16): the brand
+   *  wizard clears stale error toasts when the user advances a
+   *  step, so a fixed error doesn't linger on the next step. */
+  clearToasts: () => void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -65,6 +69,7 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
       (message: string) => push("success", message),
       [push]
     ),
+    clearToasts: useCallback(() => setToasts([]), []),
   };
 
   return (

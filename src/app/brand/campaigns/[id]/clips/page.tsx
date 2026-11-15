@@ -28,7 +28,11 @@ export default async function BrandClipsPage({
   params: { id: string };
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // Backstop — the middleware catches logged-out guests first
+  // with the same message + next parameters. (The next target
+  // here is My Campaigns, since the clip page id is dynamic.)
+  if (!user)
+    redirect("/login?message=login-required&next=%2Fbrand%2Fcampaigns");
   // Open to any signed-in user — see My Campaigns for why. The
   // ownership check below still applies: only the owning brand
   // (or the owner) may see these clips.

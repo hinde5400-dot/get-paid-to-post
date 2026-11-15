@@ -31,7 +31,10 @@ export const metadata: Metadata = {
  */
 export default async function BrandPaymentsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // Backstop — the middleware catches logged-out guests first
+  // with the same message + next parameters.
+  if (!user)
+    redirect("/login?message=login-required&next=%2Fbrand%2Fpayments");
   // Open to any signed-in user — see My Campaigns for why: a
   // creator in brand mode sees only their own (empty) payments.
 

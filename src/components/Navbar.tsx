@@ -1,4 +1,4 @@
-import { getCampaigns, getUserSubmissions } from "@/lib/data";
+import { getJoinedCampaigns } from "@/lib/data";
 import { getModeContext } from "@/lib/mode";
 import SideMenu from "./SideMenu";
 import ProfileMenu from "./ProfileMenu";
@@ -28,25 +28,16 @@ export default async function Navbar() {
   }
 
   // Campaigns the signed-in user has joined (for the JOINED section
-  // of the sidebar drawer). Empty for guests. Forms #26: the data
-  // getters THROW on DB error — a failed lookup must not 500 the
-  // whole navbar (it renders on every page), so fall back to an
-  // empty joined list; the pages themselves show their own honest
-  // error states when their data fails to load.
+  // of the sidebar drawer). Empty for guests. Forms #26: a failed
+  // lookup must not 500 the whole navbar (it renders on every
+  // page), so getJoinedCampaigns already falls back to [] on any
+  // error; the pages themselves show their own honest error states
+  // when their data fails to load. (2026-11-16: this used to fetch
+  // the user's full submissions AND the full live campaign list on
+  // every page load — now two light reads, ids + titles only.)
   let joined: { id: string; title: string }[] = [];
   if (user) {
-    try {
-      const [subs, campaigns] = await Promise.all([
-        getUserSubmissions(user.id),
-        getCampaigns(),
-      ]);
-      const ids = new Set(subs.map((s) => s.campaign_id));
-      joined = campaigns
-        .filter((c) => ids.has(c.id))
-        .map((c) => ({ id: c.id, title: c.title }));
-    } catch {
-      joined = [];
-    }
+    joined = await getJoinedCampaigns(user.id);
   }
 
   return (

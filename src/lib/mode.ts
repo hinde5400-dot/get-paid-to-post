@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { getCurrentUser, getProfile, isOwner } from "./auth";
-import { getBrandCampaigns, getUserSubmissions } from "./data";
+import { hasAnySubmission, ownsAnyCampaign } from "./data";
 import { MODE_COOKIE } from "./constants";
 import type { UserProfile } from "./types";
 import type { User } from "@supabase/supabase-js";
@@ -64,21 +64,21 @@ export const getModeContext = cache(async (): Promise<ModeContext> => {
   };
   const user = await getCurrentUser();
   if (!user) return guest;
-  const profile = await getProfile(user.id);
+  // 2026-11-16 slowness fix: these three reads are independent
+  // (all keyed by user.id), so they run in parallel instead of
+  // one after another. They are also LIGHT existence checks now
+  // (ownsAnyCampaign / hasAnySubmission read one id row each) —
+  // the old code fetched the user's full campaign list (limit
+  // 2,000) and full submission list (with join + flags) on every
+  // page load just to answer two yes/no questions. A profile
+  // read failure falls back to null (role defaults to creator)
+  // so a DB error never 500s the navbar.
+  const [profile, ownsCampaigns, hasSubmissions] = await Promise.all([
+    getProfile(user.id).catch(() => null),
+    ownsAnyCampaign(user.id),
+    hasAnySubmission(user.id),
+  ]);
   const role: "creator" | "brand" = profile?.role ?? "creator";
-
-  let ownsCampaigns = false;
-  try {
-    ownsCampaigns = (await getBrandCampaigns(user.id)).length > 0;
-  } catch {
-    ownsCampaigns = false;
-  }
-  let hasSubmissions = false;
-  try {
-    hasSubmissions = (await getUserSubmissions(user.id)).length > 0;
-  } catch {
-    hasSubmissions = false;
-  }
 
   const brandCapable = role === "brand" || ownsCampaigns;
   const creatorCapable = role === "creator" || hasSubmissions;

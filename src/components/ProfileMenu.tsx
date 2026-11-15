@@ -72,9 +72,20 @@ export default function ProfileMenu({
         {initial ? (
           <span className="font-display text-base font-black">{initial}</span>
         ) : (
-          <span className="text-xl leading-none" aria-hidden>
-            ○
-          </span>
+          // 2026-11-16 (P2): guests used to get a hollow "○" that
+          // looked like a broken empty avatar — a proper user icon.
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="h-5 w-5"
+            aria-hidden
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" />
+          </svg>
         )}
       </button>
 
@@ -88,7 +99,7 @@ export default function ProfileMenu({
               <span className="block truncate text-sm font-bold text-fg">
                 {displayName}
               </span>
-              <span className="block text-xs text-fg/50">
+              <span className="block truncate text-xs text-fg/50">
                 {userEmail ?? "Signed out"}
               </span>
             </span>

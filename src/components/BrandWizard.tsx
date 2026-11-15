@@ -115,13 +115,27 @@ export default function BrandWizard({
   initialWebsite?: string | null;
   initialBrandDescription?: string | null;
 }) {
-  const { showError, showSuccess } = useToast();
+  const { showError, showSuccess, clearToasts } = useToast();
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [submitStep, setSubmitStep] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // 2026-11-16: a field error must clear the moment the user
+  // fixes that field — the old code only cleared errors on the
+  // next Continue tap, so "Campaign name is required" stayed
+  // visible after the name was typed. Every input below calls
+  // this in its onChange.
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   // Step 1 — Organization
   const [brandName, setBrandName] = useState(initialBrandName ?? "");
@@ -173,11 +187,13 @@ export default function BrandWizard({
     if (logoPreview) URL.revokeObjectURL(logoPreview);
     setLogoFile(f);
     setLogoPreview(f ? URL.createObjectURL(f) : null);
+    clearFieldError("logoUrl");
   }
   function pickThumbnail(f: File | null) {
     if (thumbnailPreview) URL.revokeObjectURL(thumbnailPreview);
     setThumbnailFile(f);
     setThumbnailPreview(f ? URL.createObjectURL(f) : null);
+    clearFieldError("thumbnailUrl");
   }
   useEffect(
     () => () => {
@@ -247,6 +263,7 @@ export default function BrandWizard({
     setReferenceLinks(
       linesOf(referenceLinks).filter((l) => l !== link).join("\n")
     );
+    clearFieldError("referenceLinks");
   }
 
   // Per-step validation. Returns true when the step is good to
@@ -415,7 +432,13 @@ export default function BrandWizard({
 
   // Step 1 saves the organization to the brand's profile, then
   // moves on. A failed save stays on step 1 with the real error.
+  // 2026-11-16: the save hung on "Saving..." for 30–60s on a
+  // cold serverless start with nothing the user could do — it
+  // now times out after 25s with a retry message. The save is
+  // idempotent (same values), so retrying is safe.
   async function saveProfile(): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
       const res = await fetch("/api/profile", {
         method: "PATCH",
@@ -425,6 +448,7 @@ export default function BrandWizard({
           website: website.trim() || null,
           brandDescription: brandDescription.trim() || null,
         }),
+        signal: controller.signal,
       });
       const text = await res.text();
       let data: { error?: string } = {};
@@ -437,8 +461,16 @@ export default function BrandWizard({
         throw new Error(data.error || `Server error (HTTP ${res.status}) — please try again.`);
       return true;
     } catch (err) {
-      showError(err instanceof Error ? err.message : "Could not save your organization.");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        showError(
+          "The save is taking too long — please check your connection and tap Continue again. Nothing was lost, your entries are still here."
+        );
+      } else {
+        showError(err instanceof Error ? err.message : "Could not save your organization.");
+      }
       return false;
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -456,6 +488,10 @@ export default function BrandWizard({
         setBusy(false);
       }
     }
+    // 2026-11-16: advancing clears any error toast from the
+    // step just left, so a fixed error doesn't linger on the
+    // next step (error toasts otherwise sit for 5s).
+    clearToasts();
     setStep((s) => Math.min(7, s + 1));
   }
 
@@ -747,7 +783,7 @@ export default function BrandWizard({
           <input
             value={brandName}
             maxLength={100}
-            onChange={(e) => setBrandName(e.target.value)}
+            onChange={(e) => { setBrandName(e.target.value); clearFieldError("brandName"); }}
             placeholder="Your brand"
             className={inputCls}
           />
@@ -757,7 +793,7 @@ export default function BrandWizard({
           Website <span className="font-medium text-fg/50">(optional)</span>
           <input
             value={website}
-            onChange={(e) => setWebsite(e.target.value)}
+            onChange={(e) => { setWebsite(e.target.value); clearFieldError("website"); }}
             placeholder="https://yourbrand.com"
             inputMode="url"
             className={inputCls}
@@ -770,7 +806,7 @@ export default function BrandWizard({
             rows={3}
             value={brandDescription}
             maxLength={500}
-            onChange={(e) => setBrandDescription(e.target.value)}
+            onChange={(e) => { setBrandDescription(e.target.value); clearFieldError("brandDescription"); }}
             placeholder="What does your brand do, in one or two lines?"
             className={`${inputCls} resize-none`}
           />
@@ -790,7 +826,7 @@ export default function BrandWizard({
           {GOALS.map((g) =>
             optionCard(
               goal === g,
-              () => setGoal(g),
+              () => { setGoal(g); clearFieldError("goal"); },
               g,
               g === "Brand awareness"
                 ? "Get your name in front of new audiences."
@@ -832,7 +868,7 @@ export default function BrandWizard({
           <input
             value={title}
             maxLength={120}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => { setTitle(e.target.value); clearFieldError("title"); }}
             placeholder="e.g. Show Your Energy"
             className={inputCls}
           />
@@ -844,7 +880,7 @@ export default function BrandWizard({
             rows={4}
             value={description}
             maxLength={DESCRIPTION_MAX}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => { setDescription(e.target.value); clearFieldError("description"); }}
             placeholder="What is this campaign about? Creators read this before they film."
             className={`${inputCls} resize-none`}
           />
@@ -861,7 +897,7 @@ export default function BrandWizard({
           <span className={helpCls}>Pick at least one.</span>
           <div className="mt-2 flex flex-wrap gap-2">
             {CAMPAIGN_TYPES.map((t) =>
-              chip(types.includes(t), () => toggleIn(types, t, setTypes), t, t)
+              chip(types.includes(t), () => { toggleIn(types, t, setTypes); clearFieldError("types"); }, t, t)
             )}
           </div>
           {fieldErrors.types && <span className={errCls}>{fieldErrors.types}</span>}
@@ -870,7 +906,7 @@ export default function BrandWizard({
           Category
           <select
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => { setCategory(e.target.value); clearFieldError("category"); }}
             className={inputCls}
           >
             {CAMPAIGN_CATEGORIES.map((c) => (
@@ -914,7 +950,7 @@ export default function BrandWizard({
               <div className="flex gap-2">
                 <input
                   value={linkInput}
-                  onChange={(e) => setLinkInput(e.target.value)}
+                  onChange={(e) => { setLinkInput(e.target.value); clearFieldError("referenceLinks"); }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -1002,7 +1038,7 @@ export default function BrandWizard({
             rows={6}
             value={brief}
             maxLength={5000}
-            onChange={(e) => setBrief(e.target.value)}
+            onChange={(e) => { setBrief(e.target.value); clearFieldError("brief"); }}
             placeholder={"Hook in the first 3 seconds.\nShow the product clearly in the first 5 seconds.\nVertical 9:16, captions on screen.\nNo competitor logos.\nEnd with the CTA: try [Brand] today."}
             className={`${inputCls} resize-none`}
           />
@@ -1024,7 +1060,7 @@ export default function BrandWizard({
           <span className="font-medium text-fg/50">(optional)</span>
           <input
             value={soundTiktok}
-            onChange={(e) => setSoundTiktok(e.target.value)}
+            onChange={(e) => { setSoundTiktok(e.target.value); clearFieldError("soundTiktok"); }}
             placeholder="https://www.tiktok.com/music/..."
             inputMode="url"
             className={inputCls}
@@ -1036,7 +1072,7 @@ export default function BrandWizard({
           <span className="font-medium text-fg/50">(optional)</span>
           <input
             value={soundInstagram}
-            onChange={(e) => setSoundInstagram(e.target.value)}
+            onChange={(e) => { setSoundInstagram(e.target.value); clearFieldError("soundInstagram"); }}
             placeholder="https://www.instagram.com/reel/..."
             inputMode="url"
             className={inputCls}
@@ -1130,7 +1166,7 @@ export default function BrandWizard({
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => togglePlatform(key)}
+                    onChange={() => { togglePlatform(key); clearFieldError("platforms"); }}
                     className="h-5 w-5 shrink-0 accent-[#C6FF00]"
                   />
                   <Icon className="h-5 w-5 shrink-0" />
@@ -1152,7 +1188,7 @@ export default function BrandWizard({
               min={0}
               step="0.01"
               value={budget}
-              onChange={(e) => setBudget(e.target.value)}
+              onChange={(e) => { setBudget(e.target.value); clearFieldError("budget"); }}
               placeholder="200"
               className={`${inputCls} pl-8`}
             />
@@ -1187,7 +1223,7 @@ export default function BrandWizard({
               min={0}
               step="0.01"
               value={rate}
-              onChange={(e) => setRate(e.target.value)}
+              onChange={(e) => { setRate(e.target.value); clearFieldError("rate"); }}
               placeholder="2"
               className={`${inputCls} pl-8`}
             />
@@ -1208,7 +1244,7 @@ export default function BrandWizard({
                 max={MAX_PAYOUT_MAX}
                 step="0.01"
                 value={minPayout}
-                onChange={(e) => setMinPayout(e.target.value)}
+                onChange={(e) => { setMinPayout(e.target.value); clearFieldError("minPayout"); }}
                 placeholder="1"
                 className={`${inputCls} pl-8`}
               />
@@ -1229,7 +1265,7 @@ export default function BrandWizard({
                 max={MAX_PAYOUT_MAX}
                 step="1"
                 value={maxPayout}
-                onChange={(e) => setMaxPayout(e.target.value)}
+                onChange={(e) => { setMaxPayout(e.target.value); clearFieldError("maxPayout"); }}
                 placeholder="100"
                 className={`${inputCls} pl-8`}
               />
@@ -1249,7 +1285,7 @@ export default function BrandWizard({
               min={1000}
               step="1"
               value={minViews}
-              onChange={(e) => setMinViews(e.target.value)}
+              onChange={(e) => { setMinViews(e.target.value); clearFieldError("minViews"); }}
               placeholder="1000"
               className={inputCls}
             />
@@ -1435,7 +1471,7 @@ export default function BrandWizard({
           <button
             type="button"
             disabled={busy || step === 1}
-            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            onClick={() => { clearToasts(); setStep((s) => Math.max(1, s - 1)); }}
             className="flex items-center justify-center rounded-full border border-fg/15 bg-ink px-5 py-3 text-sm font-bold text-fg transition hover:border-fg/30 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ← Back
@@ -1474,7 +1510,7 @@ export default function BrandWizard({
           <button
             type="button"
             disabled={busy}
-            onClick={() => setStep(6)}
+            onClick={() => { clearToasts(); setStep(6); }}
             className="flex w-full items-center justify-center rounded-full border border-fg/15 bg-ink py-3.5 text-sm font-bold text-fg transition hover:border-fg/30 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ← Back to Configuration

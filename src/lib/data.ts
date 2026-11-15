@@ -1,5 +1,6 @@
 import { MAX_PAYOUT_DEFAULT } from "./constants";
 import { getServerClient } from "./supabase/server";
+import { getCurrentUser } from "./auth";
 import type { BrandMessage, Campaign, CreatorWarning, NotificationItem, Submission, SubmissionStatus, Wallet, Withdrawal } from "./types";
 import { platformsFromRow, ratesFromRow, rateForPlatform } from "./types";
 
@@ -413,6 +414,84 @@ export async function getBrandCampaigns(userId: string): Promise<Campaign[]> {
 }
 
 /**
+ * Light existence checks for the mode split (2026-11-16
+ * slowness fix): getModeContext runs on EVERY page via the
+ * layout, and it used to fetch the user's FULL campaign list
+ * (limit 2,000 rows) and FULL submission list (with a campaigns
+ * join + flags) just to answer two yes/no questions — "owns any
+ * campaign?" and "has any submission?". These ask the same
+ * questions with a one-row id-only read. Fail-soft to false: a
+ * DB error never 500s the navbar.
+ */
+export async function ownsAnyCampaign(userId: string): Promise<boolean> {
+  const supabase = getServerClient();
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("id")
+      .eq("user_id", userId)
+      .limit(1);
+    if (error) return false;
+    return (data ?? []).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function hasAnySubmission(userId: string): Promise<boolean> {
+  const supabase = getServerClient();
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("user_id", userId)
+      .limit(1);
+    if (error) return false;
+    return (data ?? []).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Campaigns the signed-in user has joined, for the sidebar
+ * drawer's JOINED section (2026-11-16 slowness fix): the Navbar
+ * used to fetch the user's full submissions AND the full live
+ * campaign list on every signed-in page load just for titles.
+ * Two light reads instead — submission campaign ids, then id +
+ * title for those campaigns only.
+ */
+export async function getJoinedCampaigns(
+  userId: string
+): Promise<{ id: string; title: string }[]> {
+  const supabase = getServerClient();
+  if (!supabase) return [];
+  try {
+    const { data: subs, error: subsError } = await supabase
+      .from("submissions")
+      .select("campaign_id")
+      .eq("user_id", userId)
+      .limit(2000);
+    if (subsError || !subs) return [];
+    const ids = [...new Set(subs.map((s) => String(s.campaign_id)))];
+    if (ids.length === 0) return [];
+    const { data: camps, error: campsError } = await supabase
+      .from("campaigns")
+      .select("id, title")
+      .in("id", ids);
+    if (campsError || !camps) return [];
+    return (camps as { id: string; title: string }[]).map((c) => ({
+      id: String(c.id),
+      title: String(c.title ?? ""),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Per-campaign stats for a brand's own dashboard: submission counts
  * from the SECURITY DEFINER campaign_stats function (migration
  * 0003, same as getCampaignStats) plus total views across all
@@ -786,12 +865,15 @@ export async function hasVerifiedProfile(): Promise<boolean> {
   const supabase = getServerClient();
   if (!supabase) return false;
   try {
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) return false;
+    // Reuses the per-request cached auth call (2026-11-16) —
+    // this used to call supabase.auth.getUser() itself, a third
+    // duplicate auth round trip on the Discover load.
+    const user = await getCurrentUser();
+    if (!user) return false;
     const { data, error } = await supabase
       .from("verified_profiles")
       .select("id")
-      .eq("user_id", auth.user.id)
+      .eq("user_id", user.id)
       .not("verified_at", "is", null)
       .limit(1);
     if (error) return false;

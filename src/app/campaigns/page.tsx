@@ -9,7 +9,6 @@ import {
   getUserSubmissions,
   hasVerifiedProfile,
 } from "@/lib/data";
-import { getCurrentUser } from "@/lib/auth";
 import { getModeContext } from "@/lib/mode";
 import { DISCORD_URL } from "@/lib/constants";
 import CampaignGrid from "@/components/CampaignGrid";
@@ -92,20 +91,33 @@ export default async function CampaignsPage({
   let joinedSubs: Awaited<ReturnType<typeof getUserSubmissions>> | null =
     null;
   const tab = searchParams.tab === "joined" ? "joined" : "explore";
-  const user = await getCurrentUser();
+  // Brand mode never sees Discover — brands live in My Campaigns.
+  // Guests still see Discover (it is the public campaign list).
+  // 2026-11-16 (P0-1): the mode/user check runs FIRST, before
+  // any data load — the old order called getCurrentUser, then
+  // hasVerifiedProfile, then getModeContext, so a brand user
+  // waited through ~6 sequential Supabase round trips staring at
+  // a blank main area before the silent redirect fired. The
+  // redirect now carries ?notice=discover so My Campaigns can
+  // explain where the brand user went and why.
+  const { mode, user } = await getModeContext();
+  if (user && mode === "brand") redirect("/brand/campaigns?notice=discover");
   // "Connect your accounts first" shows only when the user has
   // ZERO verified profiles (Turn, 2026-11-15) — once even one
   // profile is connected the nudge disappears.
   const hasConnected = user ? await hasVerifiedProfile() : false;
-  // Brand mode never sees Discover — brands live in My Campaigns.
-  // Guests still see Discover (it is the public campaign list).
-  const { mode } = await getModeContext();
-  if (user && mode === "brand") redirect("/brand/campaigns");
   try {
-    all = await getDiscoverCampaigns();
-    if (tab === "joined" && user) {
-      joinedSubs = await getUserSubmissions(user.id);
-    }
+    // 2026-11-16 slowness fix: the three independent loads run in
+    // parallel — Discover, the Win Board, and (joined tab only)
+    // the user's submissions. Stats still wait on the campaign
+    // list below because they need its ids.
+    [all, topClippers, joinedSubs] = await Promise.all([
+      getDiscoverCampaigns(),
+      getTopClippers(5),
+      tab === "joined" && user
+        ? getUserSubmissions(user.id)
+        : Promise.resolve(null),
+    ]);
   } catch {
     return loadError();
   }
@@ -135,12 +147,10 @@ export default async function CampaignsPage({
   }
   // Stats are loaded BEFORE sorting: the Trending sort orders by
   // submission count. No extra queries — the same stats map already
-  // fed the cards and the modal.
+  // fed the cards and the modal. (Win Board top clippers already
+  // loaded in parallel above.)
   try {
     stats = await getCampaignStatsMap(list.map((c) => c.id));
-    // Win Board: real top earners from approved submissions only —
-    // empty (all counts 0) until the first clip is approved.
-    topClippers = await getTopClippers(5);
   } catch {
     return loadError();
   }

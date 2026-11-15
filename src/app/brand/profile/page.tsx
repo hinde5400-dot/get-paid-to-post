@@ -22,7 +22,10 @@ export const metadata: Metadata = {
  */
 export default async function BrandProfilePage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // Backstop — the middleware catches logged-out guests first
+  // with the same message + next parameters.
+  if (!user)
+    redirect("/login?message=login-required&next=%2Fbrand%2Fprofile");
   // Open to any signed-in user — see My Campaigns for why.
   const { canSwitch } = await getModeContext();
 

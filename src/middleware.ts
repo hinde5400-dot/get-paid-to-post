@@ -15,6 +15,12 @@ const PROTECTED_PREFIXES = [
   "/submit",
   "/onboarding",
   "/brands/payment",
+  // 2026-11-16 (P2): all /brand/* pages need sign-in — before
+  // this, /brand/campaigns was missing here, so a logged-out
+  // guest got a bare /login redirect with no message and no next
+  // param (the page itself redirected). /brands (plural) is the
+  // public brand landing page and stays open.
+  "/brand",
 ];
 
 /** Only relative in-site paths are accepted as a post-login target —
