@@ -5,7 +5,7 @@ import DiscordButton from "@/components/DiscordButton";
 export const metadata: Metadata = {
   title: "Support",
   description:
-    "Get help with Get Paid To Post on Discord: payouts, submissions, account problems, campaigns, and brand payments and refunds.",
+    "Get help with Get Paid To Post by email or on Discord: payouts, submissions, account problems, campaigns, and brand payments and refunds.",
 };
 
 export default function SupportPage() {
@@ -13,11 +13,34 @@ export default function SupportPage() {
     <div className="mx-auto max-w-lg space-y-6">
       <h1 className="font-display text-3xl font-black uppercase tracking-tight text-fg">Contact Support</h1>
       <p className="text-sm leading-relaxed text-fg/60">
-        Support Tickets, Announcements, and Community — All on Discord.
-        Support for {BRAND_NAME} runs on Discord only — there is no live
-        chat on the site. Join the server to open a support ticket, ask a
-        question, or report a problem.
+        Support Tickets, Announcements, and Community — on Discord and by
+        email. Email us at{" "}
+        <a
+          href="mailto:getpaidtopost.official@gmail.com"
+          className="font-bold text-limeink hover:underline"
+        >
+          getpaidtopost.official@gmail.com
+        </a>
+        , or join the Discord server to open a support ticket. There is no
+        live chat on the site.
       </p>
+
+      <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center">
+        <p className="text-4xl">✉️</p>
+        <h2 className="mt-3 text-lg font-extrabold text-fg">
+          Email Support
+        </h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg/60">
+          Prefer email? Write to us — we reply to brand and creator
+          questions here.
+        </p>
+        <a
+          href="mailto:getpaidtopost.official@gmail.com"
+          className="mt-4 inline-block font-bold text-limeink hover:underline"
+        >
+          getpaidtopost.official@gmail.com
+        </a>
+      </div>
 
       <div className="rounded-3xl border border-fg/10 bg-card p-6 text-center">
         <p className="text-4xl">💬</p>

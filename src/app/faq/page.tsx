@@ -41,12 +41,20 @@ const FAQS = [
     a: "Up to 15 approved clips per platform per campaign, and one clip per platform every 2 hours — the cooldown applies across all campaigns on that platform, not per campaign. A rejected or duplicate submission does not start the cooldown. Submit up to 2 links together as one bundle (a single-platform campaign needs only 1 link). Rejected clips don't count toward the 15-clip limit, and a rejected clip cannot be resubmitted — post a new clip instead.",
   },
   {
+    q: "How do I fund my campaign in USDT (TRC20)?",
+    a: "On the payment page you will see the admin USDT wallet address and the exact total: your budget + 15% platform fee + about a $3 network fee. In your wallet app, choose the TRC20 network, paste the address exactly, and send the total. Always double-check the address and the network before sending — crypto sent on the wrong network cannot be recovered. Then paste your Transaction ID on the payment page so the admin can verify it.",
+  },
+  {
+    q: "How are views counted and verified?",
+    a: "Views are checked through the platforms' own data where available (TikTok and YouTube) and reviewed by hand; Instagram views are checked by hand only. A clip needs at least 1,000 views and at least 1% engagement (likes + comments only) to earn. Only verified views are paid — fake or bot views lead to rejection and can get the creator's account blocked or banned.",
+  },
+  {
     q: "What happens with fake engagement?",
     a: "Fake engagement will lead to your account being strictly blocked or banned. Only real views from real people count.",
   },
   {
     q: "Is Get Paid To Post safe?",
-    a: "We make no guarantee of safety — here is how it works instead. Every campaign is funded by the brand before it goes live, creators are paid only for verified views, and creators never pay anything to join, post, or earn. Views are checked through the platforms' own data where available (TikTok and YouTube) and reviewed by hand; Instagram views are checked by hand only — there is no automatic Instagram check yet. Fake engagement leads to an account being strictly blocked or banned. Support runs on Discord.",
+    a: "We make no guarantee of safety — here is how it works instead. Every campaign is funded by the brand before it goes live, creators are paid only for verified views, and creators never pay anything to join, post, or earn. Views are checked through the platforms' own data where available (TikTok and YouTube) and reviewed by hand; Instagram views are checked by hand only — there is no automatic Instagram check yet. Fake engagement leads to an account being strictly blocked or banned. Support runs on Discord and by email.",
   },
   {
     q: "What happens to my unspent budget?",

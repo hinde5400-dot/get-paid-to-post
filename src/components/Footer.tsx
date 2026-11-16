@@ -27,6 +27,12 @@ export default async function Footer() {
             minimum.
           </p>
           <p className="mt-3 text-xs text-fg/40">{SITE_DOMAIN}</p>
+          <a
+            href="mailto:getpaidtopost.official@gmail.com"
+            className="mt-1 block text-xs text-fg/60 hover:text-limeink"
+          >
+            getpaidtopost.official@gmail.com
+          </a>
           <DiscordButton compact className="mt-4" />
         </div>
         <div>

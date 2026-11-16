@@ -173,6 +173,67 @@ export default async function BrandsPage() {
     </section>
   );
 
+  const costComparison = (
+    <section className="rounded-3xl border border-lime/40 bg-card p-6 md:p-8">
+      <h2 className="text-xl font-extrabold text-fg">
+        Reach for less than paid ads
+      </h2>
+      <p className="mt-3 text-sm leading-relaxed text-fg/70">
+        Clipping typically costs around $1 per 1,000 views — while paid
+        social ads typically cost $20–$80 per 1,000 impressions. You get
+        reach for less, and you only pay for verified views.
+      </p>
+      <div className="mt-5 space-y-4">
+        <div>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="font-bold text-fg">Get Paid To Post clips</span>
+            <span className="shrink-0 font-black text-limeink">
+              ~$1 per 1,000 views
+            </span>
+          </div>
+          <div className="mt-1 h-3 overflow-hidden rounded-full bg-fg/10">
+            <div className="h-full w-[4%] rounded-full bg-lime" />
+          </div>
+        </div>
+        <div>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="font-bold text-fg">Paid social ads</span>
+            <span className="shrink-0 font-black text-fg">
+              $20–$80 per 1,000 impressions
+            </span>
+          </div>
+          <div className="mt-1 h-3 overflow-hidden rounded-full bg-fg/10">
+            <div className="h-full w-full rounded-full bg-fg/30" />
+          </div>
+        </div>
+      </div>
+      <p className="mt-4 text-xs leading-relaxed text-fg/50">
+        Typical ranges: clipping rates around $1 per 1,000 views
+        (Content Rewards median $1.09, Nov 2026); paid social $20–$80 per
+        1,000 impressions (Picsart). Rates vary by campaign — you set your
+        own rate, and you only pay for verified views.
+      </p>
+    </section>
+  );
+
+  const contact = (
+    <section className="rounded-3xl border border-fg/10 bg-card p-6 text-center">
+      <h2 className="text-lg font-extrabold text-fg">
+        Questions before you launch?
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/60">
+        Email us at{" "}
+        <a
+          href="mailto:getpaidtopost.official@gmail.com"
+          className="font-bold text-limeink hover:underline"
+        >
+          getpaidtopost.official@gmail.com
+        </a>{" "}
+        or ask on Discord — we will help you set up your first campaign.
+      </p>
+    </section>
+  );
+
   const benefit = (
     <section className="rounded-3xl border border-fg/10 bg-card p-6">
       <h2 className="text-lg font-extrabold text-fg">
@@ -343,9 +404,11 @@ export default async function BrandsPage() {
         {formSection}
         {howFunding}
         {benefit}
+        {costComparison}
         {protection}
         {trust}
         {faq}
+        {contact}
       </div>
     );
   }
@@ -355,10 +418,12 @@ export default async function BrandsPage() {
       {roleSplit}
       {howFunding}
       {benefit}
+      {costComparison}
       {protection}
       {trust}
       {faq}
       {formSection}
+      {contact}
     </div>
   );
 }
