@@ -40,8 +40,13 @@ export async function middleware(request: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url, 308);
   }
-  const isProtected = PROTECTED_PREFIXES.some((p) =>
-    pathname.startsWith(p)
+  // Prefixes match on a whole path segment only: "/brand" must protect
+  // /brand/campaigns etc. but NOT /brands (plural) — the public brand
+  // landing page. A plain startsWith("/brand") wrongly redirected
+  // logged-out guests from /brands to /login (found live 2026-11-16
+  // 17:28 PKT, right after the dd000c8 push added "/brand" here).
+  const isProtected = PROTECTED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
   );
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
